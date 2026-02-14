@@ -1,0 +1,43 @@
+1. News Service
+
+    1.1 GET all the news with specified categories
+        -> categories from user table.
+        -> fetch all the news article based on the categories.
+
+        GET: {base_url}/api/personalized_articles
+
+    1.2 GET all the categories aviailable in the db done
+        
+        GET: {base_url}/api/get_all_categories
+
+    1.3 GET the selected categories from onboarding
+
+        GET: {base_url}/api/user_categories
+
+    1.4 POST set the selected categories from onboarding
+        
+        POST: {base_url}/api/user_categories
+
+    1.5 GET search article and get all the matching article
+
+        GET: {base_url}/api/search_articles
+
+    1.6 GET article by id
+
+        GET: {base_url}/api/article_by_id
+
+    1.7 GET user liked articles
+
+        GET: {base_url}/api/user_liked_articles
+
+    1.8 POST user liked articles
+
+        POST: {base_url}/api/user_liked_articles
+
+    1.9 POST user bookmarked articles
+
+        POST: {base_url}/api/user_bookmarked_articles
+
+    1.10 GET user bookmarked articles
+
+        GET: {base_url}/api/user_bookmarked_articles
