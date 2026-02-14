@@ -2,7 +2,6 @@ services:
   # ---- LiveKit SFU Server ----
   livekit:
     image: livekit/livekit-server:latest
-    platform: linux/arm64
     container_name: founderstribe-livekit
     ports:
       - "7880:7880" # HTTP / WebSocket
@@ -17,26 +16,18 @@ services:
   # ---- Redis (Socket.io adapter + caching) ----
   redis:
     image: redis:7-alpine
-    platform: linux/arm64
     container_name: founderstribe-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # ---- Backend API (Voice Service) ----
   voice-service:
     build:
       context: ./services/voice-service-js
       dockerfile: Dockerfile
-    platform: linux/arm64
     container_name: founderstribe-voice-service
     ports:
       - "3002:3002"
@@ -49,24 +40,16 @@ services:
       - LIVEKIT_API_SECRET=dAfg5eXbr7FTU45LXhR1fmjuKCktGzfE
       - PORT=3002
     depends_on:
-      redis:
-        condition: service_healthy
-      livekit:
-        condition: service_started
+      - redis
+      - livekit
+
     restart: unless-stopped
-    healthcheck:
-      test:
-        ["CMD", "wget", "--spider", "-q", "http://localhost:3002/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # ---- News Service ----
   news-service:
     build:
       context: ./services/news-service
       dockerfile: Dockerfile
-    platform: linux/arm64
     container_name: founderstribe-news-service
     ports:
       - "3001:3001"
@@ -76,8 +59,7 @@ services:
       - PORT=3001
     restart: unless-stopped
     healthcheck:
-      test:
-        ["CMD", "wget", "--spider", "-q", "http://localhost:3001/ping"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/ping"]
       interval: 30s
       timeout: 10s
       retries: 3
