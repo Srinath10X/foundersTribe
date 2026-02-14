@@ -1,0 +1,138 @@
+import { generateLiveKitToken } from '../config/livekit.js';
+import { logger } from '../utils/logger.js';
+import { AppError } from '../utils/AppError.js';
+import { roomRepository } from '../repositories/roomRepository.js';
+import { participantRepository } from '../repositories/participantRepository.js';
+
+function getGrantsForRole(role) {
+    switch (role) {
+        case 'host':
+        case 'co-host':
+        case 'speaker':
+            return { canPublish: true, canSubscribe: true };
+        case 'listener':
+            return { canPublish: false, canSubscribe: true };
+        default:
+            return { canPublish: false, canSubscribe: true };
+    }
+}
+
+export async function createRoom(userId, title, type = 'public') {
+    const room = await roomRepository.createRoom(userId, title, type);
+
+    const participant = await participantRepository.addParticipant(room.id, userId, 'host', null);
+
+    const livekitToken = await generateLiveKitToken(userId, room.id, getGrantsForRole('host'));
+
+    logger.info({ roomId: room.id, userId }, 'Room created');
+    return { room, participant, livekitToken };
+}
+
+export async function joinRoom(userId, roomId, socketId) {
+    const room = await roomRepository.getRoomById(roomId);
+
+    if (!room || !room.is_active) {
+        throw new AppError('Room not found or inactive', 404);
+    }
+
+    const count = await participantRepository.countConnected(roomId);
+    if (count >= room.max_participants) {
+        throw new AppError('Room is full', 400);
+    }
+
+    let participant = await participantRepository.getParticipant(roomId, userId);
+
+    if (participant) {
+        await participantRepository.updateSocketId(roomId, userId, socketId);
+        const updated = await participantRepository.getParticipant(roomId, userId);
+        if (updated) participant = updated;
+        logger.info({ roomId, userId, role: participant.role }, 'Participant restored');
+    } else {
+        participant = await participantRepository.addParticipant(roomId, userId, 'listener', socketId);
+        logger.info({ roomId, userId }, 'New participant joined');
+    }
+
+    const livekitToken = await generateLiveKitToken(
+        userId,
+        roomId,
+        getGrantsForRole(participant.role)
+    );
+
+    return { participant, livekitToken, room };
+}
+
+export async function leaveRoom(userId, roomId) {
+    await participantRepository.markDisconnected(roomId, userId);
+    logger.info({ roomId, userId }, 'Participant left room');
+
+    await checkAndDestroyRoom(roomId);
+}
+
+export async function endRoom(userId, roomId) {
+    const room = await roomRepository.getRoomById(roomId);
+
+    if (!room) {
+        throw new AppError('Room not found', 404);
+    }
+
+    if (room.host_id !== userId) {
+        throw new AppError('Only the host can end the room', 403);
+    }
+
+    await roomRepository.updateRoomStatus(roomId, false);
+    await participantRepository.removeAllInRoom(roomId);
+
+    logger.info({ roomId, userId }, 'Room ended');
+}
+
+export async function getActiveRooms() {
+    const rooms = await roomRepository.getActiveRooms();
+
+    const roomsWithCounts = await Promise.all(
+        rooms.map(async (room) => {
+            const count = await participantRepository.countConnected(room.id);
+            return { ...room, participant_count: count };
+        })
+    );
+
+    return roomsWithCounts;
+}
+
+export async function getRoomState(roomId) {
+    const room = await roomRepository.getRoomById(roomId);
+
+    if (!room) {
+        throw new AppError('Room not found', 404);
+    }
+
+    const participants = await participantRepository.getConnectedParticipants(roomId);
+
+    return { room, participants };
+}
+
+export async function markDisconnected(userId, roomId, socketId) {
+    await participantRepository.markDisconnectedBySocket(userId, roomId, socketId);
+}
+
+export async function removeParticipant(userId, roomId) {
+    await participantRepository.deleteParticipant(roomId, userId);
+    await checkAndDestroyRoom(roomId);
+}
+
+async function checkAndDestroyRoom(roomId) {
+    const count = await participantRepository.countConnected(roomId);
+    if (count === 0) {
+        logger.info({ roomId }, 'Room empty — initiating auto-destruction');
+        await roomRepository.updateRoomStatus(roomId, false);
+        await participantRepository.removeAllInRoom(roomId); 
+        logger.info({ roomId }, 'Room destroyed due to inactivity');
+    }
+}
+
+export async function getParticipantRooms(socketId) {
+    return await participantRepository.getParticipantRooms(socketId);
+}
+
+export async function updateSocketId(userId, roomId, socketId) {
+    await participantRepository.updateSocketId(roomId, userId, socketId);
+}
