@@ -33,8 +33,15 @@ import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
 
+const getBaseUrl = () => {
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:3002';
+  }
+  return 'http://localhost:3002';
+};
+
 const VOICE_API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://localhost:3002";
+  process.env.EXPO_PUBLIC_VOICE_API_URL || getBaseUrl();
 
 interface ChatMessage {
   id: string;

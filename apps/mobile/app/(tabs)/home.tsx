@@ -68,35 +68,26 @@ export default function HomeFeed() {
   };
 
   const fetchArticles = async () => {
+    const NEWS_SERVICE_URL = process.env.EXPO_PUBLIC_NEWS_SERVICE_URL || 'http://192.168.1.4:3001';
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      // 1. Get User Interests
-      const { data: interestData } = await supabase
-        .from("user_interests")
-        .select("selected_interests")
-        .eq("user_id", user.id)
-        .single();
+      if (!token) throw new Error("No auth token");
 
-      const interests = interestData?.selected_interests || [];
+      const response = await fetch(`${NEWS_SERVICE_URL}/api/personalized_articles`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-      // 2. Query Articles (Filtered by Interests if available)
-      let query = supabase
-        .from("Articles")
-        .select("*")
-        .order("id", { ascending: false });
-
-      if (interests.length > 0) {
-        query = query.in("Category", interests);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to fetch articles");
       }
 
-      const { data, error } = await query.limit(20);
-
-      if (error) throw error;
-
+      const data = await response.json();
       setArticles(data || []);
     } catch (error) {
       console.error("Error fetching articles:", error);

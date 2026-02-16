@@ -9,7 +9,7 @@ import {
 } from 'livekit-client';
 import { Socket } from 'socket.io-client';
 
-const LIVEKIT_WS_URL = process.env.EXPO_PUBLIC_LIVEKIT_URL || 'ws://localhost:7880';
+const LIVEKIT_WS_URL = process.env.EXPO_PUBLIC_LIVEKIT_URL || 'ws://192.168.1.4:7880';
 
 setLogLevel(LogLevel.warn);
 

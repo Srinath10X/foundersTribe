@@ -5,6 +5,17 @@ import {
 import { Slot, usePathname, useRouter, useSegments } from "expo-router";
 import { LogBox, Platform } from "react-native";
 import "react-native-reanimated";
+import "react-native-get-random-values";
+import { TextEncoder, TextDecoder } from "text-encoding";
+
+// Polyfills
+if (typeof global.TextEncoder === "undefined") {
+  global.TextEncoder = TextEncoder;
+}
+
+if (typeof global.TextDecoder === "undefined") {
+  global.TextDecoder = TextDecoder;
+}
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
