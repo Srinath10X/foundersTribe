@@ -119,6 +119,7 @@ function RootLayoutNav() {
         // whitelist allowed paths
         const isAllowedPath =
           segment === "(tabs)" ||
+          segment === "room" ||
           segment === "article" ||
           segment === "edit-interests" ||
           currentPath.includes("edit-interests");
