@@ -1,7 +1,9 @@
 import { ArticleReelCard } from '@/components/ArticleReelCard';
 import { Layout, Spacing, Typography } from '@/constants/DesignSystem';
+import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
-import { supabase } from '@/lib/supabase';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.31.76:3001';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -44,6 +46,8 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
 export default function BookmarksScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { session } = useAuth();
+  const authToken = session?.access_token;
   const [bookmarkedArticles, setBookmarkedArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,41 +55,27 @@ export default function BookmarksScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (!authToken) return;
       fetchBookmarkedArticles();
-    }, [])
+    }, [authToken])
   );
 
   const fetchBookmarkedArticles = async (isRefreshing = false) => {
     if (!isRefreshing) setLoading(true);
-    
+    if (!authToken) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) return;
+      const res = await fetch(`${API_URL}/api/user_bookmarked_articles`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
 
-      const { data: interactions } = await supabase
-        .from('user_interactions')
-        .select('article_id')
-        .eq('user_id', user.id)
-        .eq('bookmarked', true);
+      if (!res.ok) throw new Error(`Failed to fetch bookmarks: ${res.status}`);
 
-      if (!interactions || interactions.length === 0) {
-        setBookmarkedArticles([]);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
-      const articleIds = interactions.map(i => i.article_id);
-      
-      const { data: articles } = await supabase
-        .from('Articles')
-        .select('id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"')
-        .in('id', articleIds);
-      
-      if (articles) {
-        setBookmarkedArticles(articles);
-      }
+      const data = await res.json();
+      setBookmarkedArticles(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching bookmarks:', error);
     } finally {
@@ -100,7 +90,7 @@ export default function BookmarksScreen() {
     }
     setRefreshing(true);
     await fetchBookmarkedArticles(true);
-  }, []);
+  }, [authToken]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -117,17 +107,17 @@ export default function BookmarksScreen() {
   const ReachedEndFooter = () => (
     <View style={[styles.footerContainer, { backgroundColor: theme.background }]}>
       <View style={styles.footerContent}>
-         <Ionicons name="checkmark-circle-outline" size={48} color={theme.brand.primary} />
-         <Text style={[styles.footerTitle, { color: theme.text.primary }]}>End of Collection</Text>
-         <Text style={[styles.footerSubtitle, { color: theme.text.tertiary }]}>
-            You've seen all your bookmarked articles.
-         </Text>
-         <TouchableOpacity 
-            style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]} 
-            onPress={() => router.push('/(tabs)/home')}
-         >
-            <Text style={[styles.exploreBtnText, { color: theme.text.inverse }]}>Discover More</Text>
-         </TouchableOpacity>
+        <Ionicons name="checkmark-circle-outline" size={48} color={theme.brand.primary} />
+        <Text style={[styles.footerTitle, { color: theme.text.primary }]}>End of Collection</Text>
+        <Text style={[styles.footerSubtitle, { color: theme.text.tertiary }]}>
+          You've seen all your bookmarked articles.
+        </Text>
+        <TouchableOpacity
+          style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]}
+          onPress={() => router.push('/(tabs)/home')}
+        >
+          <Text style={[styles.exploreBtnText, { color: theme.text.inverse }]}>Discover More</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -141,7 +131,7 @@ export default function BookmarksScreen() {
       <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
         You haven't bookmarked any articles yet.
       </Text>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}
         onPress={() => router.push('/(tabs)/home')}
         activeOpacity={0.7}
@@ -157,7 +147,7 @@ export default function BookmarksScreen() {
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <View style={styles.loadingContainer}>
-           <ActivityIndicator size="large" color={theme.brand.primary} />
+          <ActivityIndicator size="large" color={theme.brand.primary} />
         </View>
       </View>
     );
@@ -166,14 +156,14 @@ export default function BookmarksScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
+
       {/* Overlay Header at top */}
       <View style={styles.headerContainer}>
-          <LinearGradient
-            colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.4)', 'transparent']}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <Text style={styles.headerTitle}>Saved Collection</Text>
+        <LinearGradient
+          colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.4)', 'transparent']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <Text style={styles.headerTitle}>Saved Collection</Text>
       </View>
 
       {bookmarkedArticles.length === 0 ? (

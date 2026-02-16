@@ -1,6 +1,9 @@
 import { Typography } from '@/constants/DesignSystem';
+import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { supabase } from '@/lib/supabase';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.31.76:3001';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
@@ -22,51 +25,43 @@ const { width } = Dimensions.get('window');
 export default function ProfileScreen() {
   const router = useRouter();
   const { theme, themeMode, setThemeMode, isDark } = useTheme();
-  const [userEmail, setUserEmail] = useState('');
-  const [userName, setUserName] = useState('');
+  const { user, session } = useAuth();
+  const authToken = session?.access_token;
   const [stats, setStats] = useState({
     articlesRead: 0,
     bookmarks: 0,
     likes: 0,
   });
 
+  const userEmail = user?.email || '';
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+
   // -- Data Loading --
   useEffect(() => {
-    loadUserData();
-    loadStats();
-  }, []);
+    if (authToken) loadStats();
+  }, [authToken]);
 
-  const loadUserData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      setUserEmail(user.email || '');
-      const fullName = user.user_metadata?.full_name || user.user_metadata?.name;
-      setUserName(fullName || user.email?.split('@')[0] || 'User');
-    }
-  };
-
-  // Calculate stats from User Interactions table
   const loadStats = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const [bookmarksRes, likesRes] = await Promise.all([
+        fetch(`${API_URL}/api/user_bookmarked_articles`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch(`${API_URL}/api/user_liked_articles`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+      ]);
 
-      const { data: bookmarks } = await supabase
-        .from('user_interactions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('bookmarked', true);
+      const bookmarksData = bookmarksRes.ok ? await bookmarksRes.json() : [];
+      const likesData = likesRes.ok ? await likesRes.json() : [];
 
-      const { data: likes } = await supabase
-        .from('user_interactions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('liked', true);
+      const bookmarkCount = Array.isArray(bookmarksData) ? bookmarksData.length : 0;
+      const likeCount = Array.isArray(likesData) ? likesData.length : 0;
 
       setStats({
-        articlesRead: (bookmarks?.length || 0) + (likes?.length || 0),
-        bookmarks: bookmarks?.length || 0,
-        likes: likes?.length || 0,
+        articlesRead: bookmarkCount + likeCount,
+        bookmarks: bookmarkCount,
+        likes: likeCount,
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -107,11 +102,11 @@ export default function ProfileScreen() {
     router.push('/edit-interests');
   };
 
-  const MenuItem = ({ 
-    icon, 
-    title, 
-    subtitle, 
-    onPress, 
+  const MenuItem = ({
+    icon,
+    title,
+    subtitle,
+    onPress,
     showChevron = true,
     rightElement,
     accentColor
@@ -125,10 +120,10 @@ export default function ProfileScreen() {
     accentColor?: string;
   }) => {
     const iconColor = accentColor || theme.brand.primary;
-    
+
     return (
-      <TouchableOpacity 
-        style={[styles.menuItem, { borderBottomColor: theme.border }]} 
+      <TouchableOpacity
+        style={[styles.menuItem, { borderBottomColor: theme.border }]}
         onPress={onPress}
         activeOpacity={0.7}
         disabled={!onPress}
@@ -154,21 +149,21 @@ export default function ProfileScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView 
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Profile Header */}
         <View style={styles.header}>
-            <View style={styles.avatarWrapper}>
-                <View style={[styles.avatar, { borderColor: theme.brand.primary, shadowColor: theme.brand.primary }]}>
-                    <Text style={[styles.avatarInitial, { color: theme.brand.primary }]}>
-                        {userName.charAt(0).toUpperCase() || 'P'}
-                    </Text>
-                </View>
+          <View style={styles.avatarWrapper}>
+            <View style={[styles.avatar, { borderColor: theme.brand.primary, shadowColor: theme.brand.primary }]}>
+              <Text style={[styles.avatarInitial, { color: theme.brand.primary }]}>
+                {userName.charAt(0).toUpperCase() || 'P'}
+              </Text>
             </View>
-            <Text style={[styles.userName, { color: theme.text.primary }]}>{userName}</Text>
-            <Text style={[styles.userEmail, { color: theme.text.secondary }]}>{userEmail}</Text>
+          </View>
+          <Text style={[styles.userName, { color: theme.text.primary }]}>{userName}</Text>
+          <Text style={[styles.userEmail, { color: theme.text.secondary }]}>{userEmail}</Text>
         </View>
 
         {/* Stats Row */}
@@ -189,72 +184,72 @@ export default function ProfileScreen() {
 
         {/* Content Sections */}
         <View style={styles.sectionsContainer}>
-            {/* Personalization Section */}
-            <View style={styles.section}>
-                <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>PERSONALIZATION</Text>
-                <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                    <MenuItem
-                    icon="heart"
-                    title="Edit Interests"
-                    subtitle="Customize your news feed"
-                    onPress={handleEditInterests}
-                    />
-                    <MenuItem
-                    icon="notifications"
-                    title="Notifications"
-                    subtitle="Manage your alerts"
-                    onPress={() => triggerHaptic()}
-                    />
-                </View>
+          {/* Personalization Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>PERSONALIZATION</Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <MenuItem
+                icon="heart"
+                title="Edit Interests"
+                subtitle="Customize your news feed"
+                onPress={handleEditInterests}
+              />
+              <MenuItem
+                icon="notifications"
+                title="Notifications"
+                subtitle="Manage your alerts"
+                onPress={() => triggerHaptic()}
+              />
             </View>
+          </View>
 
-            {/* Appearance Section */}
-            <View style={styles.section}>
-                <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>APPEARANCE</Text>
-                <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                    <MenuItem
-                        icon="moon"
-                        title="Theme"
-                        subtitle={themeMode === 'light' ? 'Light Mode' : 'Dark Mode'}
-                        showChevron={false}
-                        rightElement={
-                            <View style={[styles.themeToggle, { backgroundColor: theme.border }]}>
-                                <TouchableOpacity 
-                                    style={[styles.themePill, themeMode === 'light' && { backgroundColor: theme.brand.primary }]}
-                                    onPress={() => { triggerHaptic(); setThemeMode('light'); }}
-                                >
-                                    <Ionicons name="sunny-outline" size={14} color={themeMode === 'light' ? theme.text.inverse : theme.text.tertiary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    style={[styles.themePill, themeMode === 'dark' && { backgroundColor: theme.brand.primary }]}
-                                    onPress={() => { triggerHaptic(); setThemeMode('dark'); }}
-                                >
-                                    <Ionicons name="moon" size={14} color={themeMode === 'dark' ? theme.text.inverse : theme.text.tertiary} />
-                                </TouchableOpacity>
-                            </View>
-                        }
-                    />
-                </View>
+          {/* Appearance Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>APPEARANCE</Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <MenuItem
+                icon="moon"
+                title="Theme"
+                subtitle={themeMode === 'light' ? 'Light Mode' : 'Dark Mode'}
+                showChevron={false}
+                rightElement={
+                  <View style={[styles.themeToggle, { backgroundColor: theme.border }]}>
+                    <TouchableOpacity
+                      style={[styles.themePill, themeMode === 'light' && { backgroundColor: theme.brand.primary }]}
+                      onPress={() => { triggerHaptic(); setThemeMode('light'); }}
+                    >
+                      <Ionicons name="sunny-outline" size={14} color={themeMode === 'light' ? theme.text.inverse : theme.text.tertiary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.themePill, themeMode === 'dark' && { backgroundColor: theme.brand.primary }]}
+                      onPress={() => { triggerHaptic(); setThemeMode('dark'); }}
+                    >
+                      <Ionicons name="moon" size={14} color={themeMode === 'dark' ? theme.text.inverse : theme.text.tertiary} />
+                    </TouchableOpacity>
+                  </View>
+                }
+              />
             </View>
+          </View>
 
-            {/* Account Section */}
-            <View style={styles.section}>
-                <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>ACCOUNT</Text>
-                <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                    <MenuItem
-                        icon="log-out"
-                        title="Logout"
-                        subtitle="Sign out of your account"
-                        onPress={handleLogout}
-                        accentColor="#EF4444"
-                    />
-                </View>
+          {/* Account Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>ACCOUNT</Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <MenuItem
+                icon="log-out"
+                title="Logout"
+                subtitle="Sign out of your account"
+                onPress={handleLogout}
+                accentColor="#EF4444"
+              />
             </View>
+          </View>
         </View>
 
         {/* App Footer */}
         <View style={styles.footer}>
-            <Text style={[styles.footerVersion, { color: theme.text.muted }]}>dayStart.ai V1.0</Text>
+          <Text style={[styles.footerVersion, { color: theme.text.muted }]}>dayStart.ai V1.0</Text>
         </View>
       </ScrollView>
     </View>

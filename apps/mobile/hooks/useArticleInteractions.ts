@@ -1,7 +1,9 @@
-import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/context/AuthContext";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.31.76:3001";
 
 interface ArticleInteraction {
   liked: boolean;
@@ -11,6 +13,10 @@ interface ArticleInteraction {
 const INTERACTION_SYNC_EVENT = "ARTICLE_INTERACTION_SYNC";
 
 export function useArticleInteractions(articleId: number) {
+  const { session } = useAuth();
+  const authToken = session?.access_token;
+  const userId = session?.user?.id;
+
   const [interaction, setInteraction] = useState<ArticleInteraction>({
     liked: false,
     bookmarked: false,
@@ -18,44 +24,46 @@ export function useArticleInteractions(articleId: number) {
   const [loading, setLoading] = useState(true);
 
   const fetchInteraction = useCallback(async () => {
+    if (!authToken || !userId) return;
+
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      // Fetch liked status
+      const [likedRes, bookmarkedRes] = await Promise.all([
+        fetch(`${API_URL}/api/user_liked_articles`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+        fetch(`${API_URL}/api/user_bookmarked_articles`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        }),
+      ]);
 
-      const { data, error } = await supabase
-        .from("user_interactions")
-        .select("liked, bookmarked")
-        .eq("user_id", user.id)
-        .eq("article_id", articleId)
-        .maybeSingle();
+      let liked = false;
+      let bookmarked = false;
 
-      if (error) {
-        console.error("Error fetching interaction:", error);
-        return;
+      if (likedRes.ok) {
+        const likedData = await likedRes.json();
+        liked = Array.isArray(likedData)
+          ? likedData.some((item: any) => item.article_id === articleId || item.id === articleId)
+          : false;
       }
 
-      if (data) {
-        setInteraction(data);
-      } else {
-        setInteraction({
-          liked: false,
-          bookmarked: false,
-        });
+      if (bookmarkedRes.ok) {
+        const bookmarkedData = await bookmarkedRes.json();
+        bookmarked = Array.isArray(bookmarkedData)
+          ? bookmarkedData.some((item: any) => item.article_id === articleId || item.id === articleId)
+          : false;
       }
+
+      setInteraction({ liked, bookmarked });
     } catch (error) {
       console.error("Error in fetchInteraction:", error);
     } finally {
       setLoading(false);
     }
-  }, [articleId]);
+  }, [articleId, authToken, userId]);
 
-  // 2. Realtime Subscription & Local Event Sync
+  // Local event sync for instant tab-to-tab updates
   useEffect(() => {
-    let channel: any;
-
-    // Local listener for instant tab-to-tab sync
     const localSubscription = DeviceEventEmitter.addListener(
       INTERACTION_SYNC_EVENT,
       (payload: {
@@ -63,54 +71,19 @@ export function useArticleInteractions(articleId: number) {
         updates: Partial<ArticleInteraction>;
       }) => {
         if (payload.articleId === articleId) {
-          console.log("DEBUG: Local sync received for article", articleId);
           setInteraction((prev) => ({ ...prev, ...payload.updates }));
         }
       },
     );
 
-    const setupSubscription = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      channel = supabase
-        .channel(`article_interactions_${articleId}_${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "user_interactions",
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload: any) => {
-            if (payload.new && payload.new.article_id === articleId) {
-              console.log(
-                "REALTIME: Remote update received for article",
-                articleId,
-              );
-              setInteraction({
-                liked: payload.new.liked,
-                bookmarked: payload.new.bookmarked,
-              });
-            }
-          },
-        )
-        .subscribe();
-    };
-
     fetchInteraction();
-    setupSubscription();
 
     return () => {
       localSubscription.remove();
-      if (channel) supabase.removeChannel(channel);
     };
   }, [articleId, fetchInteraction]);
 
-  // 3. Focus-sync as a fallback
+  // Focus-sync as a fallback
   useFocusEffect(
     useCallback(() => {
       fetchInteraction();
@@ -118,15 +91,12 @@ export function useArticleInteractions(articleId: number) {
   );
 
   const toggleLike = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        alert("Please log in to like articles");
-        return;
-      }
+    if (!authToken || !userId) {
+      alert("Please log in to like articles");
+      return;
+    }
 
+    try {
       const newLiked = !interaction.liked;
 
       // OPTIMISTIC LOCAL UPDATE & SYNC
@@ -136,32 +106,36 @@ export function useArticleInteractions(articleId: number) {
         updates: { liked: newLiked },
       });
 
-      const { error } = await supabase.from("user_interactions").upsert(
-        {
-          user_id: user.id,
+      const res = await fetch(`${API_URL}/api/user_liked_articles`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           article_id: articleId,
           liked: newLiked,
-          bookmarked: interaction.bookmarked,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id,article_id",
-        },
-      );
+        }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        // Revert on failure
+        setInteraction((prev) => ({ ...prev, liked: !newLiked }));
+        DeviceEventEmitter.emit(INTERACTION_SYNC_EVENT, {
+          articleId,
+          updates: { liked: !newLiked },
+        });
+        throw new Error(`Failed to toggle like: ${res.status}`);
+      }
     } catch (error) {
       console.error("Error toggling like:", error);
     }
   };
 
   const toggleBookmark = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+    if (!authToken || !userId) return;
 
+    try {
       const newBookmarked = !interaction.bookmarked;
 
       // OPTIMISTIC LOCAL UPDATE & SYNC
@@ -171,21 +145,27 @@ export function useArticleInteractions(articleId: number) {
         updates: { bookmarked: newBookmarked },
       });
 
-      const { error } = await supabase.from("user_interactions").upsert(
-        {
-          user_id: user.id,
+      const res = await fetch(`${API_URL}/api/user_bookmarked_articles`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           article_id: articleId,
-          liked: interaction.liked,
           bookmarked: newBookmarked,
-          saved_offline: interaction.saved_offline,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id,article_id",
-        },
-      );
+        }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        // Revert on failure
+        setInteraction((prev) => ({ ...prev, bookmarked: !newBookmarked }));
+        DeviceEventEmitter.emit(INTERACTION_SYNC_EVENT, {
+          articleId,
+          updates: { bookmarked: !newBookmarked },
+        });
+        throw new Error(`Failed to toggle bookmark: ${res.status}`);
+      }
     } catch (error) {
       console.error("Error toggling bookmark:", error);
     }
