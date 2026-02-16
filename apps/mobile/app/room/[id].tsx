@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,17 +10,17 @@ import {
   Platform,
   StatusBar,
   KeyboardAvoidingView,
-} from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+} from "react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Room,
   RoomEvent,
   Participant,
   RemoteParticipant,
   ConnectionState,
-} from 'livekit-client';
-import { io, Socket } from 'socket.io-client';
-import { Ionicons } from '@expo/vector-icons';
+} from "livekit-client";
+import { io, Socket } from "socket.io-client";
+import { Ionicons } from "@expo/vector-icons";
 
 import {
   joinRoomViaSocket,
@@ -28,12 +28,13 @@ import {
   toggleMic,
   getParticipantInfo,
   ParticipantInfo,
-} from '../../lib/livekit';
-import { useAuth } from '../../context/AuthContext';
-import { useTheme } from '../../context/ThemeContext';
-import { Typography, Spacing, Layout } from '../../constants/DesignSystem';
+} from "../../lib/livekit";
+import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
+import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
 
-const VOICE_API_URL = process.env.EXPO_PUBLIC_VOICE_API_URL || 'http://localhost:3002';
+const VOICE_API_URL =
+  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://localhost:3002";
 
 interface ChatMessage {
   id: string;
@@ -46,7 +47,7 @@ interface ChatMessage {
 interface ServerParticipant {
   id: string;
   user_id: string;
-  role: 'host' | 'co-host' | 'speaker' | 'listener';
+  role: "host" | "co-host" | "speaker" | "listener";
   is_connected: boolean;
   user_name?: string;
 }
@@ -57,29 +58,38 @@ export default function RoomScreen() {
   const { session } = useAuth();
   const { theme, isDark } = useTheme();
 
-  const currentUserId = session?.user?.id || '';
+  const currentUserId = session?.user?.id || "";
   const authToken = session?.access_token;
 
   const [room, setRoom] = useState<Room | null>(null);
-  const [serverParticipants, setServerParticipants] = useState<ServerParticipant[]>([]);
-  const [livekitParticipants, setLivekitParticipants] = useState<ParticipantInfo[]>([]);
+  const [serverParticipants, setServerParticipants] = useState<
+    ServerParticipant[]
+  >([]);
+  const [livekitParticipants, setLivekitParticipants] = useState<
+    ParticipantInfo[]
+  >([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [messageInput, setMessageInput] = useState('');
+  const [messageInput, setMessageInput] = useState("");
   const [isMicEnabled, setIsMicEnabled] = useState(false);
-  const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
-  const [myRole, setMyRole] = useState<'host' | 'co-host' | 'speaker' | 'listener'>('listener');
-  const [roomTitle, setRoomTitle] = useState('Room');
+  const [connectionState, setConnectionState] = useState<ConnectionState>(
+    ConnectionState.Disconnected,
+  );
+  const [myRole, setMyRole] = useState<
+    "host" | "co-host" | "speaker" | "listener"
+  >("listener");
+  const [roomTitle, setRoomTitle] = useState("Room");
 
   const socketRef = useRef<Socket | null>(null);
   const roomRef = useRef<Room | null>(null);
   const chatListRef = useRef<FlatList>(null);
 
   const displayRole = (role: string) => {
-    if (role === 'listener') return 'audience';
+    if (role === "listener") return "audience";
     return role;
   };
 
-  const canSpeak = myRole === 'host' || myRole === 'co-host' || myRole === 'speaker';
+  const canSpeak =
+    myRole === "host" || myRole === "co-host" || myRole === "speaker";
 
   // Merge server participant data with LiveKit speaking data
   const mergedParticipants = serverParticipants.map((sp) => {
@@ -95,7 +105,7 @@ export default function RoomScreen() {
   const handleLeaveRoom = useCallback(() => {
     const socket = socketRef.current;
     if (socket?.connected && roomId) {
-      socket.emit('leave_room', { roomId }, () => { });
+      socket.emit("leave_room", { roomId }, () => {});
     }
     roomRef.current?.disconnect();
     router.back();
@@ -114,19 +124,22 @@ export default function RoomScreen() {
 
         // 1. Connect Socket.IO
         socket = io(VOICE_API_URL, {
-          transports: ['websocket'],
+          transports: ["websocket"],
           auth: { token: authToken },
         });
         socketRef.current = socket;
 
         await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('Socket connection timeout')), 10000);
-          socket!.on('connect', () => {
+          const timeout = setTimeout(
+            () => reject(new Error("Socket connection timeout")),
+            10000,
+          );
+          socket!.on("connect", () => {
             clearTimeout(timeout);
-            console.log('Room socket connected:', socket!.id);
+            console.log("Room socket connected:", socket!.id);
             resolve();
           });
-          socket!.on('connect_error', (err) => {
+          socket!.on("connect_error", (err) => {
             clearTimeout(timeout);
             reject(err);
           });
@@ -154,22 +167,42 @@ export default function RoomScreen() {
 
         // LiveKit event listeners
         const updateLKParticipants = (lkRoom: Room) => {
-          const all = [lkRoom.localParticipant, ...Array.from(lkRoom.remoteParticipants.values())];
+          const all = [
+            lkRoom.localParticipant,
+            ...Array.from(lkRoom.remoteParticipants.values()),
+          ];
           setLivekitParticipants(all.map((p) => getParticipantInfo(p)));
         };
 
         livekitRoom
-          .on(RoomEvent.ParticipantConnected, () => updateLKParticipants(livekitRoom!))
-          .on(RoomEvent.ParticipantDisconnected, () => updateLKParticipants(livekitRoom!))
-          .on(RoomEvent.ActiveSpeakersChanged, () => updateLKParticipants(livekitRoom!))
-          .on(RoomEvent.TrackPublished, () => updateLKParticipants(livekitRoom!))
-          .on(RoomEvent.TrackUnpublished, () => updateLKParticipants(livekitRoom!))
-          .on(RoomEvent.LocalTrackPublished, () => updateLKParticipants(livekitRoom!))
-          .on(RoomEvent.LocalTrackUnpublished, () => updateLKParticipants(livekitRoom!))
+          .on(RoomEvent.ParticipantConnected, () =>
+            updateLKParticipants(livekitRoom!),
+          )
+          .on(RoomEvent.ParticipantDisconnected, () =>
+            updateLKParticipants(livekitRoom!),
+          )
+          .on(RoomEvent.ActiveSpeakersChanged, () =>
+            updateLKParticipants(livekitRoom!),
+          )
+          .on(RoomEvent.TrackPublished, () =>
+            updateLKParticipants(livekitRoom!),
+          )
+          .on(RoomEvent.TrackUnpublished, () =>
+            updateLKParticipants(livekitRoom!),
+          )
+          .on(RoomEvent.LocalTrackPublished, () =>
+            updateLKParticipants(livekitRoom!),
+          )
+          .on(RoomEvent.LocalTrackUnpublished, () =>
+            updateLKParticipants(livekitRoom!),
+          )
           .on(RoomEvent.ConnectionStateChanged, (state) => {
             setConnectionState(state);
             if (state === ConnectionState.Disconnected) {
-              Alert.alert('Disconnected', 'You have been disconnected from the room.');
+              Alert.alert(
+                "Disconnected",
+                "You have been disconnected from the room.",
+              );
               handleLeaveRoom();
             }
           });
@@ -177,83 +210,105 @@ export default function RoomScreen() {
         updateLKParticipants(livekitRoom);
 
         // Enable mic if host/speaker
-        if (myParticipant && ['host', 'co-host', 'speaker'].includes(myParticipant.role)) {
+        if (
+          myParticipant &&
+          ["host", "co-host", "speaker"].includes(myParticipant.role)
+        ) {
           await toggleMic(livekitRoom.localParticipant, true);
           setIsMicEnabled(true);
         }
 
         // Socket.IO room event listeners
-        socket!.on('receive_message', (data: { message: ChatMessage }) => {
+        socket!.on("receive_message", (data: { message: ChatMessage }) => {
           setChatMessages((prev) => [...prev, data.message]);
         });
 
-        socket!.on('participant_joined', (data: { participant: ServerParticipant }) => {
-          setServerParticipants((prev) => {
-            const exists = prev.some((p) => p.user_id === data.participant.user_id);
-            if (exists) return prev;
-            return [...prev, data.participant];
-          });
-        });
+        socket!.on(
+          "participant_joined",
+          (data: { participant: ServerParticipant }) => {
+            setServerParticipants((prev) => {
+              const exists = prev.some(
+                (p) => p.user_id === data.participant.user_id,
+              );
+              if (exists) return prev;
+              return [...prev, data.participant];
+            });
+          },
+        );
 
-        socket!.on('participant_left', (data: { userId: string }) => {
-          setServerParticipants((prev) => prev.filter((p) => p.user_id !== data.userId));
-        });
-
-        socket!.on('participant_updated', (data: { participant: ServerParticipant }) => {
+        socket!.on("participant_left", (data: { userId: string }) => {
           setServerParticipants((prev) =>
-            prev.map((p) => (p.user_id === data.participant.user_id ? data.participant : p)),
+            prev.filter((p) => p.user_id !== data.userId),
           );
-          // Update my own role if changed
-          if (data.participant.user_id === currentUserId) {
-            setMyRole(data.participant.role);
-          }
         });
 
-        socket!.on('role_changed', (data: { participant: ServerParticipant; livekitToken: string }) => {
-          setMyRole(data.participant.role);
-          // Reconnect LiveKit with new token for updated permissions
-          if (livekitRoom) {
-            livekitRoom.disconnect();
-            connectToLiveKitRoom(data.livekitToken).then((newRoom) => {
-              setRoom(newRoom);
-              roomRef.current = newRoom;
-              const canPublish = ['host', 'co-host', 'speaker'].includes(data.participant.role);
-              if (canPublish) {
+        socket!.on(
+          "participant_updated",
+          (data: { participant: ServerParticipant }) => {
+            setServerParticipants((prev) =>
+              prev.map((p) =>
+                p.user_id === data.participant.user_id ? data.participant : p,
+              ),
+            );
+            // Update my own role if changed
+            if (data.participant.user_id === currentUserId) {
+              setMyRole(data.participant.role);
+            }
+          },
+        );
+
+        socket!.on(
+          "role_changed",
+          (data: { participant: ServerParticipant; livekitToken: string }) => {
+            setMyRole(data.participant.role);
+            // Reconnect LiveKit with new token for updated permissions
+            if (livekitRoom) {
+              livekitRoom.disconnect();
+              connectToLiveKitRoom(data.livekitToken).then((newRoom) => {
+                setRoom(newRoom);
+                roomRef.current = newRoom;
+                const canPublish = ["host", "co-host", "speaker"].includes(
+                  data.participant.role,
+                );
+                if (canPublish) {
+                  toggleMic(newRoom.localParticipant, true);
+                  setIsMicEnabled(true);
+                }
+              });
+            }
+          },
+        );
+
+        socket!.on(
+          "mic_granted",
+          (data: { participant: ServerParticipant; livekitToken: string }) => {
+            setMyRole(data.participant.role);
+            if (livekitRoom) {
+              livekitRoom.disconnect();
+              connectToLiveKitRoom(data.livekitToken).then((newRoom) => {
+                setRoom(newRoom);
+                roomRef.current = newRoom;
                 toggleMic(newRoom.localParticipant, true);
                 setIsMicEnabled(true);
-              }
-            });
-          }
-        });
+              });
+            }
+          },
+        );
 
-        socket!.on('mic_granted', (data: { participant: ServerParticipant; livekitToken: string }) => {
-          setMyRole(data.participant.role);
-          if (livekitRoom) {
-            livekitRoom.disconnect();
-            connectToLiveKitRoom(data.livekitToken).then((newRoom) => {
-              setRoom(newRoom);
-              roomRef.current = newRoom;
-              toggleMic(newRoom.localParticipant, true);
-              setIsMicEnabled(true);
-            });
-          }
-        });
-
-        socket!.on('removed_from_room', () => {
-          Alert.alert('Removed', 'You have been removed from the room.');
+        socket!.on("removed_from_room", () => {
+          Alert.alert("Removed", "You have been removed from the room.");
           roomRef.current?.disconnect();
           router.back();
         });
 
-        socket!.on('room_ended', () => {
-          Alert.alert('Room Ended', 'The host has ended this room.');
+        socket!.on("room_ended", () => {
+          Alert.alert("Room Ended", "The host has ended this room.");
           roomRef.current?.disconnect();
           router.back();
         });
-
       } catch (error: any) {
-        console.error('Failed to setup room:', error);
-        Alert.alert('Error', `Failed to join room: ${error.message}`);
+        console.error("Failed to setup room:", error);
+        Alert.alert("Error", `Failed to join room: ${error.message}`);
         setConnectionState(ConnectionState.Disconnected);
         socket?.disconnect();
       }
@@ -273,7 +328,10 @@ export default function RoomScreen() {
   const handleToggleMic = async () => {
     if (!room?.localParticipant) return;
     if (!canSpeak) {
-      Alert.alert('Permission Denied', 'Only speakers and hosts can use the microphone.');
+      Alert.alert(
+        "Permission Denied",
+        "Only speakers and hosts can use the microphone.",
+      );
       return;
     }
     const newState = !isMicEnabled;
@@ -286,12 +344,16 @@ export default function RoomScreen() {
     const socket = socketRef.current;
     if (!socket?.connected || !messageInput.trim()) return;
 
-    socket.emit('send_message', { roomId, content: messageInput.trim() }, (response: any) => {
-      if (!response.success) {
-        console.error('Failed to send message:', response.error);
-      }
-    });
-    setMessageInput('');
+    socket.emit(
+      "send_message",
+      { roomId, content: messageInput.trim() },
+      (response: any) => {
+        if (!response.success) {
+          console.error("Failed to send message:", response.error);
+        }
+      },
+    );
+    setMessageInput("");
   };
 
   // Promote audience → speaker
@@ -300,41 +362,54 @@ export default function RoomScreen() {
     if (!socket?.connected) return;
 
     socket.emit(
-      'promote_user',
-      { targetId: targetUserId, roomId, role: 'speaker' },
+      "promote_user",
+      { targetId: targetUserId, roomId, role: "speaker" },
       (response: any) => {
         if (!response.success) {
-          Alert.alert('Error', response.error || 'Failed to promote user');
+          Alert.alert("Error", response.error || "Failed to promote user");
         }
       },
     );
   };
 
   // Render participant item
-  const renderParticipant = ({ item }: { item: typeof mergedParticipants[0] }) => {
+  const renderParticipant = ({
+    item,
+  }: {
+    item: (typeof mergedParticipants)[0];
+  }) => {
     const isMe = item.user_id === currentUserId;
-    const isAudience = item.role === 'listener';
-    const showPromote = myRole === 'host' && isAudience && !isMe;
+    const isAudience = item.role === "listener";
+    const showPromote = myRole === "host" && isAudience && !isMe;
 
     return (
-      <View style={[styles.participantItem, { borderBottomColor: theme.border }]}>
+      <View
+        style={[styles.participantItem, { borderBottomColor: theme.border }]}
+      >
         <View style={styles.participantLeft}>
           <View
             style={[
               styles.participantAvatar,
-              { backgroundColor: theme.brand.primary + '20' },
+              { backgroundColor: theme.brand.primary + "20" },
               item.isSpeaking && { borderColor: theme.success, borderWidth: 2 },
             ]}
           >
-            <Text style={[styles.avatarInitial, { color: theme.brand.primary }]}>
+            <Text
+              style={[styles.avatarInitial, { color: theme.brand.primary }]}
+            >
               {item.displayName.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.participantInfo}>
-            <Text style={[styles.participantName, { color: theme.text.primary }]} numberOfLines={1}>
-              {item.displayName} {isMe ? '(You)' : ''}
+            <Text
+              style={[styles.participantName, { color: theme.text.primary }]}
+              numberOfLines={1}
+            >
+              {item.displayName} {isMe ? "(You)" : ""}
             </Text>
-            <Text style={[styles.participantRole, { color: theme.text.tertiary }]}>
+            <Text
+              style={[styles.participantRole, { color: theme.text.tertiary }]}
+            >
               {displayRole(item.role)}
             </Text>
           </View>
@@ -342,18 +417,23 @@ export default function RoomScreen() {
         <View style={styles.participantRight}>
           {item.isMicEnabled && (
             <Ionicons
-              name={item.isSpeaking ? 'volume-high' : 'mic'}
+              name={item.isSpeaking ? "volume-high" : "mic"}
               size={16}
               color={item.isSpeaking ? theme.success : theme.text.tertiary}
             />
           )}
           {showPromote && (
             <TouchableOpacity
-              style={[styles.promoteButton, { backgroundColor: theme.brand.primary }]}
+              style={[
+                styles.promoteButton,
+                { backgroundColor: theme.brand.primary },
+              ]}
               onPress={() => handlePromote(item.user_id)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.promoteText, { color: theme.text.inverse }]}>Promote</Text>
+              <Text style={[styles.promoteText, { color: theme.text.inverse }]}>
+                Promote
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -389,7 +469,10 @@ export default function RoomScreen() {
           </Text>
         </View>
         <Text style={[styles.messageTime, { color: theme.text.muted }]}>
-          {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {new Date(item.created_at).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
         </Text>
       </View>
     );
@@ -399,22 +482,37 @@ export default function RoomScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen
         options={{
           headerShown: true,
           title: roomTitle,
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.text.primary,
-          headerTitleStyle: { ...Typography.presets.h3, color: theme.text.primary },
+          headerTitleStyle: {
+            ...Typography.presets.h3,
+            color: theme.text.primary,
+          },
           headerLeft: () => (
-            <TouchableOpacity onPress={handleLeaveRoom} style={styles.headerButton}>
-              <Ionicons name="arrow-back" size={24} color={theme.text.primary} />
+            <TouchableOpacity
+              onPress={handleLeaveRoom}
+              style={styles.headerButton}
+            >
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={theme.text.primary}
+              />
             </TouchableOpacity>
           ),
           headerRight: () => (
-            <TouchableOpacity onPress={handleLeaveRoom} style={styles.headerButton}>
-              <Text style={[styles.leaveText, { color: theme.error }]}>Leave</Text>
+            <TouchableOpacity
+              onPress={handleLeaveRoom}
+              style={styles.headerButton}
+            >
+              <Text style={[styles.leaveText, { color: theme.error }]}>
+                Leave
+              </Text>
             </TouchableOpacity>
           ),
         }}
@@ -422,11 +520,16 @@ export default function RoomScreen() {
 
       <KeyboardAvoidingView
         style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
       >
         {/* Participants Section */}
-        <View style={[styles.section, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.section,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
           <View style={styles.sectionHeader}>
             <Ionicons name="people" size={18} color={theme.brand.primary} />
             <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>
@@ -442,7 +545,12 @@ export default function RoomScreen() {
         </View>
 
         {/* Voice Controls */}
-        <View style={[styles.controlsRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.controlsRow,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.micButton,
@@ -458,17 +566,21 @@ export default function RoomScreen() {
             disabled={!isConnected || !canSpeak}
             activeOpacity={0.8}
           >
-            <Ionicons name={isMicEnabled ? 'mic' : 'mic-off'} size={24} color={theme.text.inverse} />
+            <Ionicons
+              name={isMicEnabled ? "mic" : "mic-off"}
+              size={24}
+              color={theme.text.inverse}
+            />
           </TouchableOpacity>
           <View style={styles.controlInfo}>
             <Text style={[styles.controlLabel, { color: theme.text.primary }]}>
               {!isConnected
-                ? 'Connecting...'
+                ? "Connecting..."
                 : isMicEnabled
-                  ? 'Mic On'
+                  ? "Mic On"
                   : canSpeak
-                    ? 'Mic Off'
-                    : 'Listening'}
+                    ? "Mic Off"
+                    : "Listening"}
             </Text>
             <Text style={[styles.controlSub, { color: theme.text.tertiary }]}>
               Role: {displayRole(myRole)}
@@ -477,10 +589,21 @@ export default function RoomScreen() {
         </View>
 
         {/* Chat Section */}
-        <View style={[styles.chatSection, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+        <View
+          style={[
+            styles.chatSection,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
           <View style={styles.sectionHeader}>
-            <Ionicons name="chatbubbles" size={18} color={theme.brand.primary} />
-            <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>Chat</Text>
+            <Ionicons
+              name="chatbubbles"
+              size={18}
+              color={theme.brand.primary}
+            />
+            <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>
+              Chat
+            </Text>
           </View>
           <FlatList
             ref={chatListRef}
@@ -489,7 +612,9 @@ export default function RoomScreen() {
             keyExtractor={(item, index) => item.id || index.toString()}
             style={styles.chatList}
             contentContainerStyle={styles.chatListContent}
-            onContentSizeChange={() => chatListRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={() =>
+              chatListRef.current?.scrollToEnd({ animated: true })
+            }
           />
           <View style={[styles.chatInputRow, { borderTopColor: theme.border }]}>
             <TextInput
@@ -542,7 +667,7 @@ const styles = StyleSheet.create({
   },
   leaveText: {
     ...Typography.presets.body,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   section: {
     borderRadius: Layout.radius.lg,
@@ -551,8 +676,8 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.xs,
     marginBottom: Spacing.sm,
   },
@@ -561,42 +686,42 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.md,
   },
   participantItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: Spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   participantLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   participantAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: Spacing.sm,
   },
   avatarInitial: {
     ...Typography.presets.body,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   participantInfo: {
     flex: 1,
   },
   participantName: {
     ...Typography.presets.bodySmall,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   participantRole: {
     ...Typography.presets.caption,
   },
   participantRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.xs,
   },
   promoteButton: {
@@ -606,11 +731,11 @@ const styles = StyleSheet.create({
   },
   promoteText: {
     ...Typography.presets.caption,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: Layout.radius.lg,
     padding: Spacing.md,
     borderWidth: 1,
@@ -620,15 +745,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   controlInfo: {
     flex: 1,
   },
   controlLabel: {
     ...Typography.presets.body,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   controlSub: {
     ...Typography.presets.caption,
@@ -637,7 +762,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: Layout.radius.lg,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   chatList: {
     flex: 1,
@@ -648,14 +773,14 @@ const styles = StyleSheet.create({
   },
   messageItem: {
     marginBottom: Spacing.xs,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   messageItemMe: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   messageSender: {
     ...Typography.presets.caption,
-    fontWeight: '600',
+    fontWeight: "600",
     marginBottom: 2,
     marginLeft: Spacing.xxs,
   },
@@ -663,7 +788,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.sm,
     borderRadius: Layout.radius.md,
-    maxWidth: '80%',
+    maxWidth: "80%",
   },
   messageText: {
     ...Typography.presets.bodySmall,
@@ -675,8 +800,8 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.xxs,
   },
   chatInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: Spacing.xs,
@@ -693,7 +818,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

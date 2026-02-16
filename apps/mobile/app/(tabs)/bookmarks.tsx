@@ -1,14 +1,12 @@
-import { ArticleReelCard } from '@/components/ArticleReelCard';
-import { Layout, Spacing, Typography } from '@/constants/DesignSystem';
-import { useAuth } from '@/context/AuthContext';
-import { useTheme } from '@/context/ThemeContext';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.31.76:3001';
-import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { ArticleReelCard } from "@/components/ArticleReelCard";
+import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
+import { useTheme } from "@/context/ThemeContext";
+import { supabase } from "@/lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -20,12 +18,15 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+} from "react-native";
+import Animated, {
+  useAnimatedScrollHandler,
+  useSharedValue,
+} from "react-native-reanimated";
 
-const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
-const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 70;
-const HEADER_HEIGHT = Platform.OS === 'ios' ? 140 : 120; // Slightly more for better gradient fade
+const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
+const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
+const HEADER_HEIGHT = Platform.OS === "ios" ? 140 : 120; // Slightly more for better gradient fade
 
 const REEL_WIDTH = windowWidth;
 const REEL_HEIGHT = windowHeight - TAB_BAR_HEIGHT;
@@ -35,10 +36,10 @@ interface Article {
   Title: string;
   Summary: string;
   Content: string;
-  'Image URL': string | null;
-  'Article Link': string;
+  "Image URL": string | null;
+  "Article Link": string;
   Category: string | null;
-  'Company Name': string | null;
+  "Company Name": string | null;
 }
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
@@ -46,8 +47,6 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
 export default function BookmarksScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
-  const { session } = useAuth();
-  const authToken = session?.access_token;
   const [bookmarkedArticles, setBookmarkedArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,29 +54,47 @@ export default function BookmarksScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!authToken) return;
       fetchBookmarkedArticles();
-    }, [authToken])
+    }, []),
   );
 
   const fetchBookmarkedArticles = async (isRefreshing = false) => {
     if (!isRefreshing) setLoading(true);
-    if (!authToken) {
-      setLoading(false);
-      return;
-    }
 
     try {
-      const res = await fetch(`${API_URL}/api/user_bookmarked_articles`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      if (!res.ok) throw new Error(`Failed to fetch bookmarks: ${res.status}`);
+      if (!user) return;
 
-      const data = await res.json();
-      setBookmarkedArticles(Array.isArray(data) ? data : []);
+      const { data: interactions } = await supabase
+        .from("user_interactions")
+        .select("article_id")
+        .eq("user_id", user.id)
+        .eq("bookmarked", true);
+
+      if (!interactions || interactions.length === 0) {
+        setBookmarkedArticles([]);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      const articleIds = interactions.map((i) => i.article_id);
+
+      const { data: articles } = await supabase
+        .from("Articles")
+        .select(
+          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"',
+        )
+        .in("id", articleIds);
+
+      if (articles) {
+        setBookmarkedArticles(articles);
+      }
     } catch (error) {
-      console.error('Error fetching bookmarks:', error);
+      console.error("Error fetching bookmarks:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -85,12 +102,12 @@ export default function BookmarksScreen() {
   };
 
   const handleRefresh = useCallback(async () => {
-    if (Platform.OS !== 'web') {
+    if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setRefreshing(true);
     await fetchBookmarkedArticles(true);
-  }, [authToken]);
+  }, []);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -105,38 +122,59 @@ export default function BookmarksScreen() {
   );
 
   const ReachedEndFooter = () => (
-    <View style={[styles.footerContainer, { backgroundColor: theme.background }]}>
+    <View
+      style={[styles.footerContainer, { backgroundColor: theme.background }]}
+    >
       <View style={styles.footerContent}>
-        <Ionicons name="checkmark-circle-outline" size={48} color={theme.brand.primary} />
-        <Text style={[styles.footerTitle, { color: theme.text.primary }]}>End of Collection</Text>
+        <Ionicons
+          name="checkmark-circle-outline"
+          size={48}
+          color={theme.brand.primary}
+        />
+        <Text style={[styles.footerTitle, { color: theme.text.primary }]}>
+          End of Collection
+        </Text>
         <Text style={[styles.footerSubtitle, { color: theme.text.tertiary }]}>
           You've seen all your bookmarked articles.
         </Text>
         <TouchableOpacity
           style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]}
-          onPress={() => router.push('/(tabs)/home')}
+          onPress={() => router.push("/(tabs)/home")}
         >
-          <Text style={[styles.exploreBtnText, { color: theme.text.inverse }]}>Discover More</Text>
+          <Text style={[styles.exploreBtnText, { color: theme.text.inverse }]}>
+            Discover More
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   const EmptyState = () => (
-    <View style={[styles.emptyContainer, { backgroundColor: theme.background }]}>
-      <View style={[styles.emptyIconContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+    <View
+      style={[styles.emptyContainer, { backgroundColor: theme.background }]}
+    >
+      <View
+        style={[
+          styles.emptyIconContainer,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+        ]}
+      >
         <Ionicons name="bookmark-outline" size={80} color={theme.text.muted} />
       </View>
-      <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>No saved articles</Text>
+      <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
+        No saved articles
+      </Text>
       <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
         You haven't bookmarked any articles yet.
       </Text>
       <TouchableOpacity
         style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}
-        onPress={() => router.push('/(tabs)/home')}
+        onPress={() => router.push("/(tabs)/home")}
         activeOpacity={0.7}
       >
-        <Text style={[styles.emptyButtonText, { color: theme.text.inverse }]}>Explore Articles</Text>
+        <Text style={[styles.emptyButtonText, { color: theme.text.inverse }]}>
+          Explore Articles
+        </Text>
         <Ionicons name="arrow-forward" size={18} color={theme.text.inverse} />
       </TouchableOpacity>
     </View>
@@ -160,7 +198,7 @@ export default function BookmarksScreen() {
       {/* Overlay Header at top */}
       <View style={styles.headerContainer}>
         <LinearGradient
-          colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.4)', 'transparent']}
+          colors={["rgba(0,0,0,0.8)", "rgba(0,0,0,0.4)", "transparent"]}
           style={StyleSheet.absoluteFillObject}
         />
         <Text style={styles.headerTitle}>Saved Collection</Text>
@@ -195,7 +233,7 @@ export default function BookmarksScreen() {
             offset: REEL_HEIGHT * index,
             index,
           })}
-          removeClippedSubviews={Platform.OS === 'android'}
+          removeClippedSubviews={Platform.OS === "android"}
           maxToRenderPerBatch={3}
           windowSize={5}
           initialNumToRender={2}
@@ -211,23 +249,23 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     height: HEADER_HEIGHT,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
+    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 100,
   },
   headerTitle: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    textTransform: "uppercase",
     letterSpacing: 2,
     fontFamily: Typography.fonts.primary,
-    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
@@ -238,16 +276,16 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   footerContainer: {
     height: REEL_HEIGHT,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   footerContent: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: 40,
   },
   footerTitle: {
@@ -257,7 +295,7 @@ const styles = StyleSheet.create({
   },
   footerSubtitle: {
     ...Typography.presets.body,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 10,
     marginBottom: 30,
   },
@@ -267,37 +305,37 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   exploreBtnText: {
-    fontWeight: '700',
+    fontWeight: "700",
     fontSize: 14,
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: Spacing.xxxl,
   },
   emptyIconContainer: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: Spacing.xl,
     borderWidth: 1,
   },
   emptyTitle: {
     ...Typography.presets.h2,
     marginBottom: Spacing.sm,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptySubtitle: {
     ...Typography.presets.body,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: Spacing.xxl,
   },
   emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.md,
     borderRadius: Layout.radius.full,
@@ -305,6 +343,6 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: {
     ...Typography.presets.body,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });

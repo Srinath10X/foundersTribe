@@ -1,7 +1,7 @@
 import { Colors, Spacing, Type } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-
+import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -18,11 +18,9 @@ import {
   View,
 } from "react-native";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.31.76:3001";
-
 export default function EditInterests() {
   const router = useRouter();
-  const { user, session, refreshOnboardingStatus } = useAuth();
+  const { user, refreshOnboardingStatus } = useAuth();
   const { theme, isDark } = useTheme();
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,11 +29,9 @@ export default function EditInterests() {
     { id: string; label: string; image: string }[]
   >([]);
 
-  const authToken = session?.access_token;
-
   useEffect(() => {
-    if (authToken) fetchData();
-  }, [authToken]);
+    fetchData();
+  }, []);
 
   const fetchData = async () => {
     await Promise.all([fetchCategories(), fetchUserInterests()]);
@@ -44,24 +40,36 @@ export default function EditInterests() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/get_all_categories`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const { data, error } = await supabase
+        .from("Articles")
+        .select('Category, "Image URL"')
+        .not("Category", "is", null)
+        .order("Category");
 
-      if (!res.ok) throw new Error(`Failed to fetch categories: ${res.status}`);
+      if (error) throw error;
 
-      const data: { category_name: string; image_url: string }[] =
-        await res.json();
+      if (data) {
+        const categoryMap = new Map<string, string>();
+        data.forEach((item) => {
+          if (item.Category && !categoryMap.has(item.Category)) {
+            if (item["Image URL"]) {
+              categoryMap.set(item.Category, item["Image URL"]);
+            }
+          }
+        });
 
-      const fetchedCats = data.map((item) => ({
-        id: item.category_name.toLowerCase().replace(/ /g, "_"),
-        label: item.category_name,
-        image:
-          item.image_url ||
-          "https://images.unsplash.com/photo-1557683311-eac922347aa1",
-      }));
+        const fetchedCats = Array.from(categoryMap.entries()).map(
+          ([cat, img]) => ({
+            id: cat.toLowerCase().replace(/ /g, "_"),
+            label: cat,
+            image:
+              img ||
+              "https://images.unsplash.com/photo-1557683311-eac922347aa1",
+          }),
+        );
 
-      setCategories(fetchedCats);
+        setCategories(fetchedCats);
+      }
     } catch (e) {
       console.error("Error fetching categories:", e);
     }
@@ -71,19 +79,21 @@ export default function EditInterests() {
     try {
       if (!user) return;
 
-      const res = await fetch(`${API_URL}/api/user_categories`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const { data, error } = await supabase
+        .from("user_interests")
+        .select("category")
+        .eq("user_id", user.id);
 
-      if (!res.ok) throw new Error(`Failed to fetch interests: ${res.status}`);
+      if (error) throw error;
 
-      const data: { category: string }[] = await res.json();
-
-      const interests = data.map((item) =>
-        item.category.toLowerCase().replace(/ /g, "_"),
-      );
-      console.log("Fetched normalized interests:", interests);
-      setSelected(interests);
+      if (data) {
+        // Normalize the categories from DB to match internal IDs for UI checks
+        const interests = data.map((item) =>
+          item.category.toLowerCase().replace(/ /g, "_"),
+        );
+        console.log("Fetched normalized interests:", interests);
+        setSelected(interests);
+      }
     } catch (e) {
       console.error("Error fetching user interests:", e);
     }
@@ -111,31 +121,43 @@ export default function EditInterests() {
     setSaving(true);
 
     try {
-      console.log("Saving interests for user:", user.id);
-
-      const res = await fetch(`${API_URL}/api/user_categories`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const interestsData = selected.map((catId) => {
+        const cat = categories.find((c) => c.id === catId);
+        return {
           user_id: user.id,
-          categories: selected,
-        }),
+          category: cat ? cat.label : catId,
+        };
       });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error || `Server error: ${res.status}`);
+      const deleteResult = await supabase
+        .from("user_interests")
+        .delete()
+        .eq("user_id", user.id);
+      if (deleteResult.error) {
+        console.error("DEBUG: Error deleting interests:", deleteResult.error);
+        throw deleteResult.error;
       }
 
-      console.log("Interests updated successfully");
+      const insertResult = await supabase
+        .from("user_interests")
+        .insert(interestsData);
+      if (insertResult.error) {
+        console.error("DEBUG: Error inserting interests:", insertResult.error);
+        throw insertResult.error;
+      }
+
+      console.log("DEBUG: Interests updated successfully");
       await refreshOnboardingStatus();
       router.back();
     } catch (error: any) {
       console.error("Error saving interests:", error);
-      alert(`Failed to save: ${error?.message || "Unknown error"}`);
+
+      // Check for RLS/permission issues
+      if (error?.code === "PGRST301" || error?.status === 403) {
+        alert("Permission denied. Please check your connection and try again.");
+      } else {
+        alert(`Failed to save: ${error?.message || "Unknown error"}`);
+      }
     } finally {
       setSaving(false);
     }

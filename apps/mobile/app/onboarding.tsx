@@ -7,7 +7,7 @@
 import { Spacing, Type } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-
+import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,46 +25,53 @@ import {
 } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 
-const API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://localhost:3002";
-
 export default function Onboarding() {
   const router = useRouter();
-  const { user, session, refreshOnboardingStatus } = useAuth();
+  const { user, refreshOnboardingStatus } = useAuth();
   const { theme, isDark } = useTheme();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]); // Start empty for clean initialization
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<
     { id: string; label: string; image: string }[]
   >([]);
 
-  const authToken = session?.access_token;
-
   useEffect(() => {
-    if (authToken) fetchCategories();
-  }, [authToken]);
+    fetchCategories();
+  }, []);
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/get_all_categories`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const { data, error } = await supabase
+        .from("Articles")
+        .select('Category, "Image URL"')
+        .not("Category", "is", null)
+        .order("Category");
 
-      if (!res.ok) throw new Error(`Failed to fetch categories: ${res.status}`);
+      if (error) throw error;
 
-      const data: { category_name: string; image_url: string }[] =
-        await res.json();
-      console.log("Fetched categories data:", data);
+      if (data) {
+        const categoryMap = new Map<string, string>();
 
-      const fetchedCats = data.map((item) => ({
-        id: item.category_name.toLowerCase().replace(/ /g, "_"),
-        label: item.category_name,
-        image:
-          item.image_url ||
-          "https://images.unsplash.com/photo-1557683311-eac922347aa1",
-      }));
+        data.forEach((item) => {
+          if (item.Category && !categoryMap.has(item.Category)) {
+            if (item["Image URL"]) {
+              categoryMap.set(item.Category, item["Image URL"]);
+            }
+          }
+        });
 
-      setCategories(fetchedCats);
+        const fetchedCats = Array.from(categoryMap.entries()).map(
+          ([cat, img]) => ({
+            id: cat.toLowerCase().replace(/ /g, "_"),
+            label: cat,
+            image:
+              img ||
+              "https://images.unsplash.com/photo-1557683311-eac922347aa1",
+          }),
+        );
+
+        setCategories(fetchedCats);
+      }
     } catch (e) {
       console.error("Error fetching categories:", e);
     }
@@ -92,39 +99,40 @@ export default function Onboarding() {
 
     setLoading(true);
 
-    try {
-      console.log("Saving interests for user:", user.id);
+    const interestsData = selected.map((catId) => {
+      const cat = categories.find((c) => c.id === catId);
+      return {
+        user_id: user.id,
+        category: cat ? cat.label : catId,
+      };
+    });
 
-      const res = await fetch(`${API_URL}/api/user_categories`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          categories: selected,
-        }),
-      });
+    console.log("Saving interests for user:", user.id);
+    const del = await supabase
+      .from("user_interests")
+      .delete()
+      .eq("user_id", user.id);
+    console.log("Delete result:", del);
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error || `Server error: ${res.status}`);
-      }
+    const ins = await supabase.from("user_interests").insert(interestsData);
+    console.log("Insert result:", ins);
 
-      console.log("Save result: OK");
-
-      await refreshOnboardingStatus();
-      console.log("✅ Onboarding completed, redirecting to home...");
-      setTimeout(() => {
-        router.replace("/(tabs)/home");
-      }, 500);
-    } catch (e: any) {
-      console.error("Error saving interests:", e);
-      alert(`Error: ${e.message}`);
-    } finally {
+    if (ins.error) {
+      console.log("INSERT ERROR:", ins.error);
+      alert(
+        `Database Error: ${ins.error.message}. Did you run the setup_schema.sql?`,
+      );
       setLoading(false);
+      return;
     }
+
+    await refreshOnboardingStatus();
+    console.log("✅ Onboarding completed, redirecting to home...");
+    // Small delay to ensure Context updates before Router acts
+    setTimeout(() => {
+      router.replace("/(tabs)/home");
+    }, 500);
+    setLoading(false);
   };
 
   return (

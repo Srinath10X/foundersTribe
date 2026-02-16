@@ -1,8 +1,8 @@
-import { BrandingView } from '@/components/BrandingView';
-import { useAuth } from '@/context/AuthContext';
-import { Stack, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { BrandingView } from "@/components/BrandingView";
+import { useAuth } from "@/context/AuthContext";
+import { Stack, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
 export default function Index() {
   const router = useRouter();
@@ -11,7 +11,7 @@ export default function Index() {
 
   // -- Initial Load Logic --
   useEffect(() => {
-    // Artificial delay to show branding animation if desired, 
+    // Artificial delay to show branding animation if desired,
     // or just wait for auth loading to finish
     if (!isLoading) {
       // Small buffer to ensure animations play smoothly
@@ -27,10 +27,10 @@ export default function Index() {
     if (isReady) {
       if (session) {
         // User authenticated -> Go Home
-        router.replace('/home');
+        router.replace("/home");
       } else {
         // New/Guest user -> Show Branding/Landing
-        router.replace('/branding');
+        router.replace("/branding");
       }
     }
   }, [isReady, session]);

@@ -2,10 +2,7 @@ import { ArticleReelCard } from "@/components/ArticleReelCard";
 import { ReelCardSkeleton } from "@/components/Skeleton";
 import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
-import { useAuth } from "@/context/AuthContext";
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.31.76:3001";
-
+import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -54,17 +51,14 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
 
 export default function HomeFeed() {
   const { theme, isDark } = useTheme();
-  const { session } = useAuth();
-  const authToken = session?.access_token;
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const scrollY = useSharedValue(0);
 
   useEffect(() => {
-    if (!authToken) return;
     fetchInitialData();
-  }, [authToken]);
+  }, []);
 
   // -- Data Fetching --
   const fetchInitialData = async () => {
@@ -74,15 +68,35 @@ export default function HomeFeed() {
   };
 
   const fetchArticles = async () => {
-    if (!authToken) return;
     try {
-      const res = await fetch(`${API_URL}/api/personalized_articles`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-      if (!res.ok) throw new Error(`Failed to fetch articles: ${res.status}`);
+      // 1. Get User Interests
+      const { data: interestData } = await supabase
+        .from("user_interests")
+        .select("selected_interests")
+        .eq("user_id", user.id)
+        .single();
 
-      const data = await res.json();
+      const interests = interestData?.selected_interests || [];
+
+      // 2. Query Articles (Filtered by Interests if available)
+      let query = supabase
+        .from("Articles")
+        .select("*")
+        .order("id", { ascending: false });
+
+      if (interests.length > 0) {
+        query = query.in("Category", interests);
+      }
+
+      const { data, error } = await query.limit(20);
+
+      if (error) throw error;
+
       setArticles(data || []);
     } catch (error) {
       console.error("Error fetching articles:", error);
@@ -91,14 +105,13 @@ export default function HomeFeed() {
 
   // -- Refresh Control --
   const handleRefresh = useCallback(async () => {
-    // Haptic feedback for pull-to-refresh feel
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setRefreshing(true);
     await fetchArticles();
     setRefreshing(false);
-  }, [authToken]);
+  }, []);
 
   // -- Scroll Handling for Animations --
   const scrollHandler = useAnimatedScrollHandler({
