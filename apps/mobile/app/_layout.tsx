@@ -1,3 +1,4 @@
+import { registerGlobals } from "@livekit/react-native";
 import {
   DarkTheme,
   ThemeProvider as NavigationThemeProvider,
@@ -9,6 +10,8 @@ import "react-native-get-random-values";
 import { TextEncoder, TextDecoder } from "text-encoding";
 
 // Polyfills
+registerGlobals();
+
 if (typeof global.TextEncoder === "undefined") {
   global.TextEncoder = TextEncoder;
 }
@@ -131,6 +134,7 @@ function RootLayoutNav() {
         const isAllowedPath =
           segment === "(tabs)" ||
           segment === "room" ||
+          segment === "tribe" ||
           segment === "article" ||
           segment === "edit-interests" ||
           currentPath.includes("edit-interests");

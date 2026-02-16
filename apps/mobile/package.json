@@ -19,10 +19,12 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@config-plugins/react-native-webrtc": "^13.0.0",
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
     "@expo-google-fonts/playfair-display": "^0.4.2",
     "@expo-google-fonts/poppins": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
+    "@livekit/react-native": "^2.9.6",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
@@ -57,12 +59,14 @@
     "react-native-svg": "15.12.1",
     "react-native-url-polyfill": "^3.0.0",
     "react-native-web": "~0.21.0",
+    "react-native-webrtc": "^124.0.7",
     "react-native-worklets": "0.5.1",
     "socket.io-client": "^4.8.3",
     "text-encoding": "^0.7.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@types/text-encoding": "^0.0.40",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"

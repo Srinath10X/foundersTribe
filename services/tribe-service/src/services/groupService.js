@@ -70,6 +70,14 @@ export async function listGroups(tribeId, userId) {
   return await groupRepository.listByTribe(tribeId);
 }
 
+/**
+ * List groups for a tribe WITHOUT requiring membership (public preview).
+ * Shows channel names so non-members can see what the tribe offers.
+ */
+export async function listGroupsPublic(tribeId) {
+  return await groupRepository.listByTribe(tribeId);
+}
+
 export async function getGroupMembers(groupId, userId, cursor, limit) {
   const isMember = await groupMemberRepository.isMember(groupId, userId);
   if (!isMember) throw new AppError("Not a member of this group", 403);

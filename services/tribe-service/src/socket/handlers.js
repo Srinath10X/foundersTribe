@@ -92,6 +92,26 @@ export function registerSocketHandlers(io) {
       });
     });
 
+    // ---- Broadcast reaction added ----
+    socket.on("reaction_added", ({ groupId, messageId, emoji }) => {
+      socket.to(`group:${groupId}`).emit("reaction_added", {
+        groupId,
+        messageId,
+        emoji,
+        userId,
+      });
+    });
+
+    // ---- Broadcast reaction removed ----
+    socket.on("reaction_removed", ({ groupId, messageId, emoji }) => {
+      socket.to(`group:${groupId}`).emit("reaction_removed", {
+        groupId,
+        messageId,
+        emoji,
+        userId,
+      });
+    });
+
     // ---- Disconnect cleanup ----
     socket.on("disconnect", (reason) => {
       cleanupSocketRateLimit(socket.id);

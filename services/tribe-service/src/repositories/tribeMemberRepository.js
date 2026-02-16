@@ -86,6 +86,44 @@ export class TribeMemberRepository {
     }
   }
 
+  async getSoftDeleted(tribeId, userId) {
+    const { data, error } = await supabase
+      .from("tribe_members")
+      .select("*")
+      .eq("tribe_id", tribeId)
+      .eq("user_id", userId)
+      .not("deleted_at", "is", null)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") return null; // no soft-deleted record
+      logger.error({ error }, "TribeMemberRepository.getSoftDeleted failed");
+      throw new Error("Database error checking soft-deleted member");
+    }
+    return data;
+  }
+
+  async resurrect(tribeId, userId) {
+    const { data, error } = await supabase
+      .from("tribe_members")
+      .update({
+        deleted_at: null,
+        role: "member",
+        joined_at: new Date().toISOString(),
+      })
+      .eq("tribe_id", tribeId)
+      .eq("user_id", userId)
+      .not("deleted_at", "is", null)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error({ error }, "TribeMemberRepository.resurrect failed");
+      throw new Error("Database error resurrecting member");
+    }
+    return data;
+  }
+
   async isMember(tribeId, userId) {
     const { count, error } = await supabase
       .from("tribe_members")

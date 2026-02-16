@@ -95,6 +95,38 @@ export class TribeRepository {
     }
     return data || [];
   }
+
+  async incrementMemberCount(tribeId, delta) {
+    // Fetch current count first, then update
+    const tribe = await this.getById(tribeId);
+    if (!tribe) return;
+    const newCount = Math.max(0, (tribe.member_count || 0) + delta);
+    const { error } = await supabase
+      .from("tribes")
+      .update({ member_count: newCount })
+      .eq("id", tribeId);
+
+    if (error) {
+      logger.error({ error, tribeId, delta }, "TribeRepository.incrementMemberCount failed");
+    }
+  }
+
+  async searchPublic(query, limit = 20) {
+    const { data, error } = await supabase
+      .from("tribes")
+      .select("*")
+      .eq("is_public", true)
+      .is("deleted_at", null)
+      .ilike("name", `%${query}%`)
+      .order("member_count", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      logger.error({ error, query }, "TribeRepository.searchPublic failed");
+      throw new Error("Database error searching tribes");
+    }
+    return data || [];
+  }
 }
 
 export const tribeRepository = new TribeRepository();

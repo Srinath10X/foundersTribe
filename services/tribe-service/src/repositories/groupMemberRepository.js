@@ -69,6 +69,44 @@ export class GroupMemberRepository {
     }
   }
 
+  async getSoftDeleted(groupId, userId) {
+    const { data, error } = await supabase
+      .from("group_members")
+      .select("*")
+      .eq("group_id", groupId)
+      .eq("user_id", userId)
+      .not("deleted_at", "is", null)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") return null;
+      logger.error({ error }, "GroupMemberRepository.getSoftDeleted failed");
+      throw new Error("Database error checking soft-deleted group member");
+    }
+    return data;
+  }
+
+  async resurrect(groupId, userId) {
+    const { data, error } = await supabase
+      .from("group_members")
+      .update({
+        deleted_at: null,
+        role: "member",
+        joined_at: new Date().toISOString(),
+      })
+      .eq("group_id", groupId)
+      .eq("user_id", userId)
+      .not("deleted_at", "is", null)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error({ error }, "GroupMemberRepository.resurrect failed");
+      throw new Error("Database error resurrecting group member");
+    }
+    return data;
+  }
+
   async isMember(groupId, userId) {
     const { count, error } = await supabase
       .from("group_members")

@@ -2,11 +2,10 @@
   "expo": {
     "name": "Founders Tribe",
     "slug": "founders-tribe",
-    "scheme": "founderstribe://",
+    "scheme": "appfounderstribe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "appfounderstribe",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -52,6 +51,13 @@
             "./assets/fonts/Poppins_600SemiBold.ttf",
             "./assets/fonts/Poppins_700Bold.ttf"
           ]
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Allow Founders Tribe to access your camera for video calls.",
+          "microphonePermission": "Allow Founders Tribe to access your microphone for voice rooms."
         }
       ]
     ],

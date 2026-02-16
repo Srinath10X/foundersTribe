@@ -2,6 +2,7 @@ import { tribeMemberRepository } from "../repositories/tribeMemberRepository.js"
 import { groupMemberRepository } from "../repositories/groupMemberRepository.js";
 import { groupRepository } from "../repositories/groupRepository.js";
 import { banRepository } from "../repositories/banRepository.js";
+import { tribeRepository } from "../repositories/tribeRepository.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -12,12 +13,21 @@ export async function joinTribe(tribeId, userId) {
   const isBanned = await banRepository.isBanned(tribeId, userId);
   if (isBanned) throw new AppError("You are banned from this tribe", 403);
 
-  // Check if already a member
+  // Check if already an active member
   const existing = await tribeMemberRepository.get(tribeId, userId);
   if (existing) throw new AppError("Already a member", 409);
 
+  // Check if previously left (soft-deleted record exists) — resurrect it
+  const softDeleted = await tribeMemberRepository.getSoftDeleted(tribeId, userId);
+  if (softDeleted) {
+    const member = await tribeMemberRepository.resurrect(tribeId, userId);
+    await tribeRepository.incrementMemberCount(tribeId, 1);
+    logger.info({ tribeId, userId }, "User re-joined tribe");
+    return member;
+  }
+
   const member = await tribeMemberRepository.add(tribeId, userId, "member");
-  // DB trigger auto-adds to announcement group
+  await tribeRepository.incrementMemberCount(tribeId, 1);
   logger.info({ tribeId, userId }, "User joined tribe");
   return member;
 }
@@ -31,7 +41,7 @@ export async function leaveTribe(tribeId, userId) {
   }
 
   await tribeMemberRepository.softDelete(tribeId, userId);
-  // DB trigger handles announcement group removal and count decrement
+  await tribeRepository.incrementMemberCount(tribeId, -1);
   logger.info({ tribeId, userId }, "User left tribe");
 }
 
@@ -97,7 +107,15 @@ export async function joinGroup(tribeId, groupId, userId) {
   }
 
   const existing = await groupMemberRepository.get(groupId, userId);
-  if (existing) throw new AppError("Already a member of this group", 409);
+  if (existing) return existing; // already a member — idempotent
+
+  // Check for soft-deleted record (previously left) — resurrect it
+  const softDeleted = await groupMemberRepository.getSoftDeleted(groupId, userId);
+  if (softDeleted) {
+    const member = await groupMemberRepository.resurrect(groupId, userId);
+    logger.info({ groupId, userId }, "User re-joined group");
+    return member;
+  }
 
   const member = await groupMemberRepository.add(groupId, userId, "member");
   logger.info({ groupId, userId }, "User joined group");

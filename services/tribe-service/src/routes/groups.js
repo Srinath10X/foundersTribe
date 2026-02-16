@@ -5,10 +5,20 @@ import * as groupService from "../services/groupService.js";
 
 const router = Router({ mergeParams: true });
 
-// GET /api/tribes/:tribeId/groups — list groups in a tribe
+// GET /api/tribes/:tribeId/groups — list groups in a tribe (members only)
 router.get("/", async (req, res, next) => {
   try {
     const groups = await groupService.listGroups(req.params.tribeId, req.user.id);
+    res.json({ data: groups });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/tribes/:tribeId/groups/public — list groups publicly (preview for non-members)
+router.get("/public", async (req, res, next) => {
+  try {
+    const groups = await groupService.listGroupsPublic(req.params.tribeId);
     res.json({ data: groups });
   } catch (err) {
     next(err);

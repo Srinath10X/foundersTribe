@@ -3,18 +3,44 @@ import { reactionRepository } from "../repositories/reactionRepository.js";
 import { readRepository } from "../repositories/readRepository.js";
 import { groupMemberRepository } from "../repositories/groupMemberRepository.js";
 import { groupRepository } from "../repositories/groupRepository.js";
+import { tribeMemberRepository } from "../repositories/tribeMemberRepository.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/AppError.js";
 
-export async function sendMessage(groupId, senderId, data) {
-  // Verify group membership
-  const isMember = await groupMemberRepository.isMember(groupId, senderId);
-  if (!isMember) throw new AppError("Not a member of this group", 403);
+/**
+ * Aggregate raw reaction rows into { emoji, count, user_reacted } format.
+ */
+function aggregateReactions(message, currentUserId) {
+  const raw = message.tribe_message_reactions || [];
+  const map = {};
+  for (const r of raw) {
+    if (!map[r.emoji]) {
+      map[r.emoji] = { emoji: r.emoji, count: 0, user_reacted: false };
+    }
+    map[r.emoji].count++;
+    if (r.user_id === currentUserId) map[r.emoji].user_reacted = true;
+  }
+  const reactions = Object.values(map);
+  const { tribe_message_reactions, ...rest } = message;
+  return { ...rest, reactions };
+}
 
-  // Check if announcement group — only admins can post
+export async function sendMessage(groupId, senderId, data) {
+  // Look up the group to get its tribe_id
   const group = await groupRepository.getById(groupId);
   if (!group) throw new AppError("Group not found", 404);
 
+  // Verify tribe membership (any tribe member can post in a group)
+  const isTribeMember = await tribeMemberRepository.isMember(group.tribe_id, senderId);
+  if (!isTribeMember) throw new AppError("Not a member of this tribe", 403);
+
+  // Auto-join the group if not already a member
+  const isGroupMember = await groupMemberRepository.isMember(groupId, senderId);
+  if (!isGroupMember) {
+    await groupMemberRepository.add(groupId, senderId, "member");
+  }
+
+  // Check if announcement group — only admins can post
   if (group.is_readonly) {
     const member = await groupMemberRepository.get(groupId, senderId);
     if (!member || member.role !== "admin") {
@@ -24,25 +50,46 @@ export async function sendMessage(groupId, senderId, data) {
 
   const message = await messageRepository.create(groupId, senderId, data);
   logger.info({ messageId: message.id, groupId, senderId }, "Message sent");
-  return message;
+  return aggregateReactions(message, senderId);
 }
 
 export async function getMessages(groupId, userId, cursor, limit) {
-  // Verify membership
-  const isMember = await groupMemberRepository.isMember(groupId, userId);
-  if (!isMember) throw new AppError("Not a member of this group", 403);
+  // Look up the group to get its tribe_id
+  const group = await groupRepository.getById(groupId);
+  if (!group) throw new AppError("Group not found", 404);
+
+  // Verify tribe membership (any tribe member can read group messages)
+  const isTribeMember = await tribeMemberRepository.isMember(group.tribe_id, userId);
+  if (!isTribeMember) throw new AppError("Not a member of this tribe", 403);
 
   const messages = await messageRepository.listByGroup(groupId, cursor, limit);
 
+  // Batch-fetch reactions for all messages in one query
+  const messageIds = messages.map((m) => m.id);
+  const allReactions = await reactionRepository.listByMessageIds(messageIds);
+
+  // Group reactions by message_id
+  const reactionsByMsg = {};
+  for (const r of allReactions) {
+    if (!reactionsByMsg[r.message_id]) reactionsByMsg[r.message_id] = [];
+    reactionsByMsg[r.message_id].push(r);
+  }
+
+  // Attach reactions and aggregate
+  const enriched = messages.map((m) => {
+    const withReactions = { ...m, tribe_message_reactions: reactionsByMsg[m.id] || [] };
+    return aggregateReactions(withReactions, userId);
+  });
+
   // Build next cursor from last message
-  const nextCursor = messages.length === limit
-    ? messages[messages.length - 1].created_at
+  const nextCursor = enriched.length === limit
+    ? enriched[enriched.length - 1].created_at
     : null;
 
   return {
-    messages,
+    messages: enriched,
     next_cursor: nextCursor,
-    has_more: messages.length === limit,
+    has_more: enriched.length === limit,
   };
 }
 

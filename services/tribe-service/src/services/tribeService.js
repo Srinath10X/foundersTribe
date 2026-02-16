@@ -51,3 +51,7 @@ export async function listPublicTribes(cursor, limit) {
 export async function listMyTribes(userId) {
   return await tribeRepository.listByUser(userId);
 }
+
+export async function searchTribes(query, limit) {
+  return await tribeRepository.searchPublic(query, limit);
+}

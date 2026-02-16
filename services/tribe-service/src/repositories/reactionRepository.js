@@ -44,6 +44,21 @@ export class ReactionRepository {
     }
     return data || [];
   }
+
+  /** Batch-fetch reactions for a list of message IDs */
+  async listByMessageIds(messageIds) {
+    if (!messageIds.length) return [];
+    const { data, error } = await supabase
+      .from("tribe_message_reactions")
+      .select("id, message_id, emoji, user_id")
+      .in("message_id", messageIds);
+
+    if (error) {
+      logger.error({ error }, "ReactionRepository.listByMessageIds failed");
+      return [];
+    }
+    return data || [];
+  }
 }
 
 export const reactionRepository = new ReactionRepository();
