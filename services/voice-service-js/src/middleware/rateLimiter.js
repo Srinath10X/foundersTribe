@@ -1,37 +1,39 @@
-import rateLimit from 'express-rate-limit';
-import { logger } from '../utils/logger.js';
+import rateLimit from "express-rate-limit";
+import { logger } from "../utils/logger.js";
 
 export const apiRateLimiter = rateLimit({
-    windowMs: 60 * 1000, 
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (_req, res) => {
-        logger.warn('Rate limit exceeded');
-        res.status(429).json({ error: 'Too many requests. Please try again later.' });
-    },
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    logger.warn("Rate limit exceeded");
+    res
+      .status(429)
+      .json({ error: "Too many requests. Please try again later." });
+  },
 });
 
 const socketRateLimits = new Map();
 
 export function socketRateLimit(socketId, maxPerMinute = 60) {
-    const now = Date.now();
-    const entry = socketRateLimits.get(socketId);
+  const now = Date.now();
+  const entry = socketRateLimits.get(socketId);
 
-    if (!entry || now > entry.resetAt) {
-        socketRateLimits.set(socketId, { count: 1, resetAt: now + 60000 });
-        return true;
-    }
-
-    entry.count++;
-    if (entry.count > maxPerMinute) {
-        logger.warn({ socketId }, 'Socket rate limit exceeded');
-        return false;
-    }
-
+  if (!entry || now > entry.resetAt) {
+    socketRateLimits.set(socketId, { count: 1, resetAt: now + 60000 });
     return true;
+  }
+
+  entry.count++;
+  if (entry.count > maxPerMinute) {
+    logger.warn({ socketId }, "Socket rate limit exceeded");
+    return false;
+  }
+
+  return true;
 }
 
 export function cleanupSocketRateLimit(socketId) {
-    socketRateLimits.delete(socketId);
+  socketRateLimits.delete(socketId);
 }

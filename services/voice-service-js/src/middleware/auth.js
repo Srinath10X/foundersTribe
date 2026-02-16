@@ -1,5 +1,5 @@
-import { supabase } from '../config/supabase.js';
-import { logger } from '../utils/logger.js';
+import { supabase } from "../config/supabase.js";
+import { logger } from "../utils/logger.js";
 
 export const authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
@@ -17,24 +17,24 @@ export const authMiddleware = async (req, res, next) => {
 };
 
 export const socketAuthMiddleware = async (socket, next) => {
-    const token = socket.handshake.auth?.token;
+  const token = socket.handshake.auth?.token;
 
-    if (!token) {
-        return next(new Error('Authentication required'));
+  if (!token) {
+    return next(new Error("Authentication required"));
+  }
+
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data.user) {
+      return next(new Error("Invalid token"));
     }
 
-    try {
-        const { data, error } = await supabase.auth.getUser(token);
-
-        if (error || !data.user) {
-            return next(new Error('Invalid token'));
-        }
-
-        socket.data.user = data.user;
-        logger.debug({ userId: data.user.id }, 'Socket authenticated');
-        next();
-    } catch (err) {
-        logger.warn({ err }, 'Socket auth failed');
-        next(new Error('Authentication failed'));
-    }
+    socket.data.user = data.user;
+    logger.debug({ userId: data.user.id }, "Socket authenticated");
+    next();
+  } catch (err) {
+    logger.warn({ err }, "Socket auth failed");
+    next(new Error("Authentication failed"));
+  }
 };
