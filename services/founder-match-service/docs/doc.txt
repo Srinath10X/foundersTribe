@@ -1,0 +1,683 @@
+Here’s the completed founder-match microservice and how it fits your requirements.
+
+---
+
+**Overview**
+
+- Stack: Node.js 20, Express 4, Socket.io 4, Supabase Postgres (service key client), Redis (socket adapter), Zod for validation, express-rate-limit for rate limiting, Pino for logging.
+- Location: `services/founder-match-service`
+- Traits:
+  - Stateless REST + WebSocket service
+  - Auth via Supabase JWT (same pattern as existing services)
+  - Clean layering: routes → services → repositories → DB
+  - Production-grade concerns: rate limiting, validation, error handler, Supabase-backed RLS, Redis-based socket scaling.
+
+---
+
+**1. Folder Structure**
+
+Under [`services/founder-match-service`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service):
+
+- `package.json` – service metadata and deps.
+- `Dockerfile` – production container.
+- `migrations/`
+  - [`001_founder_match_schema.sql`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/migrations/001_founder_match_schema.sql)
+- `src/`
+  - `index.js` – app/bootstrap entrypoint.
+  - `config/`
+    - `env.js` – environment loading and required vars.
+    - `supabase.js` – Supabase service client.
+    - `redis.js` – Redis client and Socket.io adapter.
+  - `middleware/`
+    - `auth.js` – Supabase JWT auth (HTTP + socket).
+    - `errorHandler.js` – centralized error handling.
+    - `rateLimiter.js` – API, swipe, and socket rate limiting.
+    - `validate.js` – Zod-based request validation.
+  - `schemas/`
+    - `founderSchemas.js` – onboarding/public profile validation.
+    - `swipeSchemas.js` – swipe engine.
+    - `matchSchemas.js` – match listing/unmatch.
+    - `chatSchemas.js` – chat send/list/seen.
+    - `moderationSchemas.js` – block/report.
+  - `repositories/`
+    - `founderProfileRepository.js`
+    - `skillRepository.js`
+    - `blockRepository.js`
+    - `reportRepository.js`
+    - `swipeRepository.js`
+    - `matchRepository.js`
+    - `chatRepository.js`
+    - `notificationRepository.js`
+    - `analyticsRepository.js`
+  - `services/`
+    - `founderService.js`
+    - `compatibilityService.js`
+    - `swipeService.js`
+    - `matchService.js`
+    - `chatService.js`
+    - `moderationService.js`
+    - `notificationService.js`
+    - `analyticsService.js`
+  - `routes/`
+    - `health.js`
+    - `founders.js`
+    - `swipes.js`
+    - `matches.js`
+    - `chat.js`
+    - `moderation.js`
+    - `notifications.js`
+    - `analytics.js`
+  - `socket/`
+    - `handlers.js`
+  - `utils/`
+    - `logger.js`
+    - `AppError.js`
+
+---
+
+**2. Environment & Bootstrapping**
+
+[`env.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/config/env.js)
+
+- Required vars (process exits if missing):
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_KEY`
+  - `SUPABASE_JWT_SECRET`
+- Other config:
+  - `PORT` (default `3004`)
+  - `REDIS_URL` (default `redis://localhost:6379`)
+  - `CORS_ORIGIN` (default `http://localhost:5173`)
+  - `DAILY_SWIPE_LIMIT` (default `200`)
+  - `DAILY_SUPER_LIMIT` (default `10`)
+  - `MIN_PROFILE_COMPLETION_FOR_SWIPE` (default `70`)
+  - `ABNORMAL_UNMATCH_THRESHOLD` (currently used for flagging via repo helper).
+
+[`index.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/index.js)
+
+- Sets up Express + Socket.io with Redis adapter, CORS, Helmet, JSON body limit, and global API rate limiter.
+- Public route:
+  - `GET /api/health`
+- Auth-protected routes:
+  - `/api/founders`
+  - `/api/swipes`
+  - `/api/matches`
+  - `/api/chat`
+  - `/api/moderation`
+  - `/api/notifications`
+  - `/api/analytics`
+- Socket.io:
+  - Auth via Supabase JWT
+  - Room model: `match:<matchId>`
+  - Typing, message, seen events.
+
+---
+
+**3. Database Schema**
+
+All in [`001_founder_match_schema.sql`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/migrations/001_founder_match_schema.sql).
+
+Enums:
+
+- `founder_role` = `('tech','business','design','growth')`
+- `founder_looking_for` = `('tech','business','either')`
+- `founder_stage` = `('idea','mvp','revenue')`
+- `founder_commitment` = `('full_time','part_time','exploring')`
+- `swipe_type` = `('pass','interested','super')`
+- `match_status` = `('active','unmatched')`
+- `notification_type` = `('match_created','new_message','super_like_received')`
+- `analytics_event_type` = core events you listed.
+
+Core tables (normalized):
+
+- `founder_profiles`
+  - PK: `user_id` → `profiles(id)` (Supabase auth-linked).
+  - Fields: role, looking_for, stage, commitment, `industry_tags TEXT[]`, `pitch_short`, `location`, `profile_completion_pct`, `verified`, `projects_built`, `last_active_at`, `swipe_cooldown_until`, `abnormal_unmatch_flag`, timestamps.
+  - Indexes:
+    - `(role, stage, commitment)`
+    - `last_active_at DESC`
+    - `profile_completion_pct DESC`
+    - `GIN(industry_tags)` for fast industry filtering.
+
+- `skill_catalog`
+  - PK `id`, `slug` unique.
+- `user_skill_links`
+  - PK `(user_id, skill_id)`; FKs to `profiles` and `skill_catalog`.
+
+- `user_blocks`
+  - One-directional block rows; `UNIQUE(blocker_id, blocked_id)`.
+  - Indexes on `(blocker_id, blocked_id)` and `blocked_id`.
+
+- `user_reports`
+  - Reporter/reported refs to `profiles`, optional `match_id`, `reason`, `metadata`, audit fields.
+  - Index on `(reported_id, created_at DESC)`.
+
+- `swipe_actions`
+  - PK `id`, `UNIQUE(swiper_id, target_id)` to prevent duplicate swipes.
+  - FKs to `profiles`.
+  - Indexes for swiper/target with `created_at` desc (analytics and limits).
+
+- `user_matches`
+  - PK `id`.
+  - `user1_id`, `user2_id` with `CHECK(user1_id < user2_id)` and `UNIQUE(user1_id, user2_id)` to prevent duplicate pairs.
+  - `compatibility_score` 0–100, JSONB `compatibility_breakdown`.
+  - Flags: `commitment_aligned`, `role_complement`, `stage_aligned`, `skill_overlap_score`, `industry_overlap_count`.
+  - Status, `unmatched_by`, `unmatched_at`.
+  - Chat meta: `last_message_at`, `user1_last_read_message_id`, `user2_last_read_message_id`.
+  - Indexes:
+    - `(user1_id, status, created_at DESC)`
+    - `(user2_id, status, created_at DESC)`
+    - `(last_message_at DESC)` for ordering conversations.
+
+- `chat_messages`
+  - PK `id`, FK `match_id` → `user_matches(id)`, `sender_id` → `profiles`.
+  - `content` limited to 2000 chars, timestamps, soft-delete via `deleted_at`, `seen_by_other_at`.
+  - Cursor index: `(match_id, created_at DESC, id)`; plus `(sender_id, created_at DESC)`.
+
+- `user_notifications`
+  - FK `user_id`.
+  - `type` enum, JSON `payload`, `is_read`, `read_at`.
+  - Index `(user_id, is_read, created_at DESC)`.
+
+- `analytics_logs`
+  - BIGSERIAL PK.
+  - `event_type`, `user_id`, `event_time`, `metadata`.
+  - Indexes `(event_type, event_time DESC)` and `(user_id, event_time DESC)`.
+
+Plus:
+
+- Trigger to maintain `founder_profiles.updated_at`.
+
+For analytics summary endpoint, the route expects a Supabase RPC function `founder_match_analytics_summary`; you can add that to your DB for aggregate KPIs (swipes per day, match rate, etc.) with a server-side function.
+
+---
+
+**4. Authentication, Validation, Rate limiting**
+
+- Auth: [`auth.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/middleware/auth.js)
+  - HTTP: `Authorization: Bearer <JWT>` → `supabase.auth.getUser(token)`; user assigned to `req.user`.
+  - Socket: token in `socket.handshake.auth.token`, same validation; user set to `socket.data.user`.
+
+- Validation: [`validate.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/middleware/validate.js)
+  - Zod schemas parse `{ body, query, params }`.
+  - On validation error returns 400 with full error list.
+
+- Rate limiting: [`rateLimiter.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/middleware/rateLimiter.js)
+  - `apiRateLimiter`: 100 req/min per IP, global.
+  - `swipeRateLimiter`: 60 swipes/min keyed by `req.user.id`.
+  - Socket-level rate limiter with in-memory map (`socketRateLimit` + `cleanupSocketRateLimit`) for per-socket message/typing throttling.
+
+---
+
+**5. Founder Onboarding & Profile**
+
+Schemas: [`founderSchemas.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/schemas/founderSchemas.js)
+
+- Upsert profile body:
+  - `role`: `tech|business|design|growth`
+  - `looking_for`: `tech|business|either`
+  - `stage`: `idea|mvp|revenue`
+  - `commitment`: `full_time|part_time|exploring`
+  - `industry_tags`: array of strings, min 1
+  - `skills`: array of skill slugs, min 1
+  - `pitch_short`: 10–200 chars
+  - `location`: optional
+  - `projects_built`: optional int ≥ 0
+  - `verified`: optional boolean
+
+Service: [`founderService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/founderService.js)
+
+- `calculateCompletionPct`:
+  - Base fields (role, looking_for, stage, commitment, industry_tags, skills, pitch) contribute equally.
+  - Optional fields (location, projects_built>0) add small bonuses; total capped at 100 and rounded.
+- `upsertProfile(userId, payload)`:
+  - Ensures `skill_catalog` entries via `SkillRepository.ensureSkillsReturnIds`.
+  - Replaces `user_skill_links` for that user.
+  - Upserts `founder_profiles` with completion %, last_active_at.
+- `getPublicProfile(viewerId, targetUserId, compatibilityFn)`:
+  - For target user: returns role, stage, commitment, industry_tags, pitch, lastActive, completion %, verified, projectsBuilt.
+  - If `viewerId` present and not the same, computes compatibility via provided function.
+
+Repository: [`founderProfileRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/founderProfileRepository.js)
+
+- `upsert`, `getByUserId`, `updateLastActive`.
+- `isProfileEligibleForSwiping(userId, minCompletion)`:
+  - Checks `profile_completion_pct` and `swipe_cooldown_until`.
+- `setSwipeCooldown` and `flagAbnormalUnmatch`.
+
+Endpoints: [`routes/founders.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/founders.js)
+
+- `POST /api/founders/me/profile`
+  - Body: onboarding fields.
+  - Returns stored profile including `profile_completion_pct`.
+  - Incomplete profiles still saved but are blocked from swipe pool by later checks.
+- `GET /api/founders/:userId/public-profile?includeCompatibility=true`
+  - Uses current `req.user.id` as viewer.
+  - Returns public view + compatibility score/breakdown when viewer ≠ target.
+
+Compatibility uses [`compatibilityService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/compatibilityService.js), detailed below.
+
+---
+
+**6. Compatibility Scoring**
+
+Implementation: [`compatibilityService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/compatibilityService.js)
+
+- Commitment alignment:
+  - Full↔Full, Part↔Part = aligned.
+  - Any side `exploring` = treated as aligned.
+- Role complement:
+  - `looking_for` vs partner’s `role`:
+    - `either` accepts all.
+    - `tech` expects partner role `tech`.
+    - `business` accepts `business` or `growth`.
+  - Must be mutual (A’s role matches B’s `looking_for` and B’s role matches A’s `looking_for`).
+- Stage alignment:
+  - Exactly same or within 1 step (idea↔mvp, mvp↔revenue).
+- Skills:
+  - Overlap/complement scored:
+    - overlap > 0 → +7
+    - complement > 0 → +8
+- Industry:
+  - Overlap in `industry_tags` → +20.
+
+Weights (as requested):
+
+- Role complement: up to +30
+- Industry overlap: +20
+- Commitment alignment: +20
+- Stage alignment: +15
+- Skill complement/overlap: up to +15
+- Score capped at 100 and integer.
+
+Return structure:
+
+```js
+{
+  score,
+  breakdown: {
+    roleComplement,
+    industryOverlap,
+    commitmentAlignment,
+    stageAlignment,
+    skillComplement
+  },
+  commitmentAligned,
+  roleComplement: boolean,
+  stageAligned,
+  skillScore,
+  industryOverlap
+}
+```
+
+This is used:
+
+- When returning candidate from swipe engine (viewer vs candidate).
+- When forming a match between two profiles.
+
+---
+
+**7. Swipe Engine**
+
+Schemas: [`swipeSchemas.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/schemas/swipeSchemas.js)
+
+- `GET /api/swipes/next`
+  - Query filters: optional `role`, `stage`, `commitment`, `industry`.
+- `POST /api/swipes`
+  - Body: `{ targetUserId: UUID, type: "pass"|"interested"|"super" }`.
+
+Service: [`swipeService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/swipeService.js)
+
+- Eligibility guard `ensureSwipeEligibility(userId)`:
+  - Uses `founder_profiles.profile_completion_pct` vs `env.MIN_PROFILE_COMPLETION_FOR_SWIPE`.
+  - Respects `swipe_cooldown_until`.
+  - Throws errors for missing/incomplete profile or cooldown.
+
+- `getNextCandidate(userId, filters)`:
+  - Ensures profile and eligibility.
+  - `SwipeRepository.nextCandidateForUser` selects from `founder_profiles`:
+    - Excludes self.
+    - `profile_completion_pct >= MIN_PROFILE_COMPLETION_FOR_SWIPE`.
+    - Filters: role/stage/commitment.
+    - Optional industry array contains via GIN index.
+    - Orders by `last_active_at DESC`.
+    - Excludes:
+      - Targets already swiped by `userId`.
+      - Existing matches with `userId`.
+  - Fetches top skills for viewer and candidate from `user_skill_links`.
+  - Computes compatibility via `computeCompatibility`.
+  - Returns candidate public view with:
+    - `compatibility` and `compatibilityBreakdown`
+    - `topSkills` (candidate’s top skills).
+
+- `recordSwipe(userId, targetUserId, type)`:
+  - Self-swipe prevention.
+  - Disallows swipes on existing active matches.
+  - Eligibility check as above.
+  - Global block enforcement:
+    - Via `BlockRepository.isBlockedBetween`; blocks swiping blocked users.
+  - Daily limits:
+    - `SwipeRepository.getDailySwipeCount` vs `DAILY_SWIPE_LIMIT`.
+      - On exceed, sets `swipe_cooldown_until` for 1 hour and returns 429.
+    - `SwipeRepository.getDailySuperCount` vs `DAILY_SUPER_LIMIT`.
+  - Writes `swipe_actions` using `createSwipe` with unique constraint.
+  - Analytics:
+    - `trackSwipe(userId, targetUserId, type)`.
+  - For `super` type, triggers `notifySuperLikeReceived(targetUserId, userId)`.
+  - Mutual match detection:
+    - `SwipeRepository.hasMutualPositiveSwipe` checks both directions for `interested` or `super`.
+    - If no mutual interest → returns swipe and `match: null`.
+
+  - If mutual interest:
+    - Loads both `founder_profiles`.
+    - Uses up to 10 top skills for each via `SkillRepository.getTopSkillsForUsers`.
+    - Computes compatibility.
+    - Additional gating:
+      - Must have `commitmentAligned === true` and `roleComplement === true` per your rules.
+    - Creates `user_matches` via `MatchRepository.createMatch`.
+    - Analytics: `trackMatchCreated(userA, userB, compatibility.score)`.
+    - Notifications:
+      - `notifyMatchCreated(userA, matchId, userB, score)`
+      - `notifyMatchCreated(userB, matchId, userA, score)`
+    - Returns `{ swipe, match }`.
+
+Repository: [`swipeRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/swipeRepository.js)
+
+- `createSwipe` with unique constraint handling to prevent duplicates.
+- `getDailySwipeCount`/`getDailySuperCount` via `created_at >= start_of_day`.
+- `hasMutualPositiveSwipe(userA, userB)`.
+- `nextCandidateForUser`:
+  - Efficient selection relying on indexes and post-filtering for swiped/matched sets.
+
+Endpoints: [`routes/swipes.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/swipes.js)
+
+- `GET /api/swipes/next`
+- `POST /api/swipes` with `swipeRateLimiter`.
+
+---
+
+**8. Matching & Match Management**
+
+Repository: [`matchRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/matchRepository.js)
+
+- `getMatchBetween(userA, userB)` uses `(user1_id<user2_id)` invariant.
+- `createMatch(userA, userB, compatibility)` – handles unique constraint, returns existing if race.
+- `listMatchesForUser(userId, limit, cursor)`:
+  - Matches where user is user1 or user2.
+  - Status `active`.
+  - Ordered by `last_message_at DESC`, then `created_at DESC`.
+- `updateMatchLastMessage`.
+- `setReadPointer(matchId, userId, messageId)`.
+- `unmatch(matchId, actorId)` sets status to `unmatched`.
+- `getById`.
+
+Service: [`matchService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/matchService.js)
+
+- `listMatches(userId, sort, cursor, limit)`:
+  - Gets matches from repo.
+  - Collects other-party user IDs.
+  - Fetches their `founder_profiles` and top 3 skills.
+  - Enriches each match with:
+    - `matchId`, `otherUserId`, `compatibility`, `compatibilityBreakdown`, `status`.
+    - `lastMessageAt`, `timeAgo` (m/h/d).
+    - Public profile data: role, stage, commitment, industryTags, pitch, lastActiveAt, topSkills.
+  - Sorts by:
+    - `recent`: `lastMessageAt` desc.
+    - `compatibility`: compatibility score desc.
+    - `activity`: other user’s `lastActiveAt` desc.
+
+- `assertUserInMatch(matchId, userId)`:
+  - Ensures match exists, status active, and user is either side.
+- `unmatch(matchId, userId)`:
+  - Calls `assertUserInMatch`, then `MatchRepository.unmatch`.
+  - Returns updated match plus the other user’s ID.
+
+Endpoints: [`routes/matches.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/matches.js)
+
+- `GET /api/matches?sort=recent|compatibility|activity&cursor=&limit=`
+- `POST /api/matches/:matchId/unmatch`
+
+---
+
+**9. Chat System (Post-Match)**
+
+Repository: [`chatRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/chatRepository.js)
+
+- `createMessage(matchId, senderId, content)` inserts `chat_messages`.
+- `listMessages(matchId, cursor, limit)` with cursor pagination via `(match_id, created_at DESC, id)`.
+- `markSeenByOther(matchId, messageId, viewerId)` updates `seen_by_other_at` when viewer is not sender.
+
+Service: [`chatService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/chatService.js)
+
+- Guards: `ensureCanMessage(match, userId, targetUserId)`:
+  - Match must be active.
+  - User in match.
+  - No block between users (`blockRepository.isBlockedBetween`).
+- `sendMessage(matchId, senderId, content)`:
+  - Loads match, determines recipient.
+  - Runs guard.
+  - Creates message.
+  - Updates `user_matches.last_message_at`.
+  - Analytics:
+    - `trackConversationStarted` and `trackFirstMessageSent` for now are called on first use; for full accuracy you may track by checking if this is the first message for the match (can be extended).
+  - Notifies recipient via `notifyNewMessage(recipientId, matchId, senderId, message.id)`.
+- `listMessages(matchId, userId, cursor, limit)`:
+  - Ensures user is part of match.
+  - Returns paginated messages.
+- `markSeen(matchId, viewerId, lastMessageId)`:
+  - Ensures membership.
+  - Marks seen on last message if provided.
+  - Updates match read pointer for that user.
+- `getStarterPrompts()`:
+  - Static list of on-brand starter questions.
+
+Schemas: [`chatSchemas.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/schemas/chatSchemas.js)
+
+Endpoints: [`routes/chat.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/chat.js)
+
+- `GET /api/chat/:matchId/messages`
+- `POST /api/chat/:matchId/messages`
+- `POST /api/chat/:matchId/seen`
+- `GET /api/chat/starter-prompts`
+
+Socket events: [`socket/handlers.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/socket/handlers.js)
+
+- Room namespace: `match:<matchId>`.
+- Events:
+  - `join_match`, `leave_match`
+  - `typing`, `stop_typing`
+  - `message` (broadcast from REST creation)
+  - `seen`
+- All rate-limited on a per-socket basis.
+
+Global rules:
+
+- Prevent messaging without match: enforced both in chatService and membership checks.
+- Enforce block rules globally: `ensureCanMessage` prevents sending messages if blocked.
+- Chat scoped per match always uses `matchId` and match membership.
+
+---
+
+**10. Reputation Signals**
+
+From `founder_profiles` + profile completion:
+
+- Exposed in public profile and matches list:
+  - `profileCompletionPct`
+  - `verified`
+  - `projectsBuilt`
+  - `lastActiveAt` with derived `timeAgo` in match list.
+- No numeric rating system added, per requirement.
+
+---
+
+**11. Safety & Moderation**
+
+Repos:
+
+- [`blockRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/blockRepository.js)
+  - `isBlockedBetween(userA, userB)` checks bi-directional blocks with expiry.
+  - `createBlock(blockerId, blockedId, reason, expiresAt)` with upsert.
+
+- [`reportRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/reportRepository.js)
+  - `create` for `user_reports`.
+
+Service: [`moderationService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/moderationService.js)
+
+- `blockUser(blockerId, blockedId, reason)`
+  - Prevents self-block.
+- `reportUser(reporterId, payload)`
+  - Prevents self-report.
+  - Accepts optional `matchId` and metadata.
+
+Endpoints: [`routes/moderation.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/moderation.js)
+
+- `POST /api/moderation/block`
+- `POST /api/moderation/report`
+
+Effects:
+
+- Blocks:
+  - Prevent swiping on blocked users in `recordSwipe`.
+  - Prevent messaging in `ensureCanMessage`.
+  - Also implicitly prevent a blocked user from joining your chat via the guard in chatService (they can’t message; you can still choose to show/hide matches on frontend).
+
+- Cooldown for spam swipers:
+  - When `DAILY_SWIPE_LIMIT` exceeded, `swipe_cooldown_until` is set for the user.
+  - Future swipes blocked until cooldown passes.
+
+- Abnormal behavior flag:
+  - `FounderProfileRepository.flagAbnormalUnmatch` is ready to be invoked when you implement logic to detect excessive unmatched rates; the plumbing is in place.
+
+---
+
+**12. Notifications**
+
+Repo: [`notificationRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/notificationRepository.js)
+
+- Persists `user_notifications` records.
+- Lists by user with pagination.
+
+Service: [`notificationService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/notificationService.js)
+
+- `notifyMatchCreated(userId, matchId, otherUserId, compatibilityScore)`
+- `notifyNewMessage(userId, matchId, fromUserId, messageId)`
+- `notifySuperLikeReceived(userId, fromUserId)`
+
+The notification service is deliberately just a persistence abstraction, so you can later plug in push/email workers off these rows.
+
+Endpoint: [`routes/notifications.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/notifications.js)
+
+- `GET /api/notifications?limit=&cursor=`
+  - Returns most recent notifications for authenticated user.
+
+Triggers:
+
+- `recordSwipe` for super swipes.
+- `recordSwipe` when a match is created.
+- `sendMessage` for new messages.
+
+---
+
+**13. Analytics**
+
+Repo: [`analyticsRepository.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/repositories/analyticsRepository.js)
+
+- `trackEvent(userId, eventType, metadata)` writes to `analytics_logs`.
+
+Service: [`analyticsService.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/services/analyticsService.js)
+
+- `trackSwipe`
+- `trackMatchCreated`
+- `trackConversationStarted`
+- `trackFirstMessageSent`
+- `trackRetentionAfterMatch`
+
+Events you asked for can be derived from these:
+
+- Swipes per day: `event_type='swipe'`.
+- Match rate: `match_created / unique swipers`.
+- Conversation started %: `conversation_started / match_created`.
+- First message sent %: `first_message_sent / match_created`.
+- Retention: `retention_after_match` events over time.
+
+Endpoint: [`routes/analytics.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/routes/analytics.js)
+
+- `GET /api/analytics/summary`
+  - Calls a Supabase RPC `founder_match_analytics_summary` (you can implement in SQL to compute daily stats).
+
+---
+
+**14. Real-Time Chat & Socket Handling**
+
+Socket handlers: [`socket/handlers.js`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/src/socket/handlers.js)
+
+- Uses `socketRateLimit` per socket.
+- Events:
+  - `join_match { matchId }`
+  - `leave_match { matchId }`
+  - `typing { matchId }`
+  - `stop_typing { matchId }`
+  - `message { matchId, message }` – broadcast new message.
+  - `seen { matchId, lastMessageId }` – broadcast seen updates.
+- Rooms: `match:<matchId>`.
+
+Backend ensures that only matched users can send messages or see chat via HTTP service guards; socket events are designed to mirror REST actions.
+
+---
+
+**15. Performance & Scalability**
+
+- DB:
+  - Critical indexes:
+    - `founder_profiles` composite index on role/stage/commitment, plus `GIN(industry_tags)`.
+    - `swipe_actions` indexes for swiper/target.
+    - `user_matches` indexes on both users and last_message_at.
+    - `chat_messages` cursor index for efficient pagination.
+    - `analytics_logs` event_type/user/time indexes.
+  - Use of cursor-based pagination (created_at + id) avoids `OFFSET` issues for 100K+ users.
+
+- API:
+  - Stateless services; all session state is in DB.
+  - Rate limiting prevents abuse.
+  - Supabase service client uses HTTP; for high QPS you can swap to direct pg connections using similar schema.
+
+- Socket:
+  - Redis adapter for horizontal scaling across nodes.
+  - Heartbeat settings tuned for reasonable liveness.
+
+- N+1 avoidance:
+  - Match listing fetches profiles and skills in batch by user IDs, not one-by-one per match.
+
+---
+
+**16. Running the Service**
+
+From project root:
+
+```bash
+cd services/founder-match-service
+npm install
+# Set environment:
+# SUPABASE_URL=...
+# SUPABASE_SERVICE_KEY=...
+# SUPABASE_JWT_SECRET=...
+# (and optional overrides like DAILY_SWIPE_LIMIT)
+npm run start
+```
+
+Or run in dev with nodemon:
+
+```bash
+npm run dev
+```
+
+Docker:
+
+- [`Dockerfile`](file:///Users/praveenkumar/Desktop/foundersTribe/services/founder-match-service/Dockerfile) mirrors your existing services: `node:20-alpine`, `npm ci`, runs `npm start`.
+
+---
+
+If you’d like, I can next:
+
+- Add a Postgres RPC function for `founder_match_analytics_summary` with concrete SQL.
+- Tune the abnormal unmatch detection logic and wire it to flag users in `founder_profiles`.

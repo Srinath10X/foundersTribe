@@ -1,5 +1,4 @@
 import { supabase } from "../config/supabase.js";
-import { logger } from "../utils/logger.js";
 
 export const authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
@@ -11,6 +10,7 @@ export const authMiddleware = async (req, res, next) => {
   if (error || !data.user) {
     return res.status(401).json({ error: "Invalid token" });
   }
+
   req.user = data.user;
   next();
 };
@@ -30,10 +30,9 @@ export const socketAuthMiddleware = async (socket, next) => {
     }
 
     socket.data.user = data.user;
-    logger.debug({ userId: data.user.id }, "Socket authenticated");
     next();
   } catch (err) {
-    logger.warn({ err }, "Socket auth failed");
     next(new Error("Authentication failed"));
   }
 };
+
