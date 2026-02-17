@@ -54,11 +54,8 @@
         }
       ],
       [
-        "@config-plugins/react-native-webrtc",
-        {
-          "cameraPermission": "Allow Founders Tribe to access your camera for video calls.",
-          "microphonePermission": "Allow Founders Tribe to access your microphone for voice rooms."
-        }
+        "@livekit/react-native-expo-plugin",
+        "@config-plugins/react-native-webrtc"
       ]
     ],
     "experiments": {

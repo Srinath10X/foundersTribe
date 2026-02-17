@@ -25,11 +25,7 @@ import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
 /* ================================================================ */
 
 const VOICE_API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://192.168.1.4:3002";
-
-/* ================================================================ */
-/*  Types                                                            */
-/* ================================================================ */
+  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://192.168.0.28:3002";
 
 interface RoomItem {
   id: string;
