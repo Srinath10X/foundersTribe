@@ -3,3 +3,46 @@ node_modules/
 services/**/node_modules/
 services/**/.env
 livekit.yaml
+apps/mob/node_modules
+
+# dependencies
+apps/mob/node_modules/
+
+# Expo
+apps/mob/.expo/
+apps/mob/dist/
+apps/mob/web-build/
+apps/mob/expo-env.d.ts
+
+# Native
+apps/mob/.kotlin/
+apps/mob/*.orig.*
+apps/mob/*.jks
+apps/mob/*.p8
+apps/mob/*.p12
+apps/mob/*.key
+apps/mob/*.mobileprovision
+
+# Metro
+apps/mob/.metro-health-check*
+
+# debug
+apps/mob/npm-debug.*
+apps/mob/yarn-debug.*
+apps/mob/yarn-error.*
+
+# macOS
+apps/mob/.DS_Store
+apps/mob/*.pem
+
+# local env files
+apps/mob/.env*.local
+
+# typescript
+apps/mob/*.tsbuildinfo
+
+apps/mob/app-example
+
+# generated native folders
+apps/mob/ios
+apps/mob/android

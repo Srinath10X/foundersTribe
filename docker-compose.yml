@@ -64,5 +64,49 @@ services:
       timeout: 10s
       retries: 3
 
+  # ---- Tribe Service (Community Messaging) ----
+  tribe-service:
+    build:
+      context: ./services/tribe-service
+      dockerfile: Dockerfile
+    container_name: founderstribe-tribe-service
+    ports:
+      - "3003:3003"
+    env_file:
+      - ./services/tribe-service/.env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=3003
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---- Founder Match Service (Co-founder Discovery) ----
+  founder-match-service:
+    build:
+      context: ./services/founder-match-service
+      dockerfile: Dockerfile
+    container_name: founderstribe-founder-match-service
+    ports:
+      - "3004:3004"
+    env_file:
+      - ./services/founder-match-service/.env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=3004
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3004/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   redis_data:

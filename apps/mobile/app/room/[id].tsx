@@ -39,7 +39,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
 
 const VOICE_API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://localhost:3002";
+  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://192.168.1.4:3002";
 
 interface ChatMessage {
   id: string;
@@ -145,26 +145,28 @@ export default function RoomScreen() {
     const setup = async () => {
       try {
         setConnectionState(ConnectionState.Connecting);
+        console.log("[Room] Connecting socket to:", VOICE_API_URL);
 
         // 1. Connect Socket.IO
         socket = io(VOICE_API_URL, {
-          transports: ["websocket"],
+          transports: ["websocket", "polling"],
           auth: { token: authToken },
         });
         socketRef.current = socket;
 
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
-            () => reject(new Error("Socket connection timeout")),
-            10000,
+            () => reject(new Error("Socket connection timeout — check VOICE_API_URL: " + VOICE_API_URL)),
+            15000,
           );
           socket!.on("connect", () => {
             clearTimeout(timeout);
-            console.log("Room socket connected:", socket!.id);
+            console.log("[Room] Socket connected:", socket!.id);
             resolve();
           });
           socket!.on("connect_error", (err) => {
             clearTimeout(timeout);
+            console.error("[Room] Socket connect_error:", err.message);
             reject(err);
           });
         });
