@@ -43,10 +43,20 @@ const VOICE_API_URL =
 
 interface ChatMessage {
   id: string;
-  user_id: string;
   content: string;
-  created_at: string;
+  sender_id: string;
   user_name?: string;
+  created_at: string;
+}
+
+function normalizeMessage(raw: any): ChatMessage {
+  return {
+    id: raw.id || raw._id || `${Date.now()}-${Math.random()}`,
+    content: raw.content || raw.text || "",
+    sender_id: raw.sender_id || raw.user_id || "",
+    user_name: raw.user_name || raw.username || undefined,
+    created_at: raw.created_at || raw.createdAt || new Date().toISOString(),
+  };
 }
 
 interface ServerParticipant {
@@ -115,10 +125,14 @@ export default function RoomScreen() {
   const handleLeaveRoom = useCallback(() => {
     const socket = socketRef.current;
     if (socket?.connected && roomId) {
-      socket.emit("leave_room", { roomId }, () => { });
+      socket.emit("leave_room", { roomId }, () => {});
     }
+    socket?.removeAllListeners();
+    socket?.disconnect();
+    socketRef.current = null;
     roomRef.current?.disconnect();
-    router.back();
+    roomRef.current = null;
+    router.replace("/(tabs)/community");
   }, [roomId, router]);
 
   // Setup socket and LiveKit
@@ -159,7 +173,7 @@ export default function RoomScreen() {
         const result = await joinRoomViaSocket(socket!, roomId);
         setRoomTitle(result.room?.title || `Room`);
         setServerParticipants(result.participants || []);
-        setChatMessages(result.messages || []);
+        setChatMessages((result.messages || []).map(normalizeMessage));
 
         // Set my role
         const myParticipant = result.participants?.find(
@@ -213,7 +227,11 @@ export default function RoomScreen() {
                 "Disconnected",
                 "You have been disconnected from the room.",
               );
-              handleLeaveRoom();
+              socketRef.current?.removeAllListeners();
+              socketRef.current?.disconnect();
+              socketRef.current = null;
+              roomRef.current = null;
+              router.replace("/(tabs)/community");
             }
           });
 
@@ -229,8 +247,21 @@ export default function RoomScreen() {
         }
 
         // Socket.IO room event listeners
-        socket!.on("receive_message", (data: { message: ChatMessage }) => {
-          setChatMessages((prev) => [...prev, data.message]);
+        socket!.on("receive_message", (data: { message: any }) => {
+          const msg = normalizeMessage(data.message);
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            // Replace optimistic message from same sender with same content
+            const withoutOptimistic = prev.filter(
+              (m) =>
+                !(
+                  m.id.startsWith("local-") &&
+                  m.sender_id === msg.sender_id &&
+                  m.content === msg.content
+                ),
+            );
+            return [...withoutOptimistic, msg];
+          });
         });
 
         socket!.on(
@@ -308,13 +339,21 @@ export default function RoomScreen() {
         socket!.on("removed_from_room", () => {
           Alert.alert("Removed", "You have been removed from the room.");
           roomRef.current?.disconnect();
-          router.back();
+          roomRef.current = null;
+          socketRef.current?.removeAllListeners();
+          socketRef.current?.disconnect();
+          socketRef.current = null;
+          router.replace("/(tabs)/community");
         });
 
         socket!.on("room_ended", () => {
           Alert.alert("Room Ended", "The host has ended this room.");
           roomRef.current?.disconnect();
-          router.back();
+          roomRef.current = null;
+          socketRef.current?.removeAllListeners();
+          socketRef.current?.disconnect();
+          socketRef.current = null;
+          router.replace("/(tabs)/community");
         });
       } catch (error: any) {
         console.error("Failed to setup room:", error);
@@ -354,16 +393,24 @@ export default function RoomScreen() {
     const socket = socketRef.current;
     if (!socket?.connected || !messageInput.trim()) return;
 
-    socket.emit(
-      "send_message",
-      { roomId, content: messageInput.trim() },
-      (response: any) => {
-        if (!response.success) {
-          console.error("Failed to send message:", response.error);
-        }
-      },
-    );
+    const content = messageInput.trim();
+
+    // Optimistic UI update
+    const optimisticMsg = normalizeMessage({
+      id: `local-${Date.now()}`,
+      content,
+      sender_id: currentUserId,
+      user_name: session?.user?.user_metadata?.name,
+      created_at: new Date().toISOString(),
+    });
+    setChatMessages((prev) => [...prev, optimisticMsg]);
     setMessageInput("");
+
+    socket.emit("send_message", { roomId, content }, (response: any) => {
+      if (!response.success) {
+        console.error("Failed to send message:", response.error);
+      }
+    });
   };
 
   // Promote audience → speaker
@@ -461,12 +508,13 @@ export default function RoomScreen() {
 
   // Render chat message
   const renderMessage = ({ item }: { item: ChatMessage }) => {
-    const isMe = item.user_id === currentUserId;
+    const isMe = item.sender_id === currentUserId;
     return (
       <View style={[styles.messageItem, isMe && styles.messageItemMe]}>
         {!isMe && (
           <Text style={[styles.messageSender, { color: theme.brand.primary }]}>
-            {item.user_name || item.user_id.slice(0, 8)}
+            {item.user_name ||
+              (item.sender_id ? item.sender_id.slice(0, 8) : "User")}
           </Text>
         )}
         <View
@@ -474,13 +522,13 @@ export default function RoomScreen() {
             styles.messageBubble,
             isMe
               ? [
-                styles.messageBubbleMe,
-                { backgroundColor: theme.brand.primary },
-              ]
+                  styles.messageBubbleMe,
+                  { backgroundColor: theme.brand.primary },
+                ]
               : [
-                styles.messageBubbleOther,
-                { backgroundColor: theme.surfaceElevated },
-              ],
+                  styles.messageBubbleOther,
+                  { backgroundColor: theme.surfaceElevated },
+                ],
           ]}
         >
           <Text
@@ -493,10 +541,12 @@ export default function RoomScreen() {
           </Text>
         </View>
         <Text style={[styles.messageTime, { color: theme.text.muted }]}>
-          {new Date(item.created_at).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+          {item.created_at
+            ? new Date(item.created_at).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : ""}
         </Text>
       </View>
     );
@@ -706,152 +756,152 @@ export default function RoomScreen() {
       </View>
 
       {/* Bottom Controls Bar */}
-      <View
-        style={[
-          styles.bottomControlsBar,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.border,
-            marginBottom: insets.bottom > 0 ? insets.bottom : Spacing.sm,
-            ...Layout.shadows.sm,
-          },
-        ]}
-      >
-        {/* Mic Toggle */}
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={handleToggleMic}
-          disabled={!isConnected || !canSpeak}
-          activeOpacity={0.7}
+      {/* Bottom Controls Bar */}
+      <SafeAreaView style={styles.bottomControlsSafeArea} edges={["bottom"]}>
+        <View
+          style={[
+            styles.bottomControlsBar,
+            {
+              ...Layout.shadows.md,
+            },
+          ]}
         >
-          <View
-            style={[
-              styles.controlButtonIcon,
-              {
-                backgroundColor: !canSpeak
-                  ? theme.text.muted + "20"
-                  : isMicEnabled
-                    ? theme.error + "20"
-                    : theme.success + "20",
-              },
-            ]}
+          {/* Mic Toggle */}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={handleToggleMic}
+            disabled={!isConnected || !canSpeak}
+            activeOpacity={0.7}
           >
-            <Ionicons
-              name={isMicEnabled ? "mic" : "mic-off"}
-              size={22}
-              color={
-                !canSpeak
-                  ? theme.text.muted
-                  : isMicEnabled
-                    ? theme.error
-                    : theme.success
-              }
-            />
-          </View>
-          <Text
-            style={[styles.controlButtonLabel, { color: theme.text.secondary }]}
-          >
-            {isMicEnabled ? "Mute" : "Unmute"}
-          </Text>
-        </TouchableOpacity>
+            <View
+              style={[
+                styles.controlButtonIcon,
+                {
+                  backgroundColor: isMicEnabled
+                    ? "#FFFFFF"
+                    : theme.text.muted + "20",
+                },
+              ]}
+            >
+              <Ionicons
+                name={isMicEnabled ? "mic" : "mic-off"}
+                size={22}
+                color={isMicEnabled ? "#1A1A1B" : theme.text.secondary}
+              />
+            </View>
+            <Text
+              style={[
+                styles.controlButtonLabel,
+                { color: theme.text.secondary },
+              ]}
+            >
+              {isMicEnabled ? "Mute" : "Unmute"}
+            </Text>
+          </TouchableOpacity>
 
-        {/* Leave Room */}
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={handleLeaveRoom}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.controlButtonIcon,
-              styles.leaveButtonIcon,
-              { backgroundColor: theme.error },
-            ]}
-          >
-            <Ionicons name="log-out-outline" size={22} color="#fff" />
-          </View>
-          <Text style={[styles.controlButtonLabel, { color: theme.error }]}>
-            Leave
-          </Text>
-        </TouchableOpacity>
-
-        {/* Raise Hand */}
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={() => {
-            if (handRaiseTimerRef.current) {
-              clearTimeout(handRaiseTimerRef.current);
-              handRaiseTimerRef.current = null;
-            }
-            const newState = !isHandRaised;
-            setIsHandRaised(newState);
-            if (newState) {
-              handRaiseTimerRef.current = setTimeout(() => {
-                setIsHandRaised(false);
+          {/* Raise Hand */}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() => {
+              if (handRaiseTimerRef.current) {
+                clearTimeout(handRaiseTimerRef.current);
                 handRaiseTimerRef.current = null;
-              }, 5000);
-            }
-          }}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.controlButtonIcon,
-              {
-                backgroundColor: isHandRaised
-                  ? theme.warning + "25"
-                  : theme.text.muted + "20",
-              },
-            ]}
+              }
+              const newState = !isHandRaised;
+              setIsHandRaised(newState);
+              if (newState) {
+                handRaiseTimerRef.current = setTimeout(() => {
+                  setIsHandRaised(false);
+                  handRaiseTimerRef.current = null;
+                }, 5000);
+              }
+            }}
+            activeOpacity={0.7}
           >
-            <Ionicons
-              name={isHandRaised ? "hand-left" : "hand-left-outline"}
-              size={22}
-              color={isHandRaised ? theme.warning : theme.text.secondary}
-            />
-          </View>
-          <Text
-            style={[
-              styles.controlButtonLabel,
-              { color: isHandRaised ? theme.warning : theme.text.secondary },
-            ]}
-          >
-            {isHandRaised ? "Lower" : "Raise"}
-          </Text>
-        </TouchableOpacity>
+            <View
+              style={[
+                styles.controlButtonIcon,
+                {
+                  backgroundColor: isHandRaised
+                    ? theme.warning + "25"
+                    : theme.text.muted + "20",
+                },
+              ]}
+            >
+              <Ionicons
+                name={isHandRaised ? "hand-left" : "hand-left-outline"}
+                size={22}
+                color={isHandRaised ? theme.warning : theme.text.secondary}
+              />
+            </View>
+            <Text
+              style={[
+                styles.controlButtonLabel,
+                { color: isHandRaised ? theme.warning : theme.text.secondary },
+              ]}
+            >
+              {isHandRaised ? "Lower" : "Raise"}
+            </Text>
+          </TouchableOpacity>
 
-        {/* Chat */}
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={() => setIsChatOpen(true)}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.controlButtonIcon,
-              { backgroundColor: theme.brand.primary + "20" },
-            ]}
+          {/* Chat */}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() => setIsChatOpen(true)}
+            activeOpacity={0.7}
           >
-            <Ionicons
-              name="chatbubble-ellipses"
-              size={22}
-              color={theme.brand.primary}
-            />
-            {chatMessages.length > 0 && (
-              <View style={[styles.chatBadge, { backgroundColor: theme.error }]}>
-                <Text style={styles.chatBadgeText}>
-                  {chatMessages.length > 99 ? "99+" : chatMessages.length}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text
-            style={[styles.controlButtonLabel, { color: theme.text.secondary }]}
+            <View
+              style={[
+                styles.controlButtonIcon,
+                { backgroundColor: theme.text.muted + "20" },
+              ]}
+            >
+              <Ionicons
+                name="chatbubble-ellipses"
+                size={22}
+                color={theme.text.secondary}
+              />
+              {chatMessages.length > 0 && (
+                <View
+                  style={[styles.chatBadge, { backgroundColor: theme.error }]}
+                >
+                  <Text style={styles.chatBadgeText}>
+                    {chatMessages.length > 99 ? "99+" : chatMessages.length}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text
+              style={[
+                styles.controlButtonLabel,
+                { color: theme.text.secondary },
+              ]}
+            >
+              Chat
+            </Text>
+          </TouchableOpacity>
+
+          {/* Leave Room */}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={handleLeaveRoom}
+            activeOpacity={0.7}
           >
-            Chat
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <View
+              style={[
+                styles.controlButtonIcon,
+                styles.leaveButtonIcon,
+                { backgroundColor: theme.error },
+              ]}
+            >
+              <Ionicons name="log-out-outline" size={22} color="#fff" />
+            </View>
+            <Text style={[styles.controlButtonLabel, { color: theme.error }]}>
+              Leave
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
 
       {/* Chat Modal */}
       <Modal
@@ -1157,40 +1207,61 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
   },
-  // Bottom Controls Bar
-  bottomControlsBar: {
+  // Bottom Controls SafeArea Wrapper
+  bottomControlsSafeArea: {
     position: "absolute",
     bottom: 0,
-    left: Spacing.md,
-    right: Spacing.md,
+    left: 0,
+    right: 0,
+  },
+  // Bottom Controls Bar
+  bottomControlsBar: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: Spacing.sm,
-    borderWidth: 1,
-    borderRadius: Layout.radius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.xs,
+    borderRadius: Layout.radius.xxl,
+    backgroundColor: "rgba(21, 21, 23, 0.85)",
   },
   controlButton: {
+    flex: 1,
     alignItems: "center",
-    gap: 4,
-    minWidth: 60,
+    justifyContent: "center",
+    gap: 6,
   },
   controlButtonIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
   },
   leaveButtonIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 16, // Squircle
   },
   controlButtonLabel: {
     ...Typography.presets.caption,
     fontSize: 11,
     fontWeight: "600",
+  },
+  // Floating Chat Button
+  floatingChatButton: {
+    position: "absolute",
+    bottom: 80,
+    right: Spacing.md,
+    ...Layout.shadows.lg,
+  },
+  floatingChatIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
   },
   // Chat Modal
   chatModalOverlay: {
