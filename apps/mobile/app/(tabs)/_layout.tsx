@@ -71,6 +71,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tribes"
+        options={{
+          title: "Tribes",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "shield" : "shield-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="bookmarks"
         options={{
           title: "Library",
