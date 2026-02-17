@@ -53,6 +53,10 @@
             "./assets/fonts/Poppins_700Bold.ttf"
           ]
         }
+      ],
+      [
+        "@livekit/react-native-expo-plugin",
+        "@config-plugins/react-native-webrtc"
       ]
     ],
     "experiments": {
