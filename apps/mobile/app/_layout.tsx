@@ -1,3 +1,7 @@
+import { registerGlobals } from "@livekit/react-native";
+
+registerGlobals();
+
 import {
   DarkTheme,
   ThemeProvider as NavigationThemeProvider,

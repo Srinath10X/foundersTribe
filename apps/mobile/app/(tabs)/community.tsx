@@ -20,7 +20,7 @@ import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
 import { createRoomViaSocket } from "../../lib/livekit";
 
 const VOICE_API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://localhost:3002";
+  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://192.168.0.28:3002";
 
 interface RoomItem {
   id: string;
