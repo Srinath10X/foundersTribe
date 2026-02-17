@@ -10,7 +10,12 @@ import {
   Platform,
   StatusBar,
   KeyboardAvoidingView,
+  Modal,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import {
   Room,
@@ -61,6 +66,8 @@ export default function RoomScreen() {
   const currentUserId = session?.user?.id || "";
   const authToken = session?.access_token;
 
+  const insets = useSafeAreaInsets();
+
   const [room, setRoom] = useState<Room | null>(null);
   const [serverParticipants, setServerParticipants] = useState<
     ServerParticipant[]
@@ -78,10 +85,13 @@ export default function RoomScreen() {
     "host" | "co-host" | "speaker" | "listener"
   >("listener");
   const [roomTitle, setRoomTitle] = useState("Room");
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isHandRaised, setIsHandRaised] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const roomRef = useRef<Room | null>(null);
   const chatListRef = useRef<FlatList>(null);
+  const handRaiseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const displayRole = (role: string) => {
     if (role === "listener") return "audience";
@@ -105,7 +115,7 @@ export default function RoomScreen() {
   const handleLeaveRoom = useCallback(() => {
     const socket = socketRef.current;
     if (socket?.connected && roomId) {
-      socket.emit("leave_room", { roomId }, () => {});
+      socket.emit("leave_room", { roomId }, () => { });
     }
     roomRef.current?.disconnect();
     router.back();
@@ -383,60 +393,68 @@ export default function RoomScreen() {
     const showPromote = myRole === "host" && isAudience && !isMe;
 
     return (
-      <View
-        style={[styles.participantItem, { borderBottomColor: theme.border }]}
-      >
-        <View style={styles.participantLeft}>
-          <View
-            style={[
-              styles.participantAvatar,
-              { backgroundColor: theme.brand.primary + "20" },
-              item.isSpeaking && { borderColor: theme.success, borderWidth: 2 },
-            ]}
+      <View style={styles.participantCard}>
+        <View
+          style={[
+            styles.participantAvatarLarge,
+            { backgroundColor: theme.brand.primary + "18" },
+            item.isSpeaking && {
+              borderColor: theme.success,
+              borderWidth: 2.5,
+              shadowColor: theme.success,
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.5,
+              shadowRadius: 8,
+              elevation: 6,
+            },
+          ]}
+        >
+          <Text
+            style={[styles.avatarInitialLarge, { color: theme.brand.primary }]}
           >
-            <Text
-              style={[styles.avatarInitial, { color: theme.brand.primary }]}
-            >
-              {item.displayName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View style={styles.participantInfo}>
-            <Text
-              style={[styles.participantName, { color: theme.text.primary }]}
-              numberOfLines={1}
-            >
-              {item.displayName} {isMe ? "(You)" : ""}
-            </Text>
-            <Text
-              style={[styles.participantRole, { color: theme.text.tertiary }]}
-            >
-              {displayRole(item.role)}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.participantRight}>
+            {item.displayName.charAt(0).toUpperCase()}
+          </Text>
           {item.isMicEnabled && (
-            <Ionicons
-              name={item.isSpeaking ? "volume-high" : "mic"}
-              size={16}
-              color={item.isSpeaking ? theme.success : theme.text.tertiary}
-            />
-          )}
-          {showPromote && (
-            <TouchableOpacity
+            <View
               style={[
-                styles.promoteButton,
-                { backgroundColor: theme.brand.primary },
+                styles.avatarMicBadge,
+                {
+                  backgroundColor: item.isSpeaking
+                    ? theme.success
+                    : theme.text.muted,
+                },
               ]}
-              onPress={() => handlePromote(item.user_id)}
-              activeOpacity={0.8}
             >
-              <Text style={[styles.promoteText, { color: theme.text.inverse }]}>
-                Promote
-              </Text>
-            </TouchableOpacity>
+              <Ionicons name="mic" size={10} color="#fff" />
+            </View>
           )}
         </View>
+        <Text
+          style={[styles.participantNameGrid, { color: theme.text.primary }]}
+          numberOfLines={1}
+        >
+          {item.displayName}
+          {isMe ? " (You)" : ""}
+        </Text>
+        <Text
+          style={[styles.participantRoleGrid, { color: theme.text.tertiary }]}
+        >
+          {displayRole(item.role)}
+        </Text>
+        {showPromote && (
+          <TouchableOpacity
+            style={[
+              styles.promoteButton,
+              { backgroundColor: theme.brand.primary },
+            ]}
+            onPress={() => handlePromote(item.user_id)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.promoteText, { color: theme.text.inverse }]}>
+              Promote
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -455,8 +473,14 @@ export default function RoomScreen() {
           style={[
             styles.messageBubble,
             isMe
-              ? { backgroundColor: theme.brand.primary }
-              : { backgroundColor: theme.surfaceElevated },
+              ? [
+                styles.messageBubbleMe,
+                { backgroundColor: theme.brand.primary },
+              ]
+              : [
+                styles.messageBubbleOther,
+                { backgroundColor: theme.surfaceElevated },
+              ],
           ]}
         >
           <Text
@@ -478,10 +502,32 @@ export default function RoomScreen() {
     );
   };
 
+  // Render empty chat state
+  const renderEmptyChat = () => (
+    <View style={styles.emptyChatContainer}>
+      <Ionicons
+        name="chatbubble-ellipses-outline"
+        size={48}
+        color={theme.text.muted}
+      />
+      <Text style={[styles.emptyChatTitle, { color: theme.text.tertiary }]}>
+        No messages yet
+      </Text>
+      <Text style={[styles.emptyChatSub, { color: theme.text.muted }]}>
+        Be the first to send a message!
+      </Text>
+    </View>
+  );
+
   const isConnected = connectionState === ConnectionState.Connected;
 
+  const unreadCount = isChatOpen ? 0 : chatMessages.length;
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      edges={["bottom", "top"]}
+    >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen
         options={{
@@ -505,151 +551,429 @@ export default function RoomScreen() {
               />
             </TouchableOpacity>
           ),
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={handleLeaveRoom}
-              style={styles.headerButton}
-            >
-              <Text style={[styles.leaveText, { color: theme.error }]}>
-                Leave
-              </Text>
-            </TouchableOpacity>
-          ),
         }}
       />
 
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-      >
-        {/* Participants Section */}
+      {/* Main Content */}
+      <View style={styles.mainContent}>
+        {/* Connection Status Badge */}
+        {!isConnected && (
+          <View
+            style={[
+              styles.connectionBadge,
+              { backgroundColor: theme.warning + "20" },
+            ]}
+          >
+            <Ionicons name="wifi" size={14} color={theme.warning} />
+            <Text
+              style={[styles.connectionBadgeText, { color: theme.warning }]}
+            >
+              Connecting to room...
+            </Text>
+          </View>
+        )}
+
+        {/* Participants Grid */}
         <View
           style={[
-            styles.section,
-            { backgroundColor: theme.surface, borderColor: theme.border },
+            styles.participantsSection,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              ...Layout.shadows.sm,
+            },
           ]}
         >
           <View style={styles.sectionHeader}>
-            <Ionicons name="people" size={18} color={theme.brand.primary} />
+            <View
+              style={[
+                styles.sectionIconContainer,
+                { backgroundColor: theme.brand.primary + "18" },
+              ]}
+            >
+              <Ionicons name="people" size={16} color={theme.brand.primary} />
+            </View>
             <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>
-              Participants ({mergedParticipants.length})
+              Participants
             </Text>
+            <View
+              style={[
+                styles.countBadge,
+                { backgroundColor: theme.brand.primary + "18" },
+              ]}
+            >
+              <Text
+                style={[styles.countBadgeText, { color: theme.brand.primary }]}
+              >
+                {mergedParticipants.length}
+              </Text>
+            </View>
           </View>
           <FlatList
             data={mergedParticipants}
             renderItem={renderParticipant}
             keyExtractor={(item) => item.user_id}
-            scrollEnabled={false}
+            numColumns={4}
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
+            columnWrapperStyle={styles.participantRow}
+            contentContainerStyle={styles.participantGridContent}
           />
         </View>
 
-        {/* Voice Controls */}
+        {/* Voice Status Card */}
         <View
           style={[
-            styles.controlsRow,
-            { backgroundColor: theme.surface, borderColor: theme.border },
+            styles.voiceStatusCard,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              ...Layout.shadows.md,
+            },
           ]}
         >
-          <TouchableOpacity
+          <View
             style={[
-              styles.micButton,
+              styles.voiceMicCircle,
               {
                 backgroundColor: !canSpeak
-                  ? theme.text.muted
+                  ? theme.text.muted + "30"
                   : isMicEnabled
-                    ? theme.error
-                    : theme.success,
+                    ? theme.error + "20"
+                    : theme.success + "20",
               },
             ]}
-            onPress={handleToggleMic}
-            disabled={!isConnected || !canSpeak}
-            activeOpacity={0.8}
           >
             <Ionicons
               name={isMicEnabled ? "mic" : "mic-off"}
-              size={24}
-              color={theme.text.inverse}
+              size={36}
+              color={
+                !canSpeak
+                  ? theme.text.muted
+                  : isMicEnabled
+                    ? theme.error
+                    : theme.success
+              }
             />
-          </TouchableOpacity>
-          <View style={styles.controlInfo}>
-            <Text style={[styles.controlLabel, { color: theme.text.primary }]}>
-              {!isConnected
-                ? "Connecting..."
-                : isMicEnabled
-                  ? "Mic On"
-                  : canSpeak
-                    ? "Mic Off"
-                    : "Listening"}
-            </Text>
-            <Text style={[styles.controlSub, { color: theme.text.tertiary }]}>
-              Role: {displayRole(myRole)}
+          </View>
+          <Text
+            style={[styles.voiceStatusTitle, { color: theme.text.primary }]}
+          >
+            {!isConnected
+              ? "Connecting..."
+              : isMicEnabled
+                ? "You're Live"
+                : canSpeak
+                  ? "Mic Off"
+                  : "Listening"}
+          </Text>
+          <View
+            style={[
+              styles.voiceRolePill,
+              { backgroundColor: theme.brand.primary + "18" },
+            ]}
+          >
+            <Text
+              style={[styles.voiceRoleText, { color: theme.brand.primary }]}
+            >
+              {displayRole(myRole)}
             </Text>
           </View>
         </View>
 
-        {/* Chat Section */}
-        <View
-          style={[
-            styles.chatSection,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Ionicons
-              name="chatbubbles"
-              size={18}
-              color={theme.brand.primary}
-            />
-            <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>
-              Chat
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
+
+        {/* Hand Raised Toast */}
+        {isHandRaised && (
+          <View
+            style={[
+              styles.handRaisedToast,
+              {
+                backgroundColor: theme.warning + "20",
+                borderColor: theme.warning + "40",
+              },
+            ]}
+          >
+            <Ionicons name="hand-left" size={16} color={theme.warning} />
+            <Text
+              style={[styles.handRaisedToastText, { color: theme.warning }]}
+            >
+              Hand Raised — the host has been notified
             </Text>
           </View>
-          <FlatList
-            ref={chatListRef}
-            data={chatMessages}
-            renderItem={renderMessage}
-            keyExtractor={(item, index) => item.id || index.toString()}
-            style={styles.chatList}
-            contentContainerStyle={styles.chatListContent}
-            onContentSizeChange={() =>
-              chatListRef.current?.scrollToEnd({ animated: true })
+        )}
+      </View>
+
+      {/* Bottom Controls Bar */}
+      <View
+        style={[
+          styles.bottomControlsBar,
+          {
+            backgroundColor: theme.surface,
+            borderColor: theme.border,
+            marginBottom: insets.bottom > 0 ? insets.bottom : Spacing.sm,
+            ...Layout.shadows.sm,
+          },
+        ]}
+      >
+        {/* Mic Toggle */}
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={handleToggleMic}
+          disabled={!isConnected || !canSpeak}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.controlButtonIcon,
+              {
+                backgroundColor: !canSpeak
+                  ? theme.text.muted + "20"
+                  : isMicEnabled
+                    ? theme.error + "20"
+                    : theme.success + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name={isMicEnabled ? "mic" : "mic-off"}
+              size={22}
+              color={
+                !canSpeak
+                  ? theme.text.muted
+                  : isMicEnabled
+                    ? theme.error
+                    : theme.success
+              }
+            />
+          </View>
+          <Text
+            style={[styles.controlButtonLabel, { color: theme.text.secondary }]}
+          >
+            {isMicEnabled ? "Mute" : "Unmute"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Leave Room */}
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={handleLeaveRoom}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.controlButtonIcon,
+              styles.leaveButtonIcon,
+              { backgroundColor: theme.error },
+            ]}
+          >
+            <Ionicons name="log-out-outline" size={22} color="#fff" />
+          </View>
+          <Text style={[styles.controlButtonLabel, { color: theme.error }]}>
+            Leave
+          </Text>
+        </TouchableOpacity>
+
+        {/* Raise Hand */}
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => {
+            if (handRaiseTimerRef.current) {
+              clearTimeout(handRaiseTimerRef.current);
+              handRaiseTimerRef.current = null;
             }
+            const newState = !isHandRaised;
+            setIsHandRaised(newState);
+            if (newState) {
+              handRaiseTimerRef.current = setTimeout(() => {
+                setIsHandRaised(false);
+                handRaiseTimerRef.current = null;
+              }, 5000);
+            }
+          }}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.controlButtonIcon,
+              {
+                backgroundColor: isHandRaised
+                  ? theme.warning + "25"
+                  : theme.text.muted + "20",
+              },
+            ]}
+          >
+            <Ionicons
+              name={isHandRaised ? "hand-left" : "hand-left-outline"}
+              size={22}
+              color={isHandRaised ? theme.warning : theme.text.secondary}
+            />
+          </View>
+          <Text
+            style={[
+              styles.controlButtonLabel,
+              { color: isHandRaised ? theme.warning : theme.text.secondary },
+            ]}
+          >
+            {isHandRaised ? "Lower" : "Raise"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Chat */}
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={() => setIsChatOpen(true)}
+          activeOpacity={0.7}
+        >
+          <View
+            style={[
+              styles.controlButtonIcon,
+              { backgroundColor: theme.brand.primary + "20" },
+            ]}
+          >
+            <Ionicons
+              name="chatbubble-ellipses"
+              size={22}
+              color={theme.brand.primary}
+            />
+            {chatMessages.length > 0 && (
+              <View style={[styles.chatBadge, { backgroundColor: theme.error }]}>
+                <Text style={styles.chatBadgeText}>
+                  {chatMessages.length > 99 ? "99+" : chatMessages.length}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text
+            style={[styles.controlButtonLabel, { color: theme.text.secondary }]}
+          >
+            Chat
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Chat Modal */}
+      <Modal
+        visible={isChatOpen}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsChatOpen(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.chatModalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+        >
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            activeOpacity={1}
+            onPress={() => setIsChatOpen(false)}
           />
-          <View style={[styles.chatInputRow, { borderTopColor: theme.border }]}>
-            <TextInput
+          <View
+            style={[
+              styles.chatModalContainer,
+              {
+                backgroundColor: theme.background,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            {/* Modal Header */}
+            <View
               style={[
-                styles.chatInput,
+                styles.chatModalHeader,
+                { borderBottomColor: theme.border },
+              ]}
+            >
+              <View style={styles.chatModalHeaderLeft}>
+                <Ionicons
+                  name="chatbubbles"
+                  size={20}
+                  color={theme.brand.primary}
+                />
+                <Text
+                  style={[styles.chatModalTitle, { color: theme.text.primary }]}
+                >
+                  Chat
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsChatOpen(false)}
+                style={[
+                  styles.chatModalCloseBtn,
+                  { backgroundColor: theme.surfaceElevated },
+                ]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={theme.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Messages */}
+            <FlatList
+              ref={chatListRef}
+              data={chatMessages}
+              renderItem={renderMessage}
+              keyExtractor={(item, index) => item.id || index.toString()}
+              style={styles.chatList}
+              contentContainerStyle={[
+                styles.chatListContent,
+                chatMessages.length === 0 && styles.chatListEmpty,
+              ]}
+              onContentSizeChange={() =>
+                chatListRef.current?.scrollToEnd({ animated: true })
+              }
+              ListEmptyComponent={renderEmptyChat}
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
+            />
+
+            {/* Input Row */}
+            <View
+              style={[
+                styles.chatInputRow,
                 {
-                  backgroundColor: theme.surfaceElevated,
-                  color: theme.text.primary,
-                  borderColor: theme.border,
+                  borderTopColor: theme.border,
+                  backgroundColor: theme.background,
+                  paddingBottom: insets.bottom > 0 ? insets.bottom : Spacing.sm,
                 },
               ]}
-              value={messageInput}
-              onChangeText={setMessageInput}
-              placeholder="Type a message..."
-              placeholderTextColor={theme.text.muted}
-              editable={isConnected}
-              onSubmitEditing={handleSendMessage}
-              returnKeyType="send"
-            />
-            <TouchableOpacity
-              style={[
-                styles.sendButton,
-                { backgroundColor: theme.brand.primary },
-                (!isConnected || !messageInput.trim()) && { opacity: 0.5 },
-              ]}
-              onPress={handleSendMessage}
-              disabled={!isConnected || !messageInput.trim()}
-              activeOpacity={0.8}
             >
-              <Ionicons name="send" size={18} color={theme.text.inverse} />
-            </TouchableOpacity>
+              <TextInput
+                style={[
+                  styles.chatInput,
+                  {
+                    backgroundColor: theme.surfaceElevated,
+                    color: theme.text.primary,
+                    borderColor: theme.border,
+                  },
+                ]}
+                value={messageInput}
+                onChangeText={setMessageInput}
+                placeholder="Type a message..."
+                placeholderTextColor={theme.text.muted}
+                editable={isConnected}
+                onSubmitEditing={handleSendMessage}
+                returnKeyType="send"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  { backgroundColor: theme.brand.primary },
+                  (!isConnected || !messageInput.trim()) && { opacity: 0.4 },
+                ]}
+                onPress={handleSendMessage}
+                disabled={!isConnected || !messageInput.trim()}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="send" size={16} color={theme.text.inverse} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -657,122 +981,282 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
-    flex: 1,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-  },
   headerButton: {
     paddingHorizontal: Spacing.xs,
   },
-  leaveText: {
-    ...Typography.presets.body,
+  // Main content
+  mainContent: {
+    flex: 1,
+    padding: Spacing.md,
+    gap: Spacing.md,
+  },
+  // Connection status
+  connectionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Layout.radius.md,
+  },
+  connectionBadgeText: {
+    ...Typography.presets.caption,
     fontWeight: "600",
   },
-  section: {
-    borderRadius: Layout.radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    maxHeight: 200,
-  },
+  // Section header
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
     marginBottom: Spacing.sm,
   },
-  sectionTitle: {
-    ...Typography.presets.h3,
-    fontSize: Typography.sizes.md,
-  },
-  participantItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: Spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  participantLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  participantAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  sectionIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: Spacing.sm,
   },
-  avatarInitial: {
+  sectionTitle: {
     ...Typography.presets.body,
     fontWeight: "600",
-  },
-  participantInfo: {
     flex: 1,
   },
-  participantName: {
-    ...Typography.presets.bodySmall,
+  countBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: Layout.radius.sm,
+  },
+  countBadgeText: {
+    ...Typography.presets.caption,
+    fontWeight: "700",
+  },
+  // Participants Grid
+  participantsSection: {
+    borderRadius: Layout.radius.lg,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    maxHeight: 280,
+  },
+  participantRow: {
+    justifyContent: "flex-start",
+    gap: Spacing.sm,
+  },
+  participantGridContent: {
+    gap: Spacing.sm,
+  },
+  participantCard: {
+    alignItems: "center",
+    width: 72,
+    gap: 4,
+  },
+  participantAvatarLarge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  avatarInitialLarge: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  avatarMicBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#151517",
+  },
+  participantNameGrid: {
+    ...Typography.presets.caption,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  participantRoleGrid: {
+    fontSize: 10,
+    textAlign: "center",
+    textTransform: "capitalize",
+  },
+  promoteButton: {
+    paddingVertical: 3,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: Layout.radius.sm,
+    marginTop: 2,
+  },
+  promoteText: {
+    fontSize: 10,
     fontWeight: "600",
   },
-  participantRole: {
-    ...Typography.presets.caption,
+  // Voice Status Card
+  voiceStatusCard: {
+    borderRadius: Layout.radius.xl,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.xl,
   },
-  participantRight: {
+  voiceMicCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  voiceStatusTitle: {
+    ...Typography.presets.h2,
+    fontWeight: "700",
+  },
+  voiceRolePill: {
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Layout.radius.full,
+  },
+  voiceRoleText: {
+    ...Typography.presets.caption,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  // Hand Raised Toast
+  handRaisedToast: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Layout.radius.md,
+    borderWidth: 1,
   },
-  promoteButton: {
-    paddingVertical: 4,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Layout.radius.sm,
-  },
-  promoteText: {
-    ...Typography.presets.caption,
+  handRaisedToastText: {
+    ...Typography.presets.bodySmall,
     fontWeight: "600",
   },
-  controlsRow: {
-    flexDirection: "row",
+  // Chat badge (on control button icon)
+  chatBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
     alignItems: "center",
-    borderRadius: Layout.radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    gap: Spacing.md,
+    paddingHorizontal: 3,
   },
-  micButton: {
+  chatBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  // Bottom Controls Bar
+  bottomControlsBar: {
+    position: "absolute",
+    bottom: 0,
+    left: Spacing.md,
+    right: Spacing.md,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: Layout.radius.lg,
+  },
+  controlButton: {
+    alignItems: "center",
+    gap: 4,
+    minWidth: 60,
+  },
+  controlButtonIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
   },
-  controlInfo: {
-    flex: 1,
+  leaveButtonIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
   },
-  controlLabel: {
-    ...Typography.presets.body,
+  controlButtonLabel: {
+    ...Typography.presets.caption,
+    fontSize: 11,
     fontWeight: "600",
   },
-  controlSub: {
-    ...Typography.presets.caption,
-  },
-  chatSection: {
+  // Chat Modal
+  chatModalOverlay: {
     flex: 1,
-    borderRadius: Layout.radius.lg,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  chatModalContainer: {
+    height: "75%",
+    borderTopLeftRadius: Layout.radius.xl,
+    borderTopRightRadius: Layout.radius.xl,
     borderWidth: 1,
+    borderBottomWidth: 0,
     overflow: "hidden",
   },
+  chatModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  chatModalHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  chatModalTitle: {
+    ...Typography.presets.h3,
+  },
+  chatModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Chat list + messages
   chatList: {
     flex: 1,
     paddingHorizontal: Spacing.md,
   },
   chatListContent: {
-    paddingBottom: Spacing.xs,
+    paddingVertical: Spacing.xs,
+  },
+  chatListEmpty: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  emptyChatContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.xxl,
+    gap: Spacing.xs,
+  },
+  emptyChatTitle: {
+    ...Typography.presets.body,
+    fontWeight: "600",
+    marginTop: Spacing.xs,
+  },
+  emptyChatSub: {
+    ...Typography.presets.caption,
   },
   messageItem: {
-    marginBottom: Spacing.xs,
+    marginBottom: Spacing.sm,
     alignItems: "flex-start",
   },
   messageItemMe: {
@@ -781,14 +1265,21 @@ const styles = StyleSheet.create({
   messageSender: {
     ...Typography.presets.caption,
     fontWeight: "600",
-    marginBottom: 2,
+    marginBottom: 3,
     marginLeft: Spacing.xxs,
   },
   messageBubble: {
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.sm,
-    borderRadius: Layout.radius.md,
     maxWidth: "80%",
+  },
+  messageBubbleMe: {
+    borderRadius: Layout.radius.md,
+    borderBottomRightRadius: Layout.radius.xs,
+  },
+  messageBubbleOther: {
+    borderRadius: Layout.radius.md,
+    borderBottomLeftRadius: Layout.radius.xs,
   },
   messageText: {
     ...Typography.presets.bodySmall,
@@ -796,13 +1287,15 @@ const styles = StyleSheet.create({
   messageTime: {
     ...Typography.presets.caption,
     fontSize: 10,
-    marginTop: 2,
+    marginTop: 3,
     marginHorizontal: Spacing.xxs,
   },
+  // Chat Input
   chatInputRow: {
     flexDirection: "row",
     alignItems: "center",
-    padding: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: Spacing.xs,
   },
