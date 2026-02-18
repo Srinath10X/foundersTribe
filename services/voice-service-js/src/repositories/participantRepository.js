@@ -159,10 +159,7 @@ export class ParticipantRepository {
   async removeAllInRoom(roomId) {
     const { error } = await supabase
       .from("participants")
-      .update({
-        is_connected: false,
-        disconnected_at: new Date().toISOString(),
-      })
+      .delete()
       .eq("room_id", roomId);
 
     if (error) {

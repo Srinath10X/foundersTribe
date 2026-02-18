@@ -28,6 +28,7 @@ import { io, Socket } from "socket.io-client";
 import { Ionicons } from "@expo/vector-icons";
 
 import {
+  VOICE_API_URL,
   joinRoomViaSocket,
   connectToLiveKitRoom,
   toggleMic,
@@ -36,10 +37,8 @@ import {
 } from "../../lib/livekit";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { supabase } from "../../lib/supabase";
 import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
-
-const VOICE_API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://192.168.1.4:3002";
 
 interface ChatMessage {
   id: string;
@@ -102,6 +101,11 @@ export default function RoomScreen() {
   const roomRef = useRef<Room | null>(null);
   const chatListRef = useRef<FlatList>(null);
   const handRaiseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Flag to prevent the LiveKit ConnectionStateChanged handler from tearing
+  // down the socket when we intentionally disconnect LiveKit for a token swap
+  const isReconnectingLiveKitRef = useRef(false);
+  // Track the roomId for reconnection logic
+  const activeRoomIdRef = useRef<string | null>(null);
 
   const displayRole = (role: string) => {
     if (role === "listener") return "audience";
@@ -123,6 +127,7 @@ export default function RoomScreen() {
   });
 
   const handleLeaveRoom = useCallback(() => {
+    activeRoomIdRef.current = null;
     const socket = socketRef.current;
     if (socket?.connected && roomId) {
       socket.emit("leave_room", { roomId }, () => {});
@@ -130,17 +135,88 @@ export default function RoomScreen() {
     socket?.removeAllListeners();
     socket?.disconnect();
     socketRef.current = null;
+    isReconnectingLiveKitRef.current = true; // prevent ConnectionStateChanged from double-navigating
     roomRef.current?.disconnect();
     roomRef.current = null;
     router.replace("/(tabs)/community");
   }, [roomId, router]);
+
+  // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
+  const reconnectLiveKit = useCallback(
+    async (newToken: string, newRole: string) => {
+      isReconnectingLiveKitRef.current = true;
+      try {
+        roomRef.current?.disconnect();
+        const newRoom = await connectToLiveKitRoom(newToken);
+        setRoom(newRoom);
+        roomRef.current = newRoom;
+        setConnectionState(ConnectionState.Connected);
+
+        // Re-attach LiveKit event listeners on the new room
+        attachLiveKitListeners(newRoom);
+
+        const canPublish = ["host", "co-host", "speaker"].includes(newRole);
+        if (canPublish) {
+          await toggleMic(newRoom.localParticipant, true);
+          setIsMicEnabled(true);
+        } else {
+          setIsMicEnabled(false);
+        }
+      } catch (err) {
+        console.error("[Room] Failed to reconnect LiveKit:", err);
+      } finally {
+        isReconnectingLiveKitRef.current = false;
+      }
+    },
+    [],
+  );
+
+  // LiveKit event listener attachment — extracted so we can re-attach after token swap
+  const attachLiveKitListeners = useCallback((lkRoom: Room) => {
+    const updateLKParticipants = () => {
+      const all = [
+        lkRoom.localParticipant,
+        ...Array.from(lkRoom.remoteParticipants.values()),
+      ];
+      setLivekitParticipants(all.map((p) => getParticipantInfo(p)));
+    };
+
+    lkRoom
+      .on(RoomEvent.ParticipantConnected, updateLKParticipants)
+      .on(RoomEvent.ParticipantDisconnected, updateLKParticipants)
+      .on(RoomEvent.ActiveSpeakersChanged, updateLKParticipants)
+      .on(RoomEvent.TrackPublished, updateLKParticipants)
+      .on(RoomEvent.TrackUnpublished, updateLKParticipants)
+      .on(RoomEvent.LocalTrackPublished, updateLKParticipants)
+      .on(RoomEvent.LocalTrackUnpublished, updateLKParticipants)
+      .on(RoomEvent.ConnectionStateChanged, (state) => {
+        // Skip if we're intentionally swapping LiveKit tokens
+        if (isReconnectingLiveKitRef.current) return;
+
+        setConnectionState(state);
+        if (state === ConnectionState.Disconnected) {
+          Alert.alert(
+            "Disconnected",
+            "You have been disconnected from the room.",
+          );
+          activeRoomIdRef.current = null;
+          socketRef.current?.removeAllListeners();
+          socketRef.current?.disconnect();
+          socketRef.current = null;
+          roomRef.current = null;
+          router.replace("/(tabs)/community");
+        }
+      });
+
+    updateLKParticipants();
+  }, [router]);
 
   // Setup socket and LiveKit
   useEffect(() => {
     if (!roomId || !authToken) return;
 
     let socket: Socket | undefined;
-    let livekitRoom: Room | undefined;
+    let cancelled = false;
 
     const setup = async () => {
       try {
@@ -151,8 +227,13 @@ export default function RoomScreen() {
         socket = io(VOICE_API_URL, {
           transports: ["websocket", "polling"],
           auth: { token: authToken },
+          reconnection: true,
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 10000,
         });
         socketRef.current = socket;
+        activeRoomIdRef.current = roomId;
 
         await new Promise<void>((resolve, reject) => {
           const timeout = setTimeout(
@@ -171,8 +252,12 @@ export default function RoomScreen() {
           });
         });
 
+        if (cancelled) return;
+
         // 2. Join room via socket → get livekitToken + data
         const result = await joinRoomViaSocket(socket!, roomId);
+        if (cancelled) return;
+
         setRoomTitle(result.room?.title || `Room`);
         setServerParticipants(result.participants || []);
         setChatMessages((result.messages || []).map(normalizeMessage));
@@ -186,58 +271,17 @@ export default function RoomScreen() {
         }
 
         // 3. Connect LiveKit
-        livekitRoom = await connectToLiveKitRoom(result.livekitToken);
+        const livekitRoom = await connectToLiveKitRoom(result.livekitToken);
+        if (cancelled) {
+          livekitRoom.disconnect();
+          return;
+        }
         setRoom(livekitRoom);
         roomRef.current = livekitRoom;
         setConnectionState(ConnectionState.Connected);
 
-        // LiveKit event listeners
-        const updateLKParticipants = (lkRoom: Room) => {
-          const all = [
-            lkRoom.localParticipant,
-            ...Array.from(lkRoom.remoteParticipants.values()),
-          ];
-          setLivekitParticipants(all.map((p) => getParticipantInfo(p)));
-        };
-
-        livekitRoom
-          .on(RoomEvent.ParticipantConnected, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.ParticipantDisconnected, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.ActiveSpeakersChanged, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.TrackPublished, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.TrackUnpublished, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.LocalTrackPublished, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.LocalTrackUnpublished, () =>
-            updateLKParticipants(livekitRoom!),
-          )
-          .on(RoomEvent.ConnectionStateChanged, (state) => {
-            setConnectionState(state);
-            if (state === ConnectionState.Disconnected) {
-              Alert.alert(
-                "Disconnected",
-                "You have been disconnected from the room.",
-              );
-              socketRef.current?.removeAllListeners();
-              socketRef.current?.disconnect();
-              socketRef.current = null;
-              roomRef.current = null;
-              router.replace("/(tabs)/community");
-            }
-          });
-
-        updateLKParticipants(livekitRoom);
+        // Attach LiveKit event listeners
+        attachLiveKitListeners(livekitRoom);
 
         // Enable mic if host/speaker
         if (
@@ -248,12 +292,12 @@ export default function RoomScreen() {
           setIsMicEnabled(true);
         }
 
-        // Socket.IO room event listeners
+        // ---- Socket.IO room event listeners ----
+
         socket!.on("receive_message", (data: { message: any }) => {
           const msg = normalizeMessage(data.message);
           setChatMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
-            // Replace optimistic message from same sender with same content
             const withoutOptimistic = prev.filter(
               (m) =>
                 !(
@@ -293,53 +337,43 @@ export default function RoomScreen() {
                 p.user_id === data.participant.user_id ? data.participant : p,
               ),
             );
-            // Update my own role if changed
             if (data.participant.user_id === currentUserId) {
               setMyRole(data.participant.role);
             }
           },
         );
 
+        // FIX #4: role_changed — reconnect LiveKit without tearing down socket
         socket!.on(
           "role_changed",
           (data: { participant: ServerParticipant; livekitToken: string }) => {
             setMyRole(data.participant.role);
-            // Reconnect LiveKit with new token for updated permissions
-            if (livekitRoom) {
-              livekitRoom.disconnect();
-              connectToLiveKitRoom(data.livekitToken).then((newRoom) => {
-                setRoom(newRoom);
-                roomRef.current = newRoom;
-                const canPublish = ["host", "co-host", "speaker"].includes(
-                  data.participant.role,
-                );
-                if (canPublish) {
-                  toggleMic(newRoom.localParticipant, true);
-                  setIsMicEnabled(true);
-                }
-              });
-            }
+            reconnectLiveKit(data.livekitToken, data.participant.role);
           },
         );
 
+        // FIX #4: mic_granted — reconnect LiveKit without tearing down socket
         socket!.on(
           "mic_granted",
           (data: { participant: ServerParticipant; livekitToken: string }) => {
             setMyRole(data.participant.role);
-            if (livekitRoom) {
-              livekitRoom.disconnect();
-              connectToLiveKitRoom(data.livekitToken).then((newRoom) => {
-                setRoom(newRoom);
-                roomRef.current = newRoom;
-                toggleMic(newRoom.localParticipant, true);
-                setIsMicEnabled(true);
-              });
-            }
+            reconnectLiveKit(data.livekitToken, data.participant.role);
+          },
+        );
+
+        // FIX #4: mic_revoked — reconnect LiveKit with listener permissions
+        socket!.on(
+          "mic_revoked",
+          (data: { participant: ServerParticipant; livekitToken: string }) => {
+            setMyRole(data.participant.role);
+            reconnectLiveKit(data.livekitToken, data.participant.role);
           },
         );
 
         socket!.on("removed_from_room", () => {
+          activeRoomIdRef.current = null;
           Alert.alert("Removed", "You have been removed from the room.");
+          isReconnectingLiveKitRef.current = true;
           roomRef.current?.disconnect();
           roomRef.current = null;
           socketRef.current?.removeAllListeners();
@@ -349,7 +383,9 @@ export default function RoomScreen() {
         });
 
         socket!.on("room_ended", () => {
+          activeRoomIdRef.current = null;
           Alert.alert("Room Ended", "The host has ended this room.");
+          isReconnectingLiveKitRef.current = true;
           roomRef.current?.disconnect();
           roomRef.current = null;
           socketRef.current?.removeAllListeners();
@@ -357,7 +393,92 @@ export default function RoomScreen() {
           socketRef.current = null;
           router.replace("/(tabs)/community");
         });
+
+        // FIX #5: Socket.IO reconnection — refresh auth token and restore room state
+        socket!.on("disconnect", (reason) => {
+          console.log("[Room] Socket disconnected:", reason);
+          if (reason === "io server disconnect") {
+            // Server forcefully disconnected — don't auto-reconnect
+            return;
+          }
+          setConnectionState(ConnectionState.Reconnecting);
+        });
+
+        socket!.io.on("reconnect_attempt", async () => {
+          // FIX #10: Refresh Supabase token before reconnecting
+          try {
+            const { data } = await supabase.auth.refreshSession();
+            if (data.session?.access_token) {
+              socket!.auth = { token: data.session.access_token };
+              console.log("[Room] Refreshed auth token for reconnection");
+            }
+          } catch (err) {
+            console.warn("[Room] Failed to refresh token:", err);
+          }
+        });
+
+        socket!.io.on("reconnect", () => {
+          console.log("[Room] Socket reconnected, restoring room state...");
+          const currentRoomId = activeRoomIdRef.current;
+          if (!currentRoomId || !socket?.connected) return;
+
+          const lastMsg = chatMessages[chatMessages.length - 1];
+          socket!.emit(
+            "restore_room_state",
+            {
+              roomId: currentRoomId,
+              lastMessageAt: lastMsg?.created_at,
+            },
+            (response: any) => {
+              if (response.success) {
+                console.log("[Room] Room state restored after reconnect");
+                const d = response.data;
+                if (d.participants) setServerParticipants(d.participants);
+                if (d.missedMessages?.length) {
+                  setChatMessages((prev) => {
+                    const newMsgs = d.missedMessages
+                      .map(normalizeMessage)
+                      .filter(
+                        (m: ChatMessage) => !prev.some((p) => p.id === m.id),
+                      );
+                    return [...prev, ...newMsgs];
+                  });
+                }
+                // Reconnect LiveKit with fresh token
+                if (d.livekitToken) {
+                  const me = d.participants?.find(
+                    (p: ServerParticipant) => p.user_id === currentUserId,
+                  );
+                  reconnectLiveKit(d.livekitToken, me?.role || "listener");
+                }
+                setConnectionState(ConnectionState.Connected);
+              } else {
+                console.error("[Room] Failed to restore room state:", response.error);
+                // Room may no longer exist
+                Alert.alert("Error", "Failed to restore room. Returning to community.");
+                activeRoomIdRef.current = null;
+                socketRef.current?.disconnect();
+                router.replace("/(tabs)/community");
+              }
+            },
+          );
+        });
+
+        socket!.io.on("reconnect_failed", () => {
+          console.error("[Room] Socket reconnection failed after all attempts");
+          Alert.alert(
+            "Connection Lost",
+            "Unable to reconnect to the room.",
+          );
+          activeRoomIdRef.current = null;
+          isReconnectingLiveKitRef.current = true;
+          roomRef.current?.disconnect();
+          roomRef.current = null;
+          socketRef.current = null;
+          router.replace("/(tabs)/community");
+        });
       } catch (error: any) {
+        if (cancelled) return;
         console.error("Failed to setup room:", error);
         Alert.alert("Error", `Failed to join room: ${error.message}`);
         setConnectionState(ConnectionState.Disconnected);
@@ -368,12 +489,16 @@ export default function RoomScreen() {
     setup();
 
     return () => {
+      cancelled = true;
+      activeRoomIdRef.current = null;
+      isReconnectingLiveKitRef.current = true;
       roomRef.current?.disconnect();
+      roomRef.current = null;
+      socketRef.current?.removeAllListeners();
       socketRef.current?.disconnect();
       socketRef.current = null;
-      roomRef.current = null;
     };
-  }, [roomId, authToken, currentUserId]);
+  }, [roomId, authToken, currentUserId, attachLiveKitListeners, reconnectLiveKit]);
 
   // Toggle mic
   const handleToggleMic = async () => {

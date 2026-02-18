@@ -8,12 +8,12 @@ import { Server as SocketIOServer } from "socket.io";
 import { fileURLToPath } from "url";
 
 import { env } from "./config/env.js";
-import { createRedisAdapter } from "./config/redis.js";
+import { createRedisAdapter, createRedisClient } from "./config/redis.js";
 import { socketAuthMiddleware } from "./middleware/auth.js";
 import { apiRateLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { registerSocketHandlers } from "./socket/handlers.js";
-import { clearAllGracePeriods } from "./socket/gracePeriod.js";
+import { clearAllGracePeriods, initGracePeriod } from "./socket/gracePeriod.js";
 import roomsRouter from "./routes/rooms.js";
 import healthRouter from "./routes/health.js";
 import { logger } from "./utils/logger.js";
@@ -68,6 +68,17 @@ async function main() {
     const adapter = await createRedisAdapter();
     io.adapter(adapter);
     logger.info("✅ Socket.io Redis adapter connected");
+
+    // Initialize grace period system with a standalone Redis client
+    try {
+      const graceRedis = await createRedisClient();
+      initGracePeriod(graceRedis);
+    } catch (graceErr) {
+      logger.warn(
+        { err: graceErr },
+        "⚠️ Grace period Redis failed — using local-only mode",
+      );
+    }
   } catch (err) {
     logger.warn(
       { err },

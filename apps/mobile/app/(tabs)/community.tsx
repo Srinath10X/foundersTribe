@@ -18,14 +18,8 @@ import { io, Socket } from "socket.io-client";
 import CreateRoomModal from "../../components/CreateRoomModal";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
+import { VOICE_API_URL } from "../../lib/livekit";
 import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
-
-/* ================================================================ */
-/*  Config                                                           */
-/* ================================================================ */
-
-const VOICE_API_URL =
-  process.env.EXPO_PUBLIC_VOICE_API_URL || "http://192.168.0.28:3002";
 
 interface RoomItem {
   id: string;
@@ -54,25 +48,25 @@ function timeAgo(dateStr?: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-/** Socket.IO-based room creation (returns room + livekitToken) */
-function createRoomViaSocket(
-  socket: Socket,
+/** REST-based room creation — avoids dual-socket race condition */
+async function createRoomViaREST(
   title: string,
   type: "public" | "private",
-): Promise<{ room: RoomItem; participant: any; livekitToken: string }> {
-  return new Promise((resolve, reject) => {
-    if (!socket.connected) {
-      reject(new Error("Socket is not connected."));
-      return;
-    }
-    socket.emit("create_room", { title, type }, (response: any) => {
-      if (!response.success) {
-        reject(new Error(response.error || "Failed to create room"));
-      } else {
-        resolve(response.data);
-      }
-    });
+  authToken: string,
+): Promise<{ room: RoomItem }> {
+  const res = await fetch(`${VOICE_API_URL}/api/create_room`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({ title, type }),
   });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Failed to create room");
+  }
+  return res.json();
 }
 
 /* ================================================================ */
@@ -236,17 +230,16 @@ export default function CommunityScreen() {
     router.push(`/room/${roomId}` as any);
   };
 
-  /* ── Create room via socket → navigate to room page ─────── */
+  /* ── Create room via REST → navigate to room page ──────── */
 
   const handleCreateRoom = async (roomName: string, isPublic: boolean) => {
-    const socket = socketRef.current;
-    if (!socket?.connected) return;
+    if (!authToken) return;
 
     try {
-      const result = await createRoomViaSocket(
-        socket,
+      const result = await createRoomViaREST(
         roomName,
         isPublic ? "public" : "private",
+        authToken,
       );
       setCreateModalVisible(false);
       router.push(`/room/${result.room.id}` as any);

@@ -56,7 +56,7 @@ export function registerSocketHandlers(io) {
     socket.on("join_room", async (data, cb) => {
       if (!socketRateLimit(socket.id)) return fail(cb, "Rate limit exceeded");
       try {
-        clearGracePeriod(user.id, data.roomId);
+        await clearGracePeriod(user.id, data.roomId);
 
         const result = await roomService.joinRoom(
           user.id,
@@ -99,6 +99,9 @@ export function registerSocketHandlers(io) {
     socket.on("leave_room", async (data, cb) => {
       if (!socketRateLimit(socket.id)) return fail(cb, "Rate limit exceeded");
       try {
+        // Clear any active grace period before explicit leave
+        await clearGracePeriod(user.id, data.roomId);
+
         await roomService.leaveRoom(user.id, data.roomId);
         socket.leave(data.roomId);
 
@@ -106,11 +109,16 @@ export function registerSocketHandlers(io) {
           userId: user.id,
         });
 
-        const roomState = await roomService.getRoomState(data.roomId);
-        io.emit("room_updated", {
-          roomId: data.roomId,
-          participant_count: roomState.participants.length,
-        });
+        try {
+          const roomState = await roomService.getRoomState(data.roomId);
+          io.emit("room_updated", {
+            roomId: data.roomId,
+            participant_count: roomState.participants.length,
+          });
+        } catch {
+          // Room may have been destroyed by checkAndDestroyRoom
+          io.emit("room_removed", { roomId: data.roomId });
+        }
 
         success(cb);
       } catch (err) {
@@ -353,7 +361,7 @@ export function registerSocketHandlers(io) {
     socket.on("restore_room_state", async (data, cb) => {
       if (!socketRateLimit(socket.id)) return fail(cb, "Rate limit exceeded");
       try {
-        clearGracePeriod(user.id, data.roomId);
+        await clearGracePeriod(user.id, data.roomId);
 
         await roomService.updateSocketId(user.id, data.roomId, socket.id);
         socket.join(data.roomId);
@@ -414,34 +422,50 @@ export function registerSocketHandlers(io) {
       try {
         const rooms = await roomService.getParticipantRooms(socket.id);
 
+        // Process each room independently — one failure shouldn't block others
         for (const { room_id, user_id } of rooms) {
-          await roomService.markDisconnected(user_id, room_id, socket.id);
+          try {
+            await roomService.markDisconnected(user_id, room_id, socket.id);
 
-          socket.to(room_id).emit("participant_disconnected", {
-            userId: user_id,
-          });
-
-          startGracePeriod(user_id, room_id, async () => {
-            await roomService.removeParticipant(user_id, room_id);
-
-            io.to(room_id).emit("participant_left", {
+            socket.to(room_id).emit("participant_disconnected", {
               userId: user_id,
-              expired: true,
             });
 
-            try {
-              const state = await roomService.getRoomState(room_id);
-              io.emit("room_updated", {
-                roomId: room_id,
-                participant_count: state.participants.length,
-              });
-            } catch {
-              // Room may no longer exist
-            }
-          });
+            await startGracePeriod(user_id, room_id, async () => {
+              try {
+                await roomService.removeParticipant(user_id, room_id);
+
+                io.to(room_id).emit("participant_left", {
+                  userId: user_id,
+                  expired: true,
+                });
+
+                try {
+                  const state = await roomService.getRoomState(room_id);
+                  io.emit("room_updated", {
+                    roomId: room_id,
+                    participant_count: state.participants.length,
+                  });
+                } catch {
+                  // Room may have been destroyed
+                  io.emit("room_removed", { roomId: room_id });
+                }
+              } catch (expiredErr) {
+                logger.error(
+                  { err: expiredErr, userId: user_id, roomId: room_id },
+                  "Error in grace period expiry callback",
+                );
+              }
+            });
+          } catch (roomErr) {
+            logger.error(
+              { err: roomErr, userId: user_id, roomId: room_id },
+              "Error handling disconnect for room",
+            );
+          }
         }
       } catch (err) {
-        logger.error({ err }, "Error handling disconnect");
+        logger.error({ err }, "Error fetching participant rooms on disconnect");
       }
     });
   });
