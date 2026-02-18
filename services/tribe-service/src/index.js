@@ -24,6 +24,7 @@ import messageRoutes from "./routes/messages.js";
 import memberRoutes from "./routes/members.js";
 import inviteRoutes from "./routes/invites.js";
 import moderationRoutes from "./routes/moderation.js";
+import profileRoutes from "./routes/profiles.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -59,6 +60,7 @@ app.use("/api", authMiddleware, memberRoutes);
 app.use("/api/tribes/:tribeId/invites", authMiddleware, inviteRoutes);
 app.use("/api/invites", authMiddleware, inviteRoutes);
 app.use("/api/moderation", authMiddleware, moderationRoutes);
+app.use("/api/profiles", authMiddleware, profileRoutes);
 
 // --- Error handler ---
 app.use(errorHandler);

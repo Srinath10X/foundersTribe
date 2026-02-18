@@ -1,13 +1,17 @@
 import { Typography } from "@/constants/DesignSystem";
+import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
+import * as tribeApi from "@/lib/tribeApi";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
-import { Stack, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { Stack, useRouter, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   Alert,
   Dimensions,
+  Linking,
   Platform,
   ScrollView,
   StatusBar,
@@ -15,68 +19,133 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
 
+type PreviousWork = { company: string; role: string; duration: string };
+type SocialLink = { platform: string; url: string; label: string };
+
+type Profile = {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  bio: string | null;
+  photo_url: string | null;
+  linkedin_url: string | null;
+  business_idea: string | null;
+  idea_video_url: string | null;
+  previous_works: PreviousWork[];
+  social_links: SocialLink[];
+};
+
+const PLATFORM_ICONS: Record<string, string> = {
+  twitter: "logo-twitter",
+  x: "logo-twitter",
+  github: "logo-github",
+  linkedin: "logo-linkedin",
+  instagram: "logo-instagram",
+  youtube: "logo-youtube",
+  facebook: "logo-facebook",
+  website: "globe-outline",
+  dribbble: "logo-dribbble",
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
+  const { session } = useAuth();
   const { theme, themeMode, setThemeMode, isDark } = useTheme();
-  const [userEmail, setUserEmail] = useState("");
-  const [userName, setUserName] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     articlesRead: 0,
     bookmarks: 0,
     likes: 0,
   });
 
-  // -- Data Loading --
-  useEffect(() => {
-    loadUserData();
-    loadStats();
-  }, []);
+  const token = session?.access_token || "";
 
-  const loadUserData = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user) {
-      setUserEmail(user.email || "");
-      const fullName =
-        user.user_metadata?.full_name || user.user_metadata?.name;
-      setUserName(fullName || user.email?.split("@")[0] || "User");
-    }
-  };
+  // Reload profile every time screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-  // Calculate stats from User Interactions table
-  const loadStats = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      const fetchProfile = async () => {
+        try {
+          if (!token) return;
+          const data = await tribeApi.getMyProfile(token);
+          if (!cancelled) setProfile(data);
+        } catch (error) {
+          // console.error("Error loading profile:", error);
+          // Fallback to auth user data
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (user && !cancelled) {
+            setProfile({
+              id: user.id,
+              username: user.email?.split("@")[0] || "user",
+              display_name:
+                user.user_metadata?.full_name ||
+                user.user_metadata?.name ||
+                user.email?.split("@")[0] ||
+                "User",
+              avatar_url: null,
+              bio: null,
+              photo_url: null,
+              linkedin_url: null,
+              business_idea: null,
+              idea_video_url: null,
+              previous_works: [],
+              social_links: [],
+            });
+          }
+        }
+      };
 
-      const { data: bookmarks } = await supabase
-        .from("user_interactions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("bookmarked", true);
+      const fetchStats = async () => {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return;
 
-      const { data: likes } = await supabase
-        .from("user_interactions")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("liked", true);
+          const { data: bookmarks } = await supabase
+            .from("user_interactions")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("bookmarked", true);
 
-      setStats({
-        articlesRead: (bookmarks?.length || 0) + (likes?.length || 0),
-        bookmarks: bookmarks?.length || 0,
-        likes: likes?.length || 0,
+          const { data: likes } = await supabase
+            .from("user_interactions")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("liked", true);
+
+          if (!cancelled) {
+            setStats({
+              articlesRead: (bookmarks?.length || 0) + (likes?.length || 0),
+              bookmarks: bookmarks?.length || 0,
+              likes: likes?.length || 0,
+            });
+          }
+        } catch (error) {
+          console.error("Error loading stats:", error);
+        }
+      };
+
+      setLoading(true);
+      Promise.all([fetchProfile(), fetchStats()]).finally(() => {
+        if (!cancelled) setLoading(false);
       });
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
+
+      return () => {
+        cancelled = true;
+      };
+    }, [token]),
+  );
 
   const triggerHaptic = () => {
     if (Platform.OS !== "web") {
@@ -107,6 +176,31 @@ export default function ProfileScreen() {
     await triggerHaptic();
     router.push("/edit-interests");
   };
+
+  const handleEditProfile = async () => {
+    await triggerHaptic();
+    router.push("/edit-profile");
+  };
+
+  const openURL = (url: string) => {
+    Linking.openURL(url).catch((err) =>
+      console.error("Error opening URL:", err),
+    );
+  };
+
+  const getYoutubeThumbnail = (url: string): string | null => {
+    const match = url.match(
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/,
+    );
+    return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
+  };
+
+  const userName = profile?.display_name || "User";
+  const userEmail = session?.user?.email || "";
+  const ideaVideoUrl = profile?.idea_video_url || null;
+  const videoThumbnail = ideaVideoUrl ? getYoutubeThumbnail(ideaVideoUrl) : null;
+  const previousWorks: PreviousWork[] = profile?.previous_works || [];
+  const socialLinks: SocialLink[] = profile?.social_links || [];
 
   const MenuItem = ({
     icon,
@@ -171,6 +265,21 @@ export default function ProfileScreen() {
     );
   };
 
+  if (loading && !profile) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: theme.background, justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <Stack.Screen options={{ headerShown: false }} />
+        <ActivityIndicator size="large" color={theme.brand.primary} />
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -183,21 +292,34 @@ export default function ProfileScreen() {
         {/* Profile Header */}
         <View style={styles.header}>
           <View style={styles.avatarWrapper}>
-            <View
-              style={[
-                styles.avatar,
-                {
-                  borderColor: theme.brand.primary,
-                  shadowColor: theme.brand.primary,
-                },
-              ]}
-            >
-              <Text
-                style={[styles.avatarInitial, { color: theme.brand.primary }]}
+            {profile?.photo_url ? (
+              <Image
+                source={{ uri: profile.photo_url }}
+                style={[
+                  styles.avatar,
+                  {
+                    borderColor: theme.brand.primary,
+                    shadowColor: theme.brand.primary,
+                  },
+                ]}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.avatar,
+                  {
+                    borderColor: theme.brand.primary,
+                    shadowColor: theme.brand.primary,
+                  },
+                ]}
               >
-                {userName.charAt(0).toUpperCase() || "P"}
-              </Text>
-            </View>
+                <Text
+                  style={[styles.avatarInitial, { color: theme.brand.primary }]}
+                >
+                  {userName.charAt(0).toUpperCase() || "P"}
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={[styles.userName, { color: theme.text.primary }]}>
             {userName}
@@ -205,6 +327,16 @@ export default function ProfileScreen() {
           <Text style={[styles.userEmail, { color: theme.text.secondary }]}>
             {userEmail}
           </Text>
+          <TouchableOpacity
+            style={[styles.editProfileBtn, { borderColor: theme.brand.primary }]}
+            onPress={handleEditProfile}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="create-outline" size={16} color={theme.brand.primary} />
+            <Text style={[styles.editProfileBtnText, { color: theme.brand.primary }]}>
+              Edit Profile
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats Row */}
@@ -261,7 +393,206 @@ export default function ProfileScreen() {
 
         {/* Content Sections */}
         <View style={styles.sectionsContainer}>
-          {/* Personalization Section */}
+          {/* About Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+              ABOUT
+            </Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              {profile?.bio ? (
+                <View style={styles.cardContent}>
+                  <Text style={[styles.bodyText, { color: theme.text.secondary }]}>
+                    {profile.bio}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.cardContent}>
+                  <Text style={[styles.emptyText, { color: theme.text.muted }]}>
+                    Add a bio via Edit Profile
+                  </Text>
+                </View>
+              )}
+              {profile?.linkedin_url && (
+                <TouchableOpacity
+                  style={[styles.linkedinRow, { borderTopColor: theme.border }]}
+                  onPress={() => openURL(profile.linkedin_url!)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="logo-linkedin" size={20} color="#0A66C2" />
+                  <Text
+                    style={[styles.linkedinText, { color: theme.brand.primary }]}
+                    numberOfLines={1}
+                  >
+                    LinkedIn Profile
+                  </Text>
+                  <Ionicons
+                    name="open-outline"
+                    size={14}
+                    color={theme.text.muted}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Business Idea Section */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+              BUSINESS IDEA
+            </Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              {profile?.business_idea ? (
+                <View style={styles.cardContent}>
+                  <Text style={[styles.bodyText, { color: theme.text.secondary }]}>
+                    {profile.business_idea}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.cardContent}>
+                  <Text style={[styles.emptyText, { color: theme.text.muted }]}>
+                    Share your business idea via Edit Profile
+                  </Text>
+                </View>
+              )}
+              {ideaVideoUrl && (
+                <TouchableOpacity
+                  style={[styles.videoRow, { borderTopColor: theme.border }]}
+                  onPress={() => openURL(ideaVideoUrl)}
+                  activeOpacity={0.7}
+                >
+                  {videoThumbnail ? (
+                    <Image
+                      source={{ uri: videoThumbnail }}
+                      style={styles.videoThumb}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.videoThumb,
+                        { backgroundColor: theme.surfaceElevated, justifyContent: "center", alignItems: "center" },
+                      ]}
+                    >
+                      <Ionicons name="play-circle" size={24} color={theme.text.muted} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={[styles.videoLabel, { color: theme.text.primary }]}>
+                      Pitch Video
+                    </Text>
+                    <Text style={[styles.videoUrl, { color: theme.text.muted }]} numberOfLines={1}>
+                      {ideaVideoUrl}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="open-outline"
+                    size={14}
+                    color={theme.text.muted}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Experience Section */}
+          {previousWorks.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+                EXPERIENCE
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+                {previousWorks.map((work, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.experienceItem,
+                      index < previousWorks.length - 1 && {
+                        borderBottomWidth: 1,
+                        borderBottomColor: theme.border,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.experienceDot,
+                        { backgroundColor: theme.brand.primary },
+                      ]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.experienceRole, { color: theme.text.primary }]}
+                      >
+                        {work.role}
+                      </Text>
+                      <Text
+                        style={[styles.experienceCompany, { color: theme.text.secondary }]}
+                      >
+                        {work.company}
+                      </Text>
+                      <Text
+                        style={[styles.experienceDuration, { color: theme.text.muted }]}
+                      >
+                        {work.duration}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Social Links Section */}
+          {socialLinks.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+                SOCIAL LINKS
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+                {socialLinks.map((link, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.socialItem,
+                      index < socialLinks.length - 1 && {
+                        borderBottomWidth: 1,
+                        borderBottomColor: theme.border,
+                      },
+                    ]}
+                    onPress={() => openURL(link.url)}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.socialIconWrap,
+                        { backgroundColor: theme.brand.primary + "15" },
+                      ]}
+                    >
+                      <Ionicons
+                        name={
+                          (PLATFORM_ICONS[link.platform.toLowerCase()] ||
+                            "link-outline") as any
+                        }
+                        size={18}
+                        color={theme.brand.primary}
+                      />
+                    </View>
+                    <Text
+                      style={[styles.socialLabel, { color: theme.text.primary }]}
+                      numberOfLines={1}
+                    >
+                      {link.label || link.platform}
+                    </Text>
+                    <Ionicons
+                      name="open-outline"
+                      size={14}
+                      color={theme.text.muted}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Settings Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
               PERSONALIZATION
@@ -421,6 +752,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     letterSpacing: 0.5,
     textAlign: "center",
+    marginBottom: 16,
+  },
+  editProfileBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1.5,
+  },
+  editProfileBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
   statsRow: {
     flexDirection: "row",
@@ -462,6 +807,90 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: "hidden",
+  },
+  cardContent: {
+    padding: 16,
+  },
+  bodyText: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontStyle: "italic",
+  },
+  linkedinRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 10,
+    borderTopWidth: 1,
+  },
+  linkedinText: {
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+  },
+  videoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  videoThumb: {
+    width: 80,
+    height: 50,
+    borderRadius: 8,
+  },
+  videoLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  videoUrl: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  experienceItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 16,
+    gap: 12,
+  },
+  experienceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 6,
+  },
+  experienceRole: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  experienceCompany: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  experienceDuration: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  socialItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+  },
+  socialIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  socialLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    flex: 1,
   },
   menuItem: {
     flexDirection: "row",
@@ -518,8 +947,5 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 8,
     fontFamily: "BricolageGrotesque_700Bold",
-  },
-  footerCopyright: {
-    fontSize: 13,
   },
 });

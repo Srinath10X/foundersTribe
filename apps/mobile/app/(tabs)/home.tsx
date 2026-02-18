@@ -1,18 +1,16 @@
-import { ArticleReelCard } from "@/components/ArticleReelCard";
-import { ReelCardSkeleton } from "@/components/Skeleton";
-import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
+import DiscoverTab from "@/components/home/DiscoverTab";
+import FeedTab from "@/components/home/FeedTab";
+import LibraryTab from "@/components/home/LibraryTab";
 import { useTheme } from "@/context/ThemeContext";
-import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
+import { BlurView } from "expo-blur";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Dimensions,
-  FlatList,
   Platform,
-  RefreshControl,
   StatusBar,
   StyleSheet,
   Text,
@@ -20,208 +18,182 @@ import {
   View,
 } from "react-native";
 import Animated, {
-  useAnimatedScrollHandler,
+  useAnimatedStyle,
   useSharedValue,
+  withSpring,
 } from "react-native-reanimated";
 
-const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
+const { width: windowWidth } = Dimensions.get("window");
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 
-const REEL_WIDTH =
-  Platform.OS === "web"
-    ? Math.min(windowWidth, Layout.webMaxWidth)
-    : windowWidth;
-const REEL_HEIGHT =
-  Platform.OS === "web"
-    ? Math.min(windowHeight, Layout.webMaxHeight)
-    : windowHeight - TAB_BAR_HEIGHT;
+type SubTab = "feed" | "discover" | "library";
 
-interface Article {
-  id: number;
-  Title: string;
-  Content: string | null;
-  "Image URL": string | null;
-  "Company Name": string | null;
-  "Article Link": string | null;
-  Category: string | null;
-  Summary: string | null;
-}
+const SUB_TABS: {
+  key: SubTab;
+  label: string;
+  icon: string;
+  iconFocused: string;
+}[] = [
+  { key: "feed", label: "Feed", icon: "newspaper-outline", iconFocused: "newspaper" },
+  { key: "discover", label: "Discover", icon: "compass-outline", iconFocused: "compass" },
+  { key: "library", label: "Library", icon: "bookmarks-outline", iconFocused: "bookmarks" },
+];
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
-
-export default function HomeFeed() {
+export default function HomeScreen() {
   const { theme, isDark } = useTheme();
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const scrollY = useSharedValue(0);
+  const [activeTab, setActiveTab] = useState<SubTab>("feed");
+  const indicatorX = useSharedValue(0);
+  const tabWidth = (windowWidth - 48) / 3;
 
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
-
-  // -- Data Fetching --
-  const fetchInitialData = async () => {
-    setLoading(true);
-    await fetchArticles();
-    setLoading(false);
-  };
-
-  const fetchArticles = async () => {
-    const NEWS_SERVICE_URL = process.env.EXPO_PUBLIC_NEWS_SERVICE_URL || 'http://192.168.1.4:3001';
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) throw new Error("No auth token");
-
-      const response = await fetch(`${NEWS_SERVICE_URL}/api/personalized_articles`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+  const handleTabPress = useCallback(
+    (tab: SubTab, index: number) => {
+      setActiveTab(tab);
+      indicatorX.value = withSpring(index * tabWidth, {
+        damping: 20,
+        stiffness: 180,
       });
+    },
+    [tabWidth]
+  );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to fetch articles");
-      }
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value }],
+  }));
 
-      const data = await response.json();
-      setArticles(data || []);
-    } catch (error) {
-      console.error("Error fetching articles:", error);
+  const renderContent = () => {
+    switch (activeTab) {
+      case "feed":
+        return <FeedTab />;
+      case "discover":
+        return <DiscoverTab />;
+      case "library":
+        return <LibraryTab />;
     }
   };
-
-  // -- Refresh Control --
-  const handleRefresh = useCallback(async () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    setRefreshing(true);
-    await fetchArticles();
-    setRefreshing(false);
-  }, []);
-
-  // -- Scroll Handling for Animations --
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      scrollY.value = event.contentOffset.y;
-    },
-  });
-
-  const renderItem = ({ item, index }: { item: Article; index: number }) => (
-    <ArticleReelCard article={item} />
-  );
-
-  const renderSkeleton = () => (
-    <View style={styles.skeletonContainer}>
-      <ReelCardSkeleton />
-    </View>
-  );
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-        <Stack.Screen options={{ headerShown: false }} />
-        {renderSkeleton()}
-      </View>
-    );
-  }
-
-  if (articles.length === 0) {
-    return (
-      <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-        <Stack.Screen options={{ headerShown: false }} />
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
-            No articles yet
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-            Edit your interests to see personalized content
-          </Text>
-        </View>
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Immersive Header Overlay with Gradient Scrim */}
+      {renderContent()}
+
+      {/* Header Overlay — gradient fade top→bottom */}
       <View style={styles.headerContainer}>
         <LinearGradient
-          colors={["rgba(0,0,0,0.7)", "transparent"]}
-          style={StyleSheet.absoluteFillObject}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-        />
-        <View
-          style={[
-            styles.headerContent,
-            { paddingTop: Platform.OS === "ios" ? 60 : 40 },
-          ]}
+          colors={
+            isDark
+              ? ["rgba(0,0,0,0.85)", "rgba(0,0,0,0.6)", "transparent"]
+              : ["rgba(255,255,255,0.92)", "rgba(255,255,255,0.6)", "transparent"]
+          }
+          style={styles.headerGradient}
         >
-          <Text style={[styles.headerLogo, { color: "#FFFFFF" }]}>
-            foundersTribe
-          </Text>
-          <View style={styles.headerIcons}>
+          <View style={styles.headerInner}>
+            <Image
+              source={
+                isDark
+                  ? require("@/assets/images/logo-dark.png")
+                  : require("@/assets/images/logo-light.png")
+              }
+              style={styles.brandLogo}
+              contentFit="contain"
+            />
             <TouchableOpacity
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="search" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={[
+                styles.iconButton,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.1)"
+                    : "rgba(0,0,0,0.06)",
+                },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons
                 name="notifications-outline"
-                size={24}
-                color="#FFFFFF"
+                size={20}
+                color={isDark ? "#FFFFFF" : "#000000"}
               />
             </TouchableOpacity>
           </View>
-        </View>
+        </LinearGradient>
       </View>
 
-      <AnimatedFlatList
-        data={articles}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
-        // -- Paging Logic --
-        pagingEnabled // Snaps to each item
-        showsVerticalScrollIndicator={false}
-        snapToInterval={REEL_HEIGHT} // Height of one card
-        snapToAlignment="start"
-        decelerationRate="fast" // Snap happens quickly
-        // -- Animation Connection --
-        onScroll={scrollHandler}
-        scrollEventThrottle={16} // 60fps updates
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor="#D4AF37"
-            colors={["#D4AF37"]}
-            progressViewOffset={Platform.OS === "ios" ? 100 : 80} // Push loader below header
-          />
-        }
-        // -- Optimization --
-        getItemLayout={(data, index) => ({
-          length: REEL_HEIGHT,
-          offset: REEL_HEIGHT * index,
-          index,
-        })}
-        removeClippedSubviews={Platform.OS === "android"} // Improve memory on Android
-        maxToRenderPerBatch={3}
-        windowSize={5}
-        initialNumToRender={2}
-      />
+      {/* Bottom Glassmorphism Sub-Tabs */}
+      <View style={styles.bottomTabContainer}>
+        <BlurView
+          intensity={Platform.OS === "ios" ? 90 : 120}
+          tint={isDark ? "dark" : "light"}
+          style={styles.bottomBlur}
+        >
+          <View
+            style={[
+              styles.glassTabBar,
+              {
+                backgroundColor: isDark
+                  ? "rgba(0,0,0,0.45)"
+                  : "rgba(255,255,255,0.65)",
+                borderColor: isDark
+                  ? "rgba(255,255,255,0.12)"
+                  : "rgba(0,0,0,0.08)",
+              },
+            ]}
+          >
+            {/* Animated active indicator */}
+            <Animated.View
+              style={[
+                styles.activeIndicator,
+                {
+                  width: tabWidth,
+                  backgroundColor: isDark
+                    ? "rgba(255,0,0,0.12)"
+                    : "rgba(255,0,0,0.08)",
+                },
+                indicatorStyle,
+              ]}
+            />
+
+            {SUB_TABS.map((tab, index) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={[styles.tabButton, { width: tabWidth }]}
+                  onPress={() => handleTabPress(tab.key, index)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={(isActive ? tab.iconFocused : tab.icon) as any}
+                    size={18}
+                    color={
+                      isActive
+                        ? "#FF0000"
+                        : isDark
+                        ? "rgba(255,255,255,0.5)"
+                        : "rgba(0,0,0,0.4)"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      {
+                        color: isActive
+                          ? "#FF0000"
+                          : isDark
+                          ? "rgba(255,255,255,0.5)"
+                          : "rgba(0,0,0,0.4)",
+                        fontWeight: isActive ? "700" : "500",
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </BlurView>
+      </View>
     </View>
   );
 }
@@ -229,54 +201,77 @@ export default function HomeFeed() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // Background color handled dynamically in component
   },
+
+  // Header
   headerContainer: {
     position: "absolute",
     top: 0,
     left: 0,
-    width: "100%",
+    right: 0,
     zIndex: 100,
-    height: Platform.OS === "ios" ? 120 : 90, // Covers status bar + header area
   },
-  headerContent: {
+  headerGradient: {
+    paddingBottom: 20,
+  },
+  headerInner: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 10,
-    width: "100%",
+    paddingTop: Platform.OS === "ios" ? 58 : 36,
+    paddingBottom: 4,
   },
-  headerLogo: {
-    fontSize: 22,
-    fontFamily: "BricolageGrotesque_700Bold", // Brand font
-    letterSpacing: -0.5,
-    textShadowColor: "rgba(0,0,0,0.3)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  brandLogo: {
+    height: 24,
+    width: 140,
   },
-  headerIcons: {
-    flexDirection: "row",
-    gap: 20,
+  iconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
-  },
-  skeletonContainer: {
-    width: REEL_WIDTH,
-    height: REEL_HEIGHT,
-  },
-  emptyContainer: {
-    flex: 1,
     justifyContent: "center",
+  },
+
+  // Bottom Sub-Tabs
+  bottomTabContainer: {
+    position: "absolute",
+    bottom: TAB_BAR_HEIGHT,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  bottomBlur: {
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  glassTabBar: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Spacing.xxxl,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 0.5,
+    paddingHorizontal: 4,
   },
-  emptyTitle: {
-    ...Typography.presets.h2,
-    marginBottom: Spacing.sm,
-    textAlign: "center",
+  activeIndicator: {
+    position: "absolute",
+    height: 40,
+    borderRadius: 12,
+    left: 4,
   },
-  emptySubtitle: {
-    ...Typography.presets.body,
-    textAlign: "center",
+  tabButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 48,
+    gap: 6,
+  },
+  tabLabel: {
+    fontSize: 13,
+    letterSpacing: -0.2,
+    fontFamily: "Poppins_600SemiBold",
   },
 });

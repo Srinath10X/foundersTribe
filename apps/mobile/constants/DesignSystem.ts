@@ -24,9 +24,9 @@ export const DarkTheme = {
     surface: '#151517',
     surfaceElevated: '#1E1E21',
 
-    // Brand - Warm bronze/champagne gold (sophisticated, calm)
+    // Brand
     brand: {
-        primary: '#D4AF37',      // Metallic Gold - main accent
+        primary: '#FF0000',      // Red - main accent
         secondary: '#74A5D4',    // Muted blue
         tertiary: '#D47A74',     // Muted coral
     },
@@ -58,9 +58,9 @@ export const LightTheme = {
     surface: '#FFFFFF',
     surfaceElevated: '#FFFFFF',
 
-    // Brand - Deeper bronze for better contrast on light
+    // Brand
     brand: {
-        primary: '#D4AF37',      // Metallic Gold
+        primary: '#FF0000',      // Red
         secondary: '#6091C7',    // Deeper muted blue
         tertiary: '#C76860',     // Deeper muted coral
     },
