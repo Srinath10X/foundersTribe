@@ -27,5 +27,5 @@ export const env = {
   LIVEKIT_API_SECRET: process.env.LIVEKIT_API_SECRET,
   LIVEKIT_URL: process.env.LIVEKIT_URL,
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
-  CORS_ORIGIN: process.env.CORS_ORIGIN || "http://localhost:5173",
+  CORS_ORIGIN: process.env.CORS_ORIGIN || "*",
 };

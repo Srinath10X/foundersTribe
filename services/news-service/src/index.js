@@ -99,6 +99,9 @@ app.post("/api/user_categories", authenticate, async (req, res) => {
 
 app.get("/api/personalized_articles", authenticate, async (req, res) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const offset = parseInt(req.query.offset) || 0;
+
     // 1. Get user interests
     const { data: interestData, error: interestError } = await supabase
       .from("user_interests")
@@ -119,7 +122,7 @@ app.get("/api/personalized_articles", authenticate, async (req, res) => {
       query = query.in("Category", interests);
     }
 
-    const { data, error } = await query.limit(20);
+    const { data, error } = await query.range(offset, offset + limit - 1);
     if (error) throw error;
 
     res.json(data || []);

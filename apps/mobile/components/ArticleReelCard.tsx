@@ -6,7 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Dimensions, Platform, Share, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -14,21 +14,13 @@ import Animated, {
   withSequence,
   withSpring
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: windowWidth, height: windowHeight } = Dimensions.get('window');
-const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 70;
-
-// Layout Constants
+const { width: windowWidth } = Dimensions.get('window');
 const REEL_WIDTH = Platform.OS === 'web' ? Math.min(windowWidth, Layout.webMaxWidth) : windowWidth;
-const REEL_HEIGHT = Platform.OS === 'web' 
-  ? Math.min(windowHeight, Layout.webMaxHeight) 
-  : windowHeight - TAB_BAR_HEIGHT;
 
 interface Article {
   id: number;
@@ -43,30 +35,19 @@ interface Article {
 
 interface ArticleReelCardProps {
   article: Article;
+  height?: number;
 }
 
-export function ArticleReelCard({ article }: ArticleReelCardProps) {
+export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
   const router = useRouter();
-  const { theme, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
+  const { theme } = useTheme();
   const { liked, bookmarked, toggleLike, toggleBookmark } = useArticleInteractions(article.id);
   const [imageLoading, setImageLoading] = useState(true);
-  
-  // Animation values
-  // -- Animations --
+
   const likeScale = useSharedValue(1);
   const bookmarkScale = useSharedValue(1);
   const shareScale = useSharedValue(1);
-  
-  // -- Memoized Utilities --
-  const readTime = useMemo(() => {
-    const text = article.Content || article.Summary || '';
-    const words = text.trim().split(/\s+/).length;
-    const minutes = Math.ceil(words / 200); // 200 wpm
-    return `${minutes} min read`;
-  }, [article.Content, article.Summary]);
 
-  // -- Interaction Handlers --
   const triggerHaptic = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -92,7 +73,6 @@ export function ArticleReelCard({ article }: ArticleReelCardProps) {
 
   const handleShare = async () => {
     triggerHaptic();
-    // Bouncy animation
     shareScale.value = withSequence(
       withSpring(1.3, { damping: 8 }),
       withSpring(1, { damping: 8 })
@@ -110,14 +90,12 @@ export function ArticleReelCard({ article }: ArticleReelCardProps) {
 
   const handleLike = () => {
     triggerHaptic();
-    // Heartbeat animation
     likeScale.value = withSequence(withSpring(1.4), withSpring(1));
     try { toggleLike(); } catch (e) { console.error(e); }
   };
 
   const handleBookmark = () => {
     triggerHaptic();
-    // Bookmark fill animation
     bookmarkScale.value = withSequence(withSpring(1.4), withSpring(1));
     try { toggleBookmark(); } catch (e) { console.error(e); }
   };
@@ -125,11 +103,11 @@ export function ArticleReelCard({ article }: ArticleReelCardProps) {
   const likeAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
   const bookmarkAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: bookmarkScale.value }] }));
   const shareAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: shareScale.value }] }));
-  
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      
-      {/* 1. Full Screen Visual Layer */}
+    <View style={[styles.container, { backgroundColor: theme.background, height }]}>
+
+      {/* Full-bleed background image */}
       <View style={styles.cardVisual}>
         <Image
           source={{ uri: article['Image URL'] || 'https://images.unsplash.com/photo-1541560052-5e137f229371' }}
@@ -139,87 +117,87 @@ export function ArticleReelCard({ article }: ArticleReelCardProps) {
           cachePolicy="memory-disk"
           onLoadEnd={() => setImageLoading(false)}
         />
-        {/* Scrim Gradient for Readability */}
+        {/* Dark scrim for text readability */}
         <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.9)']}
-            style={styles.imageOverlay}
-            start={{ x: 0, y: 0.4 }}
-            end={{ x: 0, y: 1 }}
+          colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
+          style={styles.imageOverlay}
+          start={{ x: 0, y: 0.35 }}
+          end={{ x: 0, y: 1 }}
         />
       </View>
 
       {imageLoading && (
-        <View style={[styles.loadingSkeleton, { backgroundColor: theme.surface }]}>
-          <ActivityIndicator size="large" color={'#D4AF37'} />
+        <View style={[styles.loadingSkeleton, { backgroundColor: '#000' }]}>
+          <ActivityIndicator size="large" color="#FF0000" />
         </View>
       )}
 
-      {/* 2. Main Content & Interaction Layer */}
-      <View style={[styles.contentWrapper, { paddingBottom: Platform.OS === 'ios' ? 90 : 30 }]}>
-        
+      {/* Content + Actions */}
+      <View style={styles.contentWrapper}>
         <View style={styles.columnContainer}>
-            {/* Left Column: Text Content */}
-            <View style={styles.leftColumn}>
-                
-                {/* Category Pill */}
-                <View style={styles.categoryPill}>
-                    <Text style={styles.categoryText}>
-                        {article.Category || 'NEWS'}
-                    </Text>
-                </View>
-
-                {/* Title */}
-                <TouchableOpacity activeOpacity={0.9} onPress={handleOpenArticle}>
-                    <Text style={styles.cardTitle} numberOfLines={3}>
-                        {article.Title}
-                    </Text>
-                </TouchableOpacity>
-                
-                {/* Summary with 'more' */}
-                <TouchableOpacity activeOpacity={0.9} onPress={handleOpenArticle}>
-                    <Text style={styles.cardSummary} numberOfLines={2}>
-                        {article.Summary || article.Content}
-                        <Text style={{ color: '#D4AF37', fontWeight: 'bold' }}> ... more</Text>
-                    </Text>
-                </TouchableOpacity>
+          {/* Left: Text */}
+          <View style={styles.leftColumn}>
+            {/* Category */}
+            <View style={styles.categoryPill}>
+              <Text style={styles.categoryText}>
+                {article.Category || 'NEWS'}
+              </Text>
             </View>
 
-            {/* Right Column: Vertical Actions */}
-            <View style={styles.rightColumn}>
-                
-                {/* Like */}
-                <View style={styles.actionItem}>
-                    <TouchableOpacity onPress={handleLike} style={styles.iconBtn}>
-                        <Animated.View style={likeAnimatedStyle}>
-                           <MaterialIcons name={liked ? "favorite" : "favorite"} size={32} color={liked ? "#FF3B30" : "#FFFFFF"} />
-                        </Animated.View>
-                    </TouchableOpacity>
-                    <Text style={styles.actionLabel}>Like</Text>
-                </View>
+            {/* Title */}
+            <TouchableOpacity activeOpacity={0.9} onPress={handleOpenArticle}>
+              <Text style={styles.cardTitle} numberOfLines={3}>
+                {article.Title}
+              </Text>
+            </TouchableOpacity>
 
-                {/* Save */}
-                <View style={styles.actionItem}>
-                    <TouchableOpacity onPress={handleBookmark} style={styles.iconBtn}>
-                        <Animated.View style={bookmarkAnimatedStyle}>
-                            <MaterialIcons name={bookmarked ? "bookmark" : "bookmark"} size={32} color={bookmarked ? "#D4AF37" : "#FFFFFF"} />
-                        </Animated.View>
-                    </TouchableOpacity>
-                    <Text style={styles.actionLabel}>Saved</Text>
-                </View>
+            {/* Summary */}
+            <TouchableOpacity activeOpacity={0.9} onPress={handleOpenArticle}>
+              <Text style={styles.cardSummary} numberOfLines={2}>
+                {article.Summary || article.Content}
+                <Text style={styles.moreText}> ... more</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-                {/* Share */}
-                <View style={styles.actionItem}>
-                    <TouchableOpacity onPress={handleShare} style={styles.iconBtn}>
-                        <Animated.View style={shareAnimatedStyle}>
-                            <MaterialIcons name="share" size={32} color="#FFFFFF" />
-                        </Animated.View>
-                    </TouchableOpacity>
-                    <Text style={styles.actionLabel}>Share</Text>
-                </View>
-
+          {/* Right: Actions */}
+          <View style={styles.rightColumn}>
+            <View style={styles.actionItem}>
+              <TouchableOpacity onPress={handleLike} style={styles.iconBtn}>
+                <Animated.View style={likeAnimatedStyle}>
+                  <MaterialIcons
+                    name={liked ? "favorite" : "favorite-outline"}
+                    size={30}
+                    color={liked ? "#FF0000" : "#FFFFFF"}
+                  />
+                </Animated.View>
+              </TouchableOpacity>
+              <Text style={styles.actionLabel}>Like</Text>
             </View>
+
+            <View style={styles.actionItem}>
+              <TouchableOpacity onPress={handleBookmark} style={styles.iconBtn}>
+                <Animated.View style={bookmarkAnimatedStyle}>
+                  <MaterialIcons
+                    name={bookmarked ? "bookmark" : "bookmark-outline"}
+                    size={30}
+                    color={bookmarked ? "#FF0000" : "#FFFFFF"}
+                  />
+                </Animated.View>
+              </TouchableOpacity>
+              <Text style={styles.actionLabel}>Save</Text>
+            </View>
+
+            <View style={styles.actionItem}>
+              <TouchableOpacity onPress={handleShare} style={styles.iconBtn}>
+                <Animated.View style={shareAnimatedStyle}>
+                  <MaterialIcons name="share" size={28} color="#FFFFFF" />
+                </Animated.View>
+              </TouchableOpacity>
+              <Text style={styles.actionLabel}>Share</Text>
+            </View>
+          </View>
         </View>
-
       </View>
     </View>
   );
@@ -228,13 +206,11 @@ export function ArticleReelCard({ article }: ArticleReelCardProps) {
 const styles = StyleSheet.create({
   container: {
     width: REEL_WIDTH,
-    height: REEL_HEIGHT,
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: '#000',
   },
-  
-  // VISUAL LAYER
+
   cardVisual: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
@@ -254,39 +230,36 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
 
-  // CONTENT OVERLAY
   contentWrapper: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 16,
     left: 0,
-    width: '100%',
+    right: 0,
     zIndex: 10,
     paddingHorizontal: 16,
-    justifyContent: 'flex-end',
   },
   columnContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    gap: 16,
+    gap: 12,
+    bottom: 48,
   },
 
-  // LEFT COLUMN
   leftColumn: {
     flex: 1,
-    paddingRight: 8,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   categoryPill: {
-    backgroundColor: '#D4AF37', // Brand Gold
-    paddingHorizontal: 8,
+    backgroundColor: '#FF0000',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
     alignSelf: 'flex-start',
     marginBottom: 12,
   },
   categoryText: {
-    color: '#000',
+    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '700',
     fontFamily: 'Poppins_600SemiBold',
@@ -294,46 +267,48 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   cardTitle: {
-    fontSize: 22, // Large readable title
-    lineHeight: 28,
-    marginBottom: 8,
+    fontSize: 20,
+    lineHeight: 26,
+    marginBottom: 6,
     fontFamily: 'Poppins_700Bold',
     color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   cardSummary: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    lineHeight: 19,
+    color: 'rgba(255,255,255,0.85)',
     fontFamily: 'Poppins_400Regular',
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
+  moreText: {
+    color: '#FF0000',
+    fontWeight: 'bold',
+  },
 
-  // RIGHT COLUMN
   rightColumn: {
-    width: 60,
+    width: 56,
     alignItems: 'center',
-    gap: 24, // Space between action groups
-    paddingBottom: 16,
+    gap: 20,
+    paddingBottom: 8,
   },
   actionItem: {
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
   iconBtn: {
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    // No background, just icon like Reels
   },
   actionLabel: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Poppins_500Medium',
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },

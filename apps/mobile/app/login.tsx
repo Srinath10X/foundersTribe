@@ -127,6 +127,7 @@ export default function Login() {
         if (error) throw error;
         // Navigation handled by onAuthStateChange in _layout,
         // but explicit redirect is faster for UX
+        
         router.replace("/home");
       } else {
         const { error } = await supabase.auth.signUp({

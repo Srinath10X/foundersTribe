@@ -34,7 +34,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "For You",
+          title: "Home",
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
@@ -44,17 +44,11 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Hidden: moved to Home sub-tabs */}
       <Tabs.Screen
         name="search"
         options={{
-          title: "Discover",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "compass" : "compass-outline"}
-              size={28}
-              color={color}
-            />
-          ),
+          href: null, // Hide from tab bar
         }}
       />
       <Tabs.Screen
@@ -83,17 +77,11 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Hidden: moved to Home sub-tabs */}
       <Tabs.Screen
         name="bookmarks"
         options={{
-          title: "Library",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "bookmarks" : "bookmarks-outline"}
-              size={24}
-              color={color}
-            />
-          ),
+          href: null, // Hide from tab bar
         }}
       />
       <Tabs.Screen

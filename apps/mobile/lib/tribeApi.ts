@@ -432,3 +432,16 @@ export const getAuditLogs = (
         `/api/moderation/${tribeId}/audit?limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`,
         { token },
     );
+
+/* ------------------------------------------------------------------ */
+/*  Profiles                                                          */
+/* ------------------------------------------------------------------ */
+
+export const getMyProfile = (token: string) =>
+    request<any>("/api/profiles/me", { token });
+
+export const updateMyProfile = (token: string, data: Record<string, any>) =>
+    request<any>("/api/profiles/me", { method: "PATCH", body: data, token });
+
+export const getPublicProfile = (token: string, userId: string) =>
+    request<any>(`/api/profiles/${userId}`, { token });

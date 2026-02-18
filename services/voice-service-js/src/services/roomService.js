@@ -79,8 +79,8 @@ export async function joinRoom(userId, roomId, socketId) {
 }
 
 export async function leaveRoom(userId, roomId) {
-  await participantRepository.markDisconnected(roomId, userId);
-  logger.info({ roomId, userId }, "Participant left room");
+  await participantRepository.deleteParticipant(roomId, userId);
+  logger.info({ roomId, userId }, "Participant left room (deleted)");
 
   await checkAndDestroyRoom(roomId);
 }

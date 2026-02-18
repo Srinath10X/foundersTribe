@@ -140,7 +140,9 @@ function RootLayoutNav() {
           segment === "tribe" ||
           segment === "article" ||
           segment === "edit-interests" ||
-          currentPath.includes("edit-interests");
+          segment === "edit-profile" ||
+          currentPath.includes("edit-interests") ||
+          currentPath.includes("edit-profile");
 
         // Redirect to Home if on unauthorized public page (like /login or /)
         if (!isAllowedPath) {
