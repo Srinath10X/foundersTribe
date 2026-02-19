@@ -12,9 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.founderstribe.ai",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ]
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
@@ -64,6 +62,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7cc0552f-8136-4858-93df-978beedb3222"
+      }
     }
   }
 }

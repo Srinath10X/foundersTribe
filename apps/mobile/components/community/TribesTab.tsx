@@ -22,6 +22,7 @@ import * as tribeApi from "../../lib/tribeApi";
 
 type TabMode = "my" | "explore";
 
+<<<<<<< frontend-new-p
 type TribesTabProps = {
   mode?: TabMode;
   showSegmentedControl?: boolean;
@@ -31,12 +32,27 @@ export default function TribesTab({
   mode,
   showSegmentedControl = true,
 }: TribesTabProps) {
+=======
+interface TribesTabProps {
+  mode?: TabMode;
+  showToggle?: boolean;
+}
+
+export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
+>>>>>>> main
   const router = useRouter();
   const { theme } = useTheme();
   const { session } = useAuth();
   const token = session?.access_token || "";
 
+<<<<<<< frontend-new-p
   const [internalActiveTab, setInternalActiveTab] = useState<TabMode>("explore");
+=======
+  // If mode prop is provided, use it; otherwise use internal state
+  const [internalActiveTab, setInternalActiveTab] = useState<TabMode>("explore");
+  const activeTab = mode || internalActiveTab;
+
+>>>>>>> main
   const [myTribes, setMyTribes] = useState<any[]>([]);
   const [publicTribes, setPublicTribes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,8 +227,13 @@ export default function TribesTab({
 
   return (
     <View style={styles.container}>
+<<<<<<< frontend-new-p
       {/* Segmented Control */}
       {showSegmentedControl && (
+=======
+      {/* Segmented Control - Only show if toggle is enabled and no fixed mode is set */}
+      {showToggle && !mode && (
+>>>>>>> main
         <View
           style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
         >
@@ -221,16 +242,30 @@ export default function TribesTab({
               key={tab}
               style={[
                 styles.tabButton,
+<<<<<<< frontend-new-p
                 activeTab === tab && { backgroundColor: theme.brand.primary },
               ]}
               onPress={() => setActiveTab(tab)}
+=======
+                internalActiveTab === tab && { backgroundColor: theme.brand.primary },
+              ]}
+              onPress={() => {
+                setInternalActiveTab(tab);
+                setSearchQuery("");
+                setSearchResults(null);
+              }}
+>>>>>>> main
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.tabText,
                   { color: theme.text.secondary },
+<<<<<<< frontend-new-p
                   activeTab === tab && {
+=======
+                  internalActiveTab === tab && {
+>>>>>>> main
                     color: theme.text.inverse,
                     fontWeight: "600",
                   },
@@ -242,6 +277,7 @@ export default function TribesTab({
           ))}
         </View>
       )}
+<<<<<<< frontend-new-p
 
       {/* Search Bar */}
       <View
@@ -285,6 +321,8 @@ export default function TribesTab({
           </TouchableOpacity>
         )}
       </View>
+=======
+>>>>>>> main
 
       {/* List */}
       {loading ? (
@@ -384,3 +422,4 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xxs,
   },
 });
+

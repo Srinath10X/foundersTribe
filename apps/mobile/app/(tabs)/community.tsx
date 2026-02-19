@@ -38,7 +38,7 @@ const { width: windowWidth } = Dimensions.get("window");
 /* ── Sub-tab config ─────────────────────────────────────────── */
 
 type SubTab = "tribes" | "find-cofounder" | "find-freelancer";
-type ActiveView = SubTab | "voice-channels";
+type ActiveView = SubTab | "voice-channels" | "my-tribes";
 
 const SUB_TABS: {
   key: SubTab;
@@ -46,25 +46,25 @@ const SUB_TABS: {
   icon: string;
   iconFocused: string;
 }[] = [
-  {
-    key: "tribes",
-    label: "Tribes",
-    icon: "shield-outline",
-    iconFocused: "shield",
-  },
-  {
-    key: "find-cofounder",
-    label: "Co-Founder",
-    icon: "people-outline",
-    iconFocused: "people",
-  },
-  {
-    key: "find-freelancer",
-    label: "Freelancer",
-    icon: "briefcase-outline",
-    iconFocused: "briefcase",
-  },
-];
+    {
+      key: "tribes",
+      label: "Tribes",
+      icon: "shield-outline",
+      iconFocused: "shield",
+    },
+    {
+      key: "find-cofounder",
+      label: "Co-Founder",
+      icon: "people-outline",
+      iconFocused: "people",
+    },
+    {
+      key: "find-freelancer",
+      label: "Freelancer",
+      icon: "briefcase-outline",
+      iconFocused: "briefcase",
+    },
+  ];
 
 /* ================================================================ */
 /*  Community Screen                                                 */
@@ -168,10 +168,19 @@ export default function CommunityScreen() {
 
   /* ── Sub-tab content ─────────────────────────────────────── */
 
+  /* ── Sub-tab content ─────────────────────────────────────── */
+
   const renderContent = () => {
     switch (activeView) {
       case "tribes":
+<<<<<<< frontend-new-p
         return <TribesTab mode={tribesMode} showSegmentedControl={false} />;
+=======
+        // Default tribes tab shows Explore view
+        return <TribesTab mode="explore" showToggle={false} />;
+      case "my-tribes":
+        return <TribesTab mode="my" showToggle={false} />;
+>>>>>>> main
       case "find-cofounder":
         return <FindCofounderTab />;
       case "find-freelancer":
@@ -206,6 +215,7 @@ export default function CommunityScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.headerActions}
           >
+<<<<<<< frontend-new-p
             <TouchableOpacity
               style={[
                 styles.headerBtn,
@@ -251,6 +261,69 @@ export default function CommunityScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
+=======
+            <Ionicons name="add-circle-outline" size={16} color={theme.text.inverse} />
+            <Text style={[styles.headerBtnText, { color: theme.text.inverse }]}>
+              Create a Tribe
+            </Text>
+          </TouchableOpacity>
+
+          {/* My Tribes */}
+          <TouchableOpacity
+            style={[
+              styles.headerBtn,
+              activeView === "my-tribes"
+                ? { backgroundColor: theme.brand.primary }
+                : {
+                  backgroundColor: theme.surface,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                },
+            ]}
+            onPress={() => setActiveView("my-tribes")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={activeView === "my-tribes" ? "shield" : "shield-outline"}
+              size={16}
+              color={activeView === "my-tribes" ? theme.text.inverse : theme.brand.primary}
+            />
+            <Text
+              style={[
+                styles.headerBtnText,
+                {
+                  color: activeView === "my-tribes"
+                    ? theme.text.inverse
+                    : theme.text.primary,
+                },
+              ]}
+            >
+              My Tribes
+            </Text>
+          </TouchableOpacity>
+
+          {/* Channels */}
+          <TouchableOpacity
+            style={[
+              styles.headerBtn,
+              activeView === "voice-channels"
+                ? { backgroundColor: theme.brand.primary }
+                : {
+                  backgroundColor: theme.surface,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                },
+            ]}
+            onPress={() => setActiveView("voice-channels")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={activeView === "voice-channels" ? "mic" : "mic-outline"}
+              size={16}
+              color={activeView === "voice-channels" ? theme.text.inverse : theme.brand.primary}
+            />
+            <Text
+>>>>>>> main
               style={[
                 styles.headerBtn,
                 activeView === "tribes" && tribesMode === "my"
