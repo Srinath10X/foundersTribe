@@ -113,6 +113,8 @@ export default function RoomScreen() {
   const activeRoomIdRef = useRef<string | null>(null);
   // Stable router ref so event handlers don't need router in their dep arrays
   const routerRef = useRef(router);
+  // Guard to prevent concurrent mic toggles (causes duplicate track listener warning)
+  const isMicTogglingRef = useRef(false);
   useEffect(() => { routerRef.current = router; }, [router]);
 
   const displayRole = (role: string) => {
@@ -589,6 +591,9 @@ export default function RoomScreen() {
 
   // Toggle mic
   const handleToggleMic = async () => {
+    // Prevent concurrent calls — each call to setMicrophoneEnabled recreates the
+    // media track internally, which triggers the duplicate event-listener warning
+    if (isMicTogglingRef.current) return;
     if (!room?.localParticipant) return;
     if (!canSpeak) {
       Alert.alert(
@@ -597,9 +602,10 @@ export default function RoomScreen() {
       );
       return;
     }
+    isMicTogglingRef.current = true;
     const newState = !isMicEnabled;
-    // Ensure speaker routing before enabling microphone
     try {
+      // Ensure speaker routing before enabling microphone
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
@@ -612,8 +618,12 @@ export default function RoomScreen() {
     } catch (err) {
       console.warn("[Room] Failed to set audio mode before toggle:", err);
     }
-    await toggleMic(room.localParticipant, newState);
-    setIsMicEnabled(newState);
+    try {
+      await toggleMic(room.localParticipant, newState);
+      setIsMicEnabled(newState);
+    } finally {
+      isMicTogglingRef.current = false;
+    }
   };
 
   // Send chat message
