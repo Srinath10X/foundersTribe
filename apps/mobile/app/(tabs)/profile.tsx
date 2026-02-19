@@ -26,6 +26,8 @@ const { width } = Dimensions.get("window");
 
 type PreviousWork = { company: string; role: string; duration: string };
 type SocialLink = { platform: string; url: string; label: string };
+type BusinessIdeaItem = { idea: string };
+const STORAGE_BUCKET = "tribe-media";
 
 type Profile = {
   id: string;
@@ -36,6 +38,7 @@ type Profile = {
   photo_url: string | null;
   linkedin_url: string | null;
   business_idea: string | null;
+  business_ideas?: string[] | null;
   idea_video_url: string | null;
   previous_works: PreviousWork[];
   social_links: SocialLink[];
@@ -66,6 +69,7 @@ export default function ProfileScreen() {
   });
 
   const token = session?.access_token || "";
+  const userId = session?.user?.id || "";
 
   // Reload profile every time screen comes into focus
   useFocusEffect(
@@ -76,7 +80,46 @@ export default function ProfileScreen() {
         try {
           if (!token) return;
           const data = await tribeApi.getMyProfile(token);
-          if (!cancelled) setProfile(data);
+          let resolvedPhotoUrl = data?.photo_url || null;
+          if (
+            typeof resolvedPhotoUrl === "string" &&
+            resolvedPhotoUrl &&
+            !/^https?:\/\//i.test(resolvedPhotoUrl)
+          ) {
+            const { data: signedData, error } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .createSignedUrl(resolvedPhotoUrl, 60 * 60 * 24 * 30);
+            if (!error && signedData?.signedUrl) {
+              resolvedPhotoUrl = `${signedData.signedUrl}&t=${Date.now()}`;
+            }
+          }
+
+          // Fallback: if profile photo_url is absent/stale, pull latest avatar directly from storage.
+          if (!resolvedPhotoUrl && userId) {
+            const folder = `profiles/${userId}`;
+            const { data: files, error } = await supabase.storage
+              .from(STORAGE_BUCKET)
+              .list(folder, { limit: 20 });
+            if (!error && Array.isArray(files) && files.length > 0) {
+              const preferred = files.find((f) => /^avatar\./i.test(f.name)) || files[0];
+              if (preferred?.name) {
+                const fullPath = `${folder}/${preferred.name}`;
+                const { data: signedData } = await supabase.storage
+                  .from(STORAGE_BUCKET)
+                  .createSignedUrl(fullPath, 60 * 60 * 24 * 30);
+                if (signedData?.signedUrl) {
+                  resolvedPhotoUrl = `${signedData.signedUrl}&t=${Date.now()}`;
+                }
+              }
+            }
+          }
+
+          if (!cancelled) {
+            setProfile({
+              ...data,
+              photo_url: resolvedPhotoUrl,
+            });
+          }
         } catch (error) {
           // console.error("Error loading profile:", error);
           // Fallback to auth user data
@@ -144,7 +187,7 @@ export default function ProfileScreen() {
       return () => {
         cancelled = true;
       };
-    }, [token]),
+    }, [token, userId]),
   );
 
   const triggerHaptic = () => {
@@ -183,7 +226,10 @@ export default function ProfileScreen() {
   };
 
   const openURL = (url: string) => {
-    Linking.openURL(url).catch((err) =>
+    const trimmed = (url || "").trim();
+    if (!trimmed) return;
+    const finalUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    Linking.openURL(finalUrl).catch((err) =>
       console.error("Error opening URL:", err),
     );
   };
@@ -199,8 +245,35 @@ export default function ProfileScreen() {
   const userEmail = session?.user?.email || "";
   const ideaVideoUrl = profile?.idea_video_url || null;
   const videoThumbnail = ideaVideoUrl ? getYoutubeThumbnail(ideaVideoUrl) : null;
-  const previousWorks: PreviousWork[] = profile?.previous_works || [];
-  const socialLinks: SocialLink[] = profile?.social_links || [];
+  const previousWorks: PreviousWork[] = Array.isArray(profile?.previous_works)
+    ? profile.previous_works
+    : [];
+  const socialLinks: SocialLink[] = (Array.isArray(profile?.social_links) ? profile?.social_links : []).filter(
+    (item) => item && typeof item.url === "string",
+  );
+  const businessIdeas: BusinessIdeaItem[] = (() => {
+    if (Array.isArray(profile?.business_ideas)) {
+      return profile.business_ideas
+        .filter((idea) => typeof idea === "string" && idea.trim().length > 0)
+        .map((idea) => ({ idea }));
+    }
+
+    const singleIdea = profile?.business_idea?.trim();
+    if (!singleIdea) return [];
+
+    try {
+      const parsed = JSON.parse(singleIdea);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((idea) => typeof idea === "string" && idea.trim().length > 0)
+          .map((idea) => ({ idea }));
+      }
+    } catch {
+      // Keep backward compatibility when this field is plain text.
+    }
+
+    return [{ idea: singleIdea }];
+  })();
 
   const MenuItem = ({
     icon,
@@ -438,19 +511,38 @@ export default function ProfileScreen() {
           {/* Business Idea Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-              BUSINESS IDEA
+              BUSINESS IDEAS
             </Text>
             <View style={[styles.card, { backgroundColor: theme.surface }]}>
-              {profile?.business_idea ? (
+              {businessIdeas.length > 0 ? (
                 <View style={styles.cardContent}>
-                  <Text style={[styles.bodyText, { color: theme.text.secondary }]}>
-                    {profile.business_idea}
-                  </Text>
+                  {businessIdeas.map((item, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.experienceItem,
+                        index < businessIdeas.length - 1 && {
+                          borderBottomWidth: 1,
+                          borderBottomColor: theme.border,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.experienceDot,
+                          { backgroundColor: theme.brand.primary },
+                        ]}
+                      />
+                      <Text style={[styles.bodyText, { color: theme.text.secondary, flex: 1 }]}>
+                        {item.idea}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               ) : (
                 <View style={styles.cardContent}>
                   <Text style={[styles.emptyText, { color: theme.text.muted }]}>
-                    Share your business idea via Edit Profile
+                    Share your business ideas via Edit Profile
                   </Text>
                 </View>
               )}
@@ -568,7 +660,7 @@ export default function ProfileScreen() {
                     >
                       <Ionicons
                         name={
-                          (PLATFORM_ICONS[link.platform.toLowerCase()] ||
+                          (PLATFORM_ICONS[String(link.platform || "").toLowerCase()] ||
                             "link-outline") as any
                         }
                         size={18}

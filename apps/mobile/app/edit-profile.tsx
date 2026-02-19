@@ -24,6 +24,8 @@ import {
 
 type PreviousWork = { company: string; role: string; duration: string };
 type SocialLink = { platform: string; url: string; label: string };
+type BusinessIdeaItem = { idea: string };
+const STORAGE_BUCKET = "tribe-media";
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -40,8 +42,11 @@ export default function EditProfileScreen() {
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [photoPath, setPhotoPath] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
-  const [businessIdea, setBusinessIdea] = useState("");
+  const [businessIdeas, setBusinessIdeas] = useState<BusinessIdeaItem[]>([
+    { idea: "" },
+  ]);
   const [ideaVideoUrl, setIdeaVideoUrl] = useState("");
   const [previousWorks, setPreviousWorks] = useState<PreviousWork[]>([]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
@@ -49,6 +54,34 @@ export default function EditProfileScreen() {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  const resolvePhotoUrl = async (storedPhotoValue: string) => {
+    if (!storedPhotoValue) return "";
+    if (/^https?:\/\//i.test(storedPhotoValue)) return storedPhotoValue;
+
+    const { data, error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(storedPhotoValue, 60 * 60 * 24 * 30);
+    if (!error && data?.signedUrl) return `${data.signedUrl}&t=${Date.now()}`;
+    return "";
+  };
+
+  const resolveLatestAvatarFromStorage = async () => {
+    if (!userId) return "";
+    const folder = `profiles/${userId}`;
+    const { data: files, error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .list(folder, { limit: 20 });
+
+    if (error || !Array.isArray(files) || files.length === 0) return "";
+    const preferred =
+      files.find((f) => /^avatar\./i.test(f.name)) || files[0];
+    if (!preferred?.name) return "";
+
+    const fullPath = `${folder}/${preferred.name}`;
+    setPhotoPath(fullPath);
+    return resolvePhotoUrl(fullPath);
+  };
 
   const loadProfile = async () => {
     try {
@@ -59,12 +92,40 @@ export default function EditProfileScreen() {
       const data = await tribeApi.getMyProfile(token);
       setDisplayName(data.display_name || "");
       setBio(data.bio || "");
-      setPhotoUrl(data.photo_url || "");
+      const storedPhoto = typeof data.photo_url === "string" ? data.photo_url : "";
+      setPhotoPath(storedPhoto && !/^https?:\/\//i.test(storedPhoto) ? storedPhoto : "");
+      const resolvedFromProfile = await resolvePhotoUrl(storedPhoto);
+      if (resolvedFromProfile) {
+        setPhotoUrl(resolvedFromProfile);
+      } else {
+        setPhotoUrl(await resolveLatestAvatarFromStorage());
+      }
       setLinkedinUrl(data.linkedin_url || "");
-      setBusinessIdea(data.business_idea || "");
+      if (Array.isArray(data.business_ideas)) {
+        const sanitizedIdeas = data.business_ideas
+          .filter((idea: unknown) => typeof idea === "string")
+          .map((idea: string) => ({ idea }));
+        setBusinessIdeas(sanitizedIdeas.length ? sanitizedIdeas : [{ idea: "" }]);
+      } else if (typeof data.business_idea === "string" && data.business_idea.trim()) {
+        try {
+          const parsed = JSON.parse(data.business_idea);
+          if (Array.isArray(parsed)) {
+            const parsedIdeas = parsed
+              .filter((idea: unknown) => typeof idea === "string")
+              .map((idea: string) => ({ idea }));
+            setBusinessIdeas(parsedIdeas.length ? parsedIdeas : [{ idea: "" }]);
+          } else {
+            setBusinessIdeas([{ idea: data.business_idea }]);
+          }
+        } catch {
+          setBusinessIdeas([{ idea: data.business_idea }]);
+        }
+      } else {
+        setBusinessIdeas([{ idea: "" }]);
+      }
       setIdeaVideoUrl(data.idea_video_url || "");
-      setPreviousWorks(data.previous_works || []);
-      setSocialLinks(data.social_links || []);
+      setPreviousWorks(Array.isArray(data.previous_works) ? data.previous_works : []);
+      setSocialLinks(Array.isArray(data.social_links) ? data.social_links : []);
     } catch (error) {
       console.error("Error loading profile:", error);
       // Fallback — load basic info from auth user
@@ -140,29 +201,37 @@ export default function EditProfileScreen() {
     setUploading(true);
     try {
       const ext = localUri.split(".").pop()?.toLowerCase() || "jpg";
-      const filePath = `${userId}/avatar.${ext}`;
+      const filePath = `profiles/${userId}/avatar.${ext}`;
       const contentType = `image/${ext === "jpg" ? "jpeg" : ext}`;
 
       // Use arraybuffer approach for reliable RN upload
       const response = await fetch(localUri);
       const arrayBuffer = await response.arrayBuffer();
 
+      // RLS policies allow INSERT/DELETE but not UPDATE on storage.objects.
+      // So avoid `upsert: true`; delete first (ignore missing-file errors), then upload.
+      await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
+
       const { error: uploadError } = await supabase.storage
-        .from("avatars")
+        .from(STORAGE_BUCKET)
         .upload(filePath, arrayBuffer, {
           contentType,
-          upsert: true,
+          upsert: false,
         });
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      // Bucket is private by policy; use signed URL for app display.
+      const { data: signedData, error: signError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(filePath, 60 * 60 * 24 * 30);
+      setPhotoPath(filePath);
 
-      // Append cache-buster so Image component refetches
-      setPhotoUrl(`${publicUrl}?t=${Date.now()}`);
+      if (signError || !signedData?.signedUrl) {
+        setPhotoUrl("");
+      } else {
+        setPhotoUrl(`${signedData.signedUrl}&t=${Date.now()}`);
+      }
     } catch (error: any) {
       console.error("Upload error:", error);
       Alert.alert("Upload failed", error?.message || "Could not upload photo");
@@ -172,19 +241,35 @@ export default function EditProfileScreen() {
   };
 
   // ── Save ───────────────────────────────────────────────
+  const normalizeUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
   const handleSave = async () => {
     if (!token) return;
     setSaving(true);
     try {
+      const cleanedIdeas = businessIdeas
+        .map((item) => item.idea.trim())
+        .filter(Boolean);
+
       await tribeApi.updateMyProfile(token, {
         display_name: displayName.trim() || undefined,
         bio: bio.trim() || null,
-        photo_url: photoUrl || null,
-        linkedin_url: linkedinUrl.trim() || null,
-        business_idea: businessIdea.trim() || null,
-        idea_video_url: ideaVideoUrl.trim() || null,
-        previous_works: previousWorks.filter((w) => w.company || w.role),
-        social_links: socialLinks.filter((l) => l.url),
+        photo_url: (photoUrl || photoPath || "").trim() || null,
+        linkedin_url: normalizeUrl(linkedinUrl),
+        business_ideas: cleanedIdeas,
+        business_idea: cleanedIdeas.length ? cleanedIdeas[0] : null,
+        idea_video_url: normalizeUrl(ideaVideoUrl),
+        previous_works: (Array.isArray(previousWorks) ? previousWorks : []).filter(
+          (w) => w && (w.company || w.role),
+        ),
+        social_links: (Array.isArray(socialLinks) ? socialLinks : []).filter(
+          (l) => l && l.url,
+        ),
       });
       Alert.alert("Success", "Profile updated!", [
         { text: "OK", onPress: () => router.back() },
@@ -220,6 +305,22 @@ export default function EditProfileScreen() {
 
   const removeLink = (index: number) =>
     setSocialLinks(socialLinks.filter((_, i) => i !== index));
+
+  const addBusinessIdea = () =>
+    setBusinessIdeas([...businessIdeas, { idea: "" }]);
+
+  const updateBusinessIdea = (index: number, value: string) => {
+    const updated = [...businessIdeas];
+    updated[index] = { idea: value };
+    setBusinessIdeas(updated);
+  };
+
+  const removeBusinessIdea = (index: number) =>
+    setBusinessIdeas(
+      businessIdeas.length <= 1
+        ? [{ idea: "" }]
+        : businessIdeas.filter((_, i) => i !== index),
+    );
 
   // ── Styles ─────────────────────────────────────────────
   const inputStyle = [
@@ -330,12 +431,12 @@ export default function EditProfileScreen() {
               Basic Info
             </Text>
 
-            <Text style={labelStyle}>Display Name</Text>
+            <Text style={labelStyle}>Full Name</Text>
             <TextInput
               style={inputStyle}
               value={displayName}
               onChangeText={setDisplayName}
-              placeholder="Your name"
+              placeholder="Your full name"
               placeholderTextColor={theme.text.muted}
               maxLength={50}
             />
@@ -366,21 +467,40 @@ export default function EditProfileScreen() {
 
           {/* Business Idea */}
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-              Business Idea
-            </Text>
+            <View style={styles.cardHeader}>
+              <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
+                Business Ideas
+              </Text>
+              <TouchableOpacity onPress={addBusinessIdea} style={styles.addBtn}>
+                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+              </TouchableOpacity>
+            </View>
 
-            <Text style={labelStyle}>Your Idea</Text>
-            <TextInput
-              style={[...inputStyle, styles.multiline]}
-              value={businessIdea}
-              onChangeText={setBusinessIdea}
-              placeholder="Describe your business idea..."
-              placeholderTextColor={theme.text.muted}
-              multiline
-              maxLength={2000}
-              textAlignVertical="top"
-            />
+            {businessIdeas.map((item, index) => (
+              <View
+                key={index}
+                style={[styles.dynamicItem, { borderColor: theme.border }]}
+              >
+                <View style={styles.dynamicItemHeader}>
+                  <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                    #{index + 1}
+                  </Text>
+                  <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
+                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={[...inputStyle, styles.multiline]}
+                  value={item.idea}
+                  onChangeText={(v) => updateBusinessIdea(index, v)}
+                  placeholder="Tell us about the product/ idea/ problem statement you working on"
+                  placeholderTextColor={theme.text.muted}
+                  multiline
+                  maxLength={2000}
+                  textAlignVertical="top"
+                />
+              </View>
+            ))}
 
             <Text style={labelStyle}>Pitch Video URL (YouTube)</Text>
             <TextInput
