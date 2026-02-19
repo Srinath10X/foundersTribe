@@ -18,18 +18,35 @@ export class ProfileRepository {
   }
 
   async update(userId, updates) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", userId)
-      .select()
-      .single();
+    const executeUpdate = async (payload) =>
+      supabase
+        .from("profiles")
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq("id", userId)
+        .select()
+        .single();
 
-    if (error) {
-      logger.error({ error, userId }, "ProfileRepository.update failed");
+    let payload = { ...updates };
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const { data, error } = await executeUpdate(payload);
+      if (!error) return data;
+
+      // PGRST204 => unknown column in payload for current schema cache.
+      if (error.code === "PGRST204") {
+        const match = error.message?.match(/'([^']+)' column/);
+        const unknownColumn = match?.[1];
+        if (unknownColumn && unknownColumn in payload) {
+          delete payload[unknownColumn];
+          continue;
+        }
+      }
+
+      logger.error({ error, userId, payloadKeys: Object.keys(payload) }, "ProfileRepository.update failed");
       throw new Error("Database error updating profile");
     }
-    return data;
+
+    logger.error({ userId, payloadKeys: Object.keys(payload) }, "ProfileRepository.update exhausted retries");
+    throw new Error("Database error updating profile");
   }
 }
 
