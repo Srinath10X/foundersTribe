@@ -22,13 +22,21 @@ import * as tribeApi from "../../lib/tribeApi";
 
 type TabMode = "my" | "explore";
 
-export default function TribesTab() {
+interface TribesTabProps {
+  mode?: TabMode;
+  showToggle?: boolean;
+}
+
+export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const { session } = useAuth();
   const token = session?.access_token || "";
 
-  const [activeTab, setActiveTab] = useState<TabMode>("explore");
+  // If mode prop is provided, use it; otherwise use internal state
+  const [internalActiveTab, setInternalActiveTab] = useState<TabMode>("explore");
+  const activeTab = mode || internalActiveTab;
+
   const [myTribes, setMyTribes] = useState<any[]>([]);
   const [publicTribes, setPublicTribes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,39 +152,41 @@ export default function TribesTab() {
 
   return (
     <View style={styles.container}>
-      {/* Segmented Control */}
-      <View
-        style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
-      >
-        {(["explore", "my"] as const).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[
-              styles.tabButton,
-              activeTab === tab && { backgroundColor: theme.brand.primary },
-            ]}
-            onPress={() => {
-              setActiveTab(tab);
-              setSearchQuery("");
-              setSearchResults(null);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text
+      {/* Segmented Control - Only show if toggle is enabled and no fixed mode is set */}
+      {showToggle && !mode && (
+        <View
+          style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
+        >
+          {(["explore", "my"] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
               style={[
-                styles.tabText,
-                { color: theme.text.secondary },
-                activeTab === tab && {
-                  color: theme.text.inverse,
-                  fontWeight: "600",
-                },
+                styles.tabButton,
+                internalActiveTab === tab && { backgroundColor: theme.brand.primary },
               ]}
+              onPress={() => {
+                setInternalActiveTab(tab);
+                setSearchQuery("");
+                setSearchResults(null);
+              }}
+              activeOpacity={0.8}
             >
-              {tab === "my" ? "My Tribes" : "Explore"}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: theme.text.secondary },
+                  internalActiveTab === tab && {
+                    color: theme.text.inverse,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {tab === "my" ? "My Tribes" : "Explore"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Search Bar (Explore tab only) */}
       {activeTab === "explore" && (
@@ -319,3 +329,4 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xxs,
   },
 });
+
