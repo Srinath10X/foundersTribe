@@ -20,6 +20,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { Typography, Spacing, Layout } from "@/constants/DesignSystem";
 import * as tribeApi from "@/lib/tribeApi";
+import MembershipGateModal from "@/components/MembershipGateModal";
 
 /* ================================================================ */
 /*  Tribe Detail Screen                                             */
@@ -50,6 +51,9 @@ export default function TribeDetailScreen() {
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Membership gate modal
+  const [showMembershipGate, setShowMembershipGate] = useState(false);
 
   // Create channel modal
   const [showCreateChannel, setShowCreateChannel] = useState(false);
@@ -440,11 +444,15 @@ export default function TribeDetailScreen() {
                 styles.channelCard,
                 { backgroundColor: theme.surface, borderColor: theme.border },
               ]}
-              onPress={() =>
+              onPress={() => {
+                if (!isMember) {
+                  setShowMembershipGate(true);
+                  return;
+                }
                 router.push(
                   `/tribe/chat/${g.id}?tribeId=${tribeId}` as any,
-                )
-              }
+                );
+              }}
               activeOpacity={0.7}
             >
               <View
@@ -814,6 +822,16 @@ export default function TribeDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Membership Gate Dialog ──────────────────────── */}
+      <MembershipGateModal
+        visible={showMembershipGate}
+        onClose={() => setShowMembershipGate(false)}
+        onJoin={async () => {
+          setShowMembershipGate(false);
+          await handleJoinLeave();
+        }}
+      />
     </View>
   );
 }

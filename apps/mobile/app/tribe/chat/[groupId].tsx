@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Typography, Spacing, Layout } from "@/constants/DesignSystem";
 import * as tribeApi from "@/lib/tribeApi";
 import MessageBubble from "@/components/MessageBubble";
+import MembershipGateModal from "@/components/MembershipGateModal";
 
 const TRIBE_API_URL =
   process.env.EXPO_PUBLIC_TRIBE_API_URL || "http://192.168.1.4:3003";
@@ -53,6 +54,7 @@ export default function GroupChatScreen() {
   const [groupName, setGroupName] = useState("Chat");
   const [isReadonly, setIsReadonly] = useState(false);
   const [isGroupAdmin, setIsGroupAdmin] = useState(false);
+  const [showMembershipGate, setShowMembershipGate] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -209,29 +211,34 @@ export default function GroupChatScreen() {
     }
   }, [token, gid, tid]);
 
-  // Load group metadata and check user's tribe role
+  // Check tribe membership, load group metadata, and check user's tribe role
   useEffect(() => {
     if (!token || !gid || !tid) return;
     (async () => {
+      // Check tribe membership first
+      try {
+        const members = await tribeApi.getTribeMembers(token, tid);
+        const memberList = Array.isArray(members) ? members : [];
+        const me = memberList.find((m: any) => m.user_id === userId);
+        if (!me) {
+          setShowMembershipGate(true);
+          return;
+        }
+        setIsGroupAdmin(
+          me.role === "owner" || me.role === "admin" || me.role === "moderator",
+        );
+      } catch (e) {
+        // getTribeMembers returns 403 for non-members
+        setShowMembershipGate(true);
+        return;
+      }
+
       try {
         const group = await tribeApi.getGroup(token, tid, gid);
         if (group) {
           setGroupName(group.name || "Chat");
           setIsReadonly(!!group.is_readonly);
         }
-      } catch (e) {
-        /* noop */
-      }
-
-      // Check if current user is admin/owner → can post in announcement channels
-      try {
-        const members = await tribeApi.getTribeMembers(token, tid);
-        const me = (Array.isArray(members) ? members : []).find(
-          (m: any) => m.user_id === userId,
-        );
-        setIsGroupAdmin(
-          me?.role === "owner" || me?.role === "admin" || me?.role === "moderator",
-        );
       } catch (e) {
         /* noop */
       }
@@ -533,6 +540,15 @@ export default function GroupChatScreen() {
           </View>
         </KeyboardAvoidingView>
       )}
+
+      {/* ── Membership Gate Dialog ──────────────────────── */}
+      <MembershipGateModal
+        visible={showMembershipGate}
+        onClose={() => {
+          setShowMembershipGate(false);
+          router.back();
+        }}
+      />
     </View>
   );
 }
