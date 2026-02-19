@@ -26,7 +26,7 @@ export const DarkTheme = {
 
     // Brand
     brand: {
-        primary: '#FF0000',      // Red - main accent
+        primary: '#D93B40',      // Vibrant red - dark mode accent
         secondary: '#74A5D4',    // Muted blue
         tertiary: '#D47A74',     // Muted coral
     },
