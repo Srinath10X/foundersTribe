@@ -2,6 +2,8 @@ import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { env } from "./env.js";
 import { logger } from "../utils/logger.js";
 
+export const livekitWsUrl = env.LIVEKIT_URL;
+
 export const roomServiceClient = new RoomServiceClient(
   env.LIVEKIT_URL.replace("ws://", "http://").replace("wss://", "https://"),
   env.LIVEKIT_API_KEY,

@@ -1,4 +1,4 @@
-import { generateLiveKitToken } from "../config/livekit.js";
+import { generateLiveKitToken, livekitWsUrl } from "../config/livekit.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/AppError.js";
 import { roomRepository } from "../repositories/roomRepository.js";
@@ -35,7 +35,7 @@ export async function createRoom(userId, title, type = "public") {
   );
 
   logger.info({ roomId: room.id, userId }, "Room created");
-  return { room, participant, livekitToken };
+  return { room, participant, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function joinRoom(userId, roomId, socketId) {
@@ -88,7 +88,7 @@ export async function joinRoom(userId, roomId, socketId) {
     getGrantsForRole(participant.role),
   );
 
-  return { participant, livekitToken, room };
+  return { participant, livekitToken, livekitUrl: livekitWsUrl, room };
 }
 
 export async function leaveRoom(userId, roomId) {

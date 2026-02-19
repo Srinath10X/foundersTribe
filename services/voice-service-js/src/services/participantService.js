@@ -1,4 +1,4 @@
-import { generateLiveKitToken } from "../config/livekit.js";
+import { generateLiveKitToken, livekitWsUrl } from "../config/livekit.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/AppError.js";
 import { participantRepository } from "../repositories/participantRepository.js";
@@ -75,7 +75,7 @@ export async function promoteUser(actorId, targetId, roomId, newRole) {
   });
 
   logger.info({ actorId, targetId, roomId, newRole }, "User promoted");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function demoteUser(actorId, targetId, roomId) {
@@ -105,7 +105,7 @@ export async function demoteUser(actorId, targetId, roomId) {
   });
 
   logger.info({ actorId, targetId, roomId }, "User demoted to listener");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function grantMic(actorId, targetId, roomId) {
@@ -128,7 +128,7 @@ export async function grantMic(actorId, targetId, roomId) {
   });
 
   logger.info({ actorId, targetId, roomId }, "Mic granted");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function revokeMic(actorId, targetId, roomId) {
@@ -161,7 +161,7 @@ export async function revokeMic(actorId, targetId, roomId) {
   });
 
   logger.info({ actorId, targetId, roomId }, "Mic revoked");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function removeUser(actorId, targetId, roomId) {

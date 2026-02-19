@@ -46,6 +46,7 @@ export function registerSocketHandlers(io) {
           room: result.room,
           participant: result.participant,
           livekitToken: result.livekitToken,
+          livekitUrl: result.livekitUrl,
         });
       } catch (err) {
         logger.error({ err }, "create_room failed");
@@ -89,6 +90,7 @@ export function registerSocketHandlers(io) {
           room: result.room,
           participant: result.participant,
           livekitToken: result.livekitToken,
+          livekitUrl: result.livekitUrl,
           participants: roomState.participants,
           messages: chronologicalMessages,
         });
@@ -196,6 +198,7 @@ export function registerSocketHandlers(io) {
             ts.emit("mic_granted", {
               participant: result.participant,
               livekitToken: result.livekitToken,
+              livekitUrl: result.livekitUrl,
             });
           }
         }
@@ -226,6 +229,7 @@ export function registerSocketHandlers(io) {
             ts.emit("mic_revoked", {
               participant: result.participant,
               livekitToken: result.livekitToken,
+              livekitUrl: result.livekitUrl,
             });
           }
         }
@@ -258,6 +262,7 @@ export function registerSocketHandlers(io) {
               ts.emit("role_changed", {
                 participant: result.participant,
                 livekitToken: result.livekitToken,
+                livekitUrl: result.livekitUrl,
               });
             }
           }
@@ -289,6 +294,7 @@ export function registerSocketHandlers(io) {
             ts.emit("role_changed", {
               participant: result.participant,
               livekitToken: result.livekitToken,
+              livekitUrl: result.livekitUrl,
             });
           }
         }
@@ -382,16 +388,18 @@ export function registerSocketHandlers(io) {
           (p) => p.user_id === user.id,
         );
         let livekitToken;
+        let livekitUrl;
 
         if (myParticipant) {
           const canPublish = ["host", "co-host", "speaker"].includes(
             myParticipant.role,
           );
-          const { generateLiveKitToken } = await import("../config/livekit.js");
+          const { generateLiveKitToken, livekitWsUrl } = await import("../config/livekit.js");
           livekitToken = await generateLiveKitToken(user.id, data.roomId, {
             canPublish,
             canSubscribe: true,
           });
+          livekitUrl = livekitWsUrl;
         }
 
         // Notify others that this user reconnected — send full participant
@@ -407,6 +415,7 @@ export function registerSocketHandlers(io) {
           participants: roomState.participants,
           missedMessages,
           livekitToken,
+          livekitUrl,
           myParticipant,
         });
       } catch (err) {

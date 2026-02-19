@@ -157,7 +157,7 @@ export default function RoomScreen() {
 
   // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
   const reconnectLiveKit = useCallback(
-    async (newToken: string, newRole: string) => {
+    async (newToken: string, newRole: string, livekitUrl?: string) => {
       isReconnectingLiveKitRef.current = true;
       try {
         roomRef.current?.disconnect();
@@ -176,7 +176,7 @@ export default function RoomScreen() {
         } catch (err) {
           console.warn("[Room] Failed to set audio mode before reconnect:", err);
         }
-        const newRoom = await connectToLiveKitRoom(newToken);
+        const newRoom = await connectToLiveKitRoom(newToken, livekitUrl);
         setRoom(newRoom);
         roomRef.current = newRoom;
         setConnectionState(ConnectionState.Connected);
@@ -325,7 +325,10 @@ export default function RoomScreen() {
         }
 
         // 3. Connect LiveKit
-        const livekitRoom = await connectToLiveKitRoom(result.livekitToken);
+        const livekitRoom = await connectToLiveKitRoom(
+          result.livekitToken,
+          result.livekitUrl,
+        );
         if (cancelled) {
           livekitRoom.disconnect();
           return;
@@ -427,27 +430,51 @@ export default function RoomScreen() {
         // FIX #4: role_changed — reconnect LiveKit without tearing down socket
         socket!.on(
           "role_changed",
-          (data: { participant: ServerParticipant; livekitToken: string }) => {
+          (data: {
+            participant: ServerParticipant;
+            livekitToken: string;
+            livekitUrl?: string;
+          }) => {
             setMyRole(data.participant.role);
-            reconnectLiveKit(data.livekitToken, data.participant.role);
+            reconnectLiveKit(
+              data.livekitToken,
+              data.participant.role,
+              data.livekitUrl,
+            );
           },
         );
 
         // FIX #4: mic_granted — reconnect LiveKit without tearing down socket
         socket!.on(
           "mic_granted",
-          (data: { participant: ServerParticipant; livekitToken: string }) => {
+          (data: {
+            participant: ServerParticipant;
+            livekitToken: string;
+            livekitUrl?: string;
+          }) => {
             setMyRole(data.participant.role);
-            reconnectLiveKit(data.livekitToken, data.participant.role);
+            reconnectLiveKit(
+              data.livekitToken,
+              data.participant.role,
+              data.livekitUrl,
+            );
           },
         );
 
         // FIX #4: mic_revoked — reconnect LiveKit with listener permissions
         socket!.on(
           "mic_revoked",
-          (data: { participant: ServerParticipant; livekitToken: string }) => {
+          (data: {
+            participant: ServerParticipant;
+            livekitToken: string;
+            livekitUrl?: string;
+          }) => {
             setMyRole(data.participant.role);
-            reconnectLiveKit(data.livekitToken, data.participant.role);
+            reconnectLiveKit(
+              data.livekitToken,
+              data.participant.role,
+              data.livekitUrl,
+            );
           },
         );
 
@@ -536,7 +563,11 @@ export default function RoomScreen() {
                     const me = d.myParticipant || d.participants?.find(
                       (p: ServerParticipant) => p.user_id === currentUserId,
                     );
-                    reconnectLiveKit(d.livekitToken, me?.role || "listener");
+                    reconnectLiveKit(
+                      d.livekitToken,
+                      me?.role || "listener",
+                      d.livekitUrl,
+                    );
                   }
                   setConnectionState(ConnectionState.Connected);
                 } else {

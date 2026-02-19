@@ -23,6 +23,7 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   const app = express();
+  app.set('trust proxy', 1);  
   const server = http.createServer(app);
 
   // ------------------------
@@ -53,11 +54,15 @@ async function main() {
       origin: env.CORS_ORIGIN,
       credentials: true,
     },
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    // Cloud Run kills idle connections after 60s.
+    // Keep-alive via frequent pings well within that window.
+    pingInterval: 10000,   // ping every 10s (was 25s)
+    pingTimeout: 20000,    // give 20s for pong (was 60s)
+    // Cloud Run: start with polling then upgrade to WebSocket
+    transports: ["polling", "websocket"],
     maxHttpBufferSize: 1e6,
     connectionStateRecovery: {
-      maxDisconnectionDuration: 30000,
+      maxDisconnectionDuration: 120000, // 2 min recovery window
     },
   });
 
