@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 
 
 import TribesTab from "../../components/community/TribesTab";
@@ -106,9 +107,15 @@ export default function CommunityScreen() {
 
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.text.primary }]}>
-          Community
-        </Text>
+        <Image
+          source={
+            isDark
+              ? require("@/assets/images/logo-dark.png")
+              : require("@/assets/images/logo-light.png")
+          }
+          style={styles.brandLogo}
+          contentFit="contain"
+        />
 
         {/* Header action buttons */}
         <ScrollView
@@ -242,10 +249,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },
-  headerTitle: {
+  brandLogo: {
+    height: 24,
+    width: 140,
     marginVertical: Spacing.xs,
     marginLeft: Spacing.xs,
-    ...Typography.presets.h1,
   },
   headerActions: {
     flexDirection: "row",
