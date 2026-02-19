@@ -22,13 +22,21 @@ import * as tribeApi from "../../lib/tribeApi";
 
 type TabMode = "my" | "explore";
 
-export default function TribesTab() {
+type TribesTabProps = {
+  mode?: TabMode;
+  showSegmentedControl?: boolean;
+};
+
+export default function TribesTab({
+  mode,
+  showSegmentedControl = true,
+}: TribesTabProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const { session } = useAuth();
   const token = session?.access_token || "";
 
-  const [activeTab, setActiveTab] = useState<TabMode>("explore");
+  const [internalActiveTab, setInternalActiveTab] = useState<TabMode>("explore");
   const [myTribes, setMyTribes] = useState<any[]>([]);
   const [publicTribes, setPublicTribes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +47,15 @@ export default function TribesTab() {
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTab = mode ?? internalActiveTab;
+
+  const setActiveTab = (tab: TabMode) => {
+    if (mode === undefined) {
+      setInternalActiveTab(tab);
+    }
+    setSearchQuery("");
+    setSearchResults(null);
+  };
 
   /* ── Fetch data ────────────────────────────────────────────── */
 
@@ -61,6 +78,18 @@ export default function TribesTab() {
     loadTribes().finally(() => setLoading(false));
   }, [loadTribes]);
 
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    setSearchQuery("");
+    setSearchResults(null);
+    setSearching(false);
+  }, [activeTab]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     setSearchQuery("");
@@ -82,20 +111,35 @@ export default function TribesTab() {
         return;
       }
 
+      if (activeTab === "my") {
+        setSearching(false);
+        const normalized = text.trim().toLowerCase();
+        const localMatches = myTribes.filter((tribe) => {
+          const name = String(tribe?.name ?? "").toLowerCase();
+          const description = String(tribe?.description ?? "").toLowerCase();
+          return name.includes(normalized) || description.includes(normalized);
+        });
+        setSearchResults(localMatches);
+        return;
+      }
+
       setSearching(true);
       searchTimer.current = setTimeout(async () => {
         try {
           const results = await tribeApi.searchTribes(token, text.trim());
-          setSearchResults(Array.isArray(results) ? results : []);
+          const filtered = Array.isArray(results)
+            ? results.filter((t) => !myTribes.some((mine) => mine.id === t.id))
+            : [];
+          setSearchResults(filtered);
         } catch (e: any) {
           console.error("Search failed:", e.message);
           setSearchResults([]);
         } finally {
           setSearching(false);
         }
-      }, 500);
+      }, 400);
     },
-    [token],
+    [activeTab, myTribes, token],
   );
 
   /* ── Handlers ──────────────────────────────────────────────── */
@@ -109,13 +153,24 @@ export default function TribesTab() {
     }
   };
 
+  useEffect(() => {
+    if (activeTab !== "explore") return;
+    const myIds = new Set(myTribes.map((t) => t.id));
+    setSearchResults((prev) => {
+      if (prev === null) return prev;
+      const filtered = prev.filter((tribe) => !myIds.has(tribe.id));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [activeTab, myTribes]);
+
   /* ── Derive data ───────────────────────────────────────────── */
 
   const myTribeIds = new Set(myTribes.map((t) => t.id));
   const exploreTribes = publicTribes.filter((t) => !myTribeIds.has(t.id));
+  const hasSearch = searchQuery.trim().length > 0;
   const displayed =
     activeTab === "my"
-      ? myTribes
+      ? (searchResults ?? myTribes)
       : searchResults !== null
         ? searchResults
         : exploreTribes;
@@ -125,17 +180,29 @@ export default function TribesTab() {
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <Ionicons
-        name={activeTab === "my" ? "shield-outline" : "compass-outline"}
+        name={
+          hasSearch
+            ? "search-outline"
+            : activeTab === "my"
+              ? "shield-outline"
+              : "compass-outline"
+        }
         size={52}
         color={theme.text.muted}
       />
       <Text style={[styles.emptyTitle, { color: theme.text.secondary }]}>
-        {activeTab === "my" ? "No tribes yet" : "Nothing to explore"}
+        {hasSearch
+          ? "No matches found"
+          : activeTab === "my"
+            ? "No tribes yet"
+            : "Nothing to explore"}
       </Text>
       <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-        {activeTab === "my"
-          ? "Create a tribe or join one from Explore"
-          : "All public tribes have been joined!"}
+        {hasSearch
+          ? "Try a different keyword."
+          : activeTab === "my"
+            ? "Join a tribe from Explore or create your own."
+            : "All public tribes have been joined."}
       </Text>
     </View>
   );
@@ -145,81 +212,79 @@ export default function TribesTab() {
   return (
     <View style={styles.container}>
       {/* Segmented Control */}
+      {showSegmentedControl && (
+        <View
+          style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
+        >
+          {(["explore", "my"] as const).map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[
+                styles.tabButton,
+                activeTab === tab && { backgroundColor: theme.brand.primary },
+              ]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: theme.text.secondary },
+                  activeTab === tab && {
+                    color: theme.text.inverse,
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                {tab === "my" ? "My Tribes" : "Explore"}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Search Bar */}
       <View
-        style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
+        style={[
+          styles.searchContainer,
+          { backgroundColor: theme.surface, borderColor: theme.border },
+        ]}
       >
-        {(["explore", "my"] as const).map((tab) => (
+        <Ionicons
+          name="search-outline"
+          size={18}
+          color={theme.text.muted}
+        />
+        <TextInput
+          style={[styles.searchInput, { color: theme.text.primary }]}
+          placeholder={
+            activeTab === "my" ? "Search in my tribes..." : "Search tribes to join..."
+          }
+          placeholderTextColor={theme.text.muted}
+          value={searchQuery}
+          onChangeText={handleSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
+        {searching && (
+          <ActivityIndicator size="small" color={theme.brand.primary} />
+        )}
+        {searchQuery.length > 0 && !searching && (
           <TouchableOpacity
-            key={tab}
-            style={[
-              styles.tabButton,
-              activeTab === tab && { backgroundColor: theme.brand.primary },
-            ]}
             onPress={() => {
-              setActiveTab(tab);
               setSearchQuery("");
               setSearchResults(null);
             }}
-            activeOpacity={0.8}
           >
-            <Text
-              style={[
-                styles.tabText,
-                { color: theme.text.secondary },
-                activeTab === tab && {
-                  color: theme.text.inverse,
-                  fontWeight: "600",
-                },
-              ]}
-            >
-              {tab === "my" ? "My Tribes" : "Explore"}
-            </Text>
+            <Ionicons
+              name="close-circle"
+              size={18}
+              color={theme.text.muted}
+            />
           </TouchableOpacity>
-        ))}
+        )}
       </View>
-
-      {/* Search Bar (Explore tab only) */}
-      {activeTab === "explore" && (
-        <View
-          style={[
-            styles.searchContainer,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}
-        >
-          <Ionicons
-            name="search-outline"
-            size={18}
-            color={theme.text.muted}
-          />
-          <TextInput
-            style={[styles.searchInput, { color: theme.text.primary }]}
-            placeholder="Search tribes..."
-            placeholderTextColor={theme.text.muted}
-            value={searchQuery}
-            onChangeText={handleSearch}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-          />
-          {searching && (
-            <ActivityIndicator size="small" color={theme.brand.primary} />
-          )}
-          {searchQuery.length > 0 && !searching && (
-            <TouchableOpacity
-              onPress={() => {
-                setSearchQuery("");
-                setSearchResults(null);
-              }}
-            >
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color={theme.text.muted}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
 
       {/* List */}
       {loading ? (

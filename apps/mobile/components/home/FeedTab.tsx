@@ -47,7 +47,11 @@ interface Article {
 
 const PAGE_SIZE = 20;
 
-export default function FeedTab() {
+type FeedTabProps = {
+  isSubTabVisible?: boolean;
+};
+
+export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
   const { theme, isDark } = useTheme();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +164,11 @@ export default function FeedTab() {
 
   const renderItem = ({ item }: { item: Article; index: number }) => (
     <View style={{ height: REEL_HEIGHT }}>
-      <ArticleReelCard article={item} height={REEL_HEIGHT} />
+      <ArticleReelCard
+        article={item}
+        height={REEL_HEIGHT}
+        bottomInset={isSubTabVisible ? 50 : 22}
+      />
     </View>
   );
 

@@ -31,6 +31,9 @@ interface RoomItem {
 }
 
 type TabMode = "public" | "private";
+type VoiceChannelsTabProps = {
+  subTabVisible?: boolean;
+};
 
 /* ── Helpers ──────────────────────────────────────────────── */
 
@@ -109,7 +112,9 @@ const pulseStyles = StyleSheet.create({
 /*  Voice Channels Tab                                               */
 /* ================================================================ */
 
-export default function VoiceChannelsTab() {
+export default function VoiceChannelsTab({
+  subTabVisible = true,
+}: VoiceChannelsTabProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const { session } = useAuth();
@@ -597,6 +602,7 @@ export default function VoiceChannelsTab() {
       <TouchableOpacity
         style={[
           styles.fab,
+          { bottom: subTabVisible ? 180 : 124 },
           { backgroundColor: theme.brand.primary },
           Layout.shadows.lg,
         ]}
@@ -780,7 +786,6 @@ const styles = StyleSheet.create({
   /* FAB */
   fab: {
     position: "absolute",
-    bottom: 140,
     right: Spacing.lg,
     width: 56,
     height: 56,

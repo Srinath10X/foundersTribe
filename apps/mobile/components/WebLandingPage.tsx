@@ -25,9 +25,6 @@ export default function WebLandingPage() {
     alert('App coming soon to iOS and Android!');
   };
 
-  // Dynamic font sizing for hero title
-  const adaptiveTitleSize = Math.min(isSmall ? 48 : 72, width * (isSmall ? 0.14 : 0.08));
-
   return (
     <View style={[styles.container, { minHeight: height, backgroundColor: theme.background }]}>
       {/* Animated gradient background - Dynamic */}
@@ -43,18 +40,18 @@ export default function WebLandingPage() {
           style={[styles.hero, { gap: isSmall ? 16 : 24 }]}
         >
           {/* Premium Logo Container */}
-          <View style={[styles.iconWrapper, isSmall && { width: 120, height: 120 }]}>
+          <View style={[styles.iconWrapper, isSmall && { width: 240, height: 100 }]}>
             <View style={[styles.logoContainer, { 
-              backgroundColor: isDark ? '#1C1C1E' : '#000000',
+              backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
               shadowColor: isDark ? '#000' : '#000',
               shadowOpacity: isDark ? 0.3 : 0.2,
+              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
             }]}>
-              <Logo width={isSmall ? 60 : 80} height={isSmall ? 60 : 80} color="#D4AF37" />
+              <Logo width={isSmall ? 170 : 210} height={isSmall ? 36 : 46} />
             </View>
           </View>
 
           {/* Main Branding */}
-          <Text style={[styles.mainTitle, { fontSize: adaptiveTitleSize, color: theme.text.primary }]}>foundersTribe</Text>
           <Text style={[styles.tagline, { fontSize: Math.min(isSmall ? 20 : 32, width * 0.06), color: theme.text.secondary }]}>
             Your AI-powered morning briefing, <Text style={{ color: theme.text.muted }}>distilled.</Text>
           </Text>
@@ -295,28 +292,22 @@ const styles = StyleSheet.create({
   },
   iconWrapper: {
     position: 'relative',
-    width: 160,
-    height: 160,
+    width: 280,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   logoContainer: {
-    width: 140, // Larger
-    height: 140,
-    borderRadius: 40, // Softer radius
+    width: 260,
+    height: 96,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 12 }, // Deeper shadow
-    shadowRadius: 24,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
+    elevation: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  mainTitle: {
-    fontFamily: 'BricolageGrotesque_700Bold',
-    letterSpacing: -2,
-    textAlign: 'center',
   },
   tagline: {
     fontFamily: 'Poppins_400Regular',

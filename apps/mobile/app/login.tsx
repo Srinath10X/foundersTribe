@@ -7,6 +7,7 @@ import { Colors, Layout, Spacing } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -175,9 +176,15 @@ export default function Login() {
               entering={FadeInUp.delay(100).duration(800)}
               style={styles.brandSection}
             >
-              <Text style={[styles.logo, { color: theme.brand.primary }]}>
-                foundersTribe
-              </Text>
+              <Image
+                source={
+                  isDark
+                    ? require("@/assets/images/logo-dark.png")
+                    : require("@/assets/images/logo-light.png")
+                }
+                style={styles.logo}
+                contentFit="contain"
+              />
               <Text style={[styles.tagline, { color: theme.text.tertiary }]}>
                 Your premium news experience
               </Text>
@@ -405,9 +412,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xxl,
   },
   logo: {
-    fontSize: 32,
-    fontFamily: "BricolageGrotesque_700Bold",
-    letterSpacing: -0.5,
+    width: 220,
+    height: 48,
     marginBottom: Spacing.xs,
   },
   tagline: {

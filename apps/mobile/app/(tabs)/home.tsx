@@ -6,8 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack } from "expo-router";
-import React, { useCallback, useState } from "react";
+import { Stack, useFocusEffect, useNavigation } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
   Platform,
@@ -18,9 +18,11 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 const { width: windowWidth } = Dimensions.get("window");
@@ -41,9 +43,50 @@ const SUB_TABS: {
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
+  const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState<SubTab>("feed");
+  const [isSubTabVisible, setIsSubTabVisible] = useState(true);
   const indicatorX = useSharedValue(0);
+  const subTabVisibility = useSharedValue(1);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabWidth = (windowWidth - 48) / 3;
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  const showSubTabsTemporarily = useCallback(() => {
+    clearHideTimer();
+    setIsSubTabVisible(true);
+    subTabVisibility.value = withTiming(1, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+    hideTimer.current = setTimeout(() => {
+      setIsSubTabVisible(false);
+      subTabVisibility.value = withTiming(0, {
+        duration: 320,
+        easing: Easing.inOut(Easing.quad),
+      });
+    }, 2000);
+  }, [clearHideTimer, subTabVisibility]);
+
+  useFocusEffect(
+    useCallback(() => {
+      showSubTabsTemporarily();
+      return () => clearHideTimer();
+    }, [clearHideTimer, showSubTabsTemporarily])
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("tabPress", () => {
+      showSubTabsTemporarily();
+    });
+    return unsubscribe;
+  }, [navigation, showSubTabsTemporarily]);
 
   const handleTabPress = useCallback(
     (tab: SubTab, index: number) => {
@@ -52,18 +95,24 @@ export default function HomeScreen() {
         damping: 20,
         stiffness: 180,
       });
+      showSubTabsTemporarily();
     },
-    [tabWidth]
+    [showSubTabsTemporarily, tabWidth]
   );
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: indicatorX.value }],
   }));
 
+  const subTabVisibilityStyle = useAnimatedStyle(() => ({
+    opacity: subTabVisibility.value,
+    transform: [{ translateY: (1 - subTabVisibility.value) * 56 }],
+  }));
+
   const renderContent = () => {
     switch (activeTab) {
       case "feed":
-        return <FeedTab />;
+        return <FeedTab isSubTabVisible={isSubTabVisible} />;
       case "discover":
         return <DiscoverTab />;
       case "library":
@@ -120,7 +169,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Bottom Glassmorphism Sub-Tabs */}
-      <View style={styles.bottomTabContainer}>
+      <Animated.View style={[styles.bottomTabContainer, subTabVisibilityStyle]}>
         <BlurView
           intensity={Platform.OS === "ios" ? 90 : 120}
           tint={isDark ? "dark" : "light"}
@@ -193,7 +242,7 @@ export default function HomeScreen() {
             })}
           </View>
         </BlurView>
-      </View>
+      </Animated.View>
     </View>
   );
 }

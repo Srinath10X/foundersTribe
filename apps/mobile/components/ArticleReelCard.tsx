@@ -6,12 +6,14 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Dimensions, Platform, Share, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
+  withTiming,
   withSpring
 } from 'react-native-reanimated';
 
@@ -36,9 +38,14 @@ interface Article {
 interface ArticleReelCardProps {
   article: Article;
   height?: number;
+  bottomInset?: number;
 }
 
-export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
+export function ArticleReelCard({
+  article,
+  height,
+  bottomInset = 48,
+}: ArticleReelCardProps) {
   const router = useRouter();
   const { theme } = useTheme();
   const { liked, bookmarked, toggleLike, toggleBookmark } = useArticleInteractions(article.id);
@@ -47,6 +54,14 @@ export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
   const likeScale = useSharedValue(1);
   const bookmarkScale = useSharedValue(1);
   const shareScale = useSharedValue(1);
+  const contentBottom = useSharedValue(bottomInset);
+
+  useEffect(() => {
+    contentBottom.value = withTiming(bottomInset, {
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [bottomInset, contentBottom]);
 
   const triggerHaptic = () => {
     if (Platform.OS !== 'web') {
@@ -103,6 +118,9 @@ export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
   const likeAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
   const bookmarkAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: bookmarkScale.value }] }));
   const shareAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: shareScale.value }] }));
+  const contentShiftStyle = useAnimatedStyle(() => ({
+    bottom: contentBottom.value,
+  }));
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, height }]}>
@@ -119,9 +137,9 @@ export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
         />
         {/* Dark scrim for text readability */}
         <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
+          colors={['transparent', 'rgba(0,0,0,0.70)', 'rgba(0,0,0,0.85)']}
           style={styles.imageOverlay}
-          start={{ x: 0, y: 0.35 }}
+          start={{ x: 0, y: 0.25 }}
           end={{ x: 0, y: 1 }}
         />
       </View>
@@ -134,7 +152,7 @@ export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
 
       {/* Content + Actions */}
       <View style={styles.contentWrapper}>
-        <View style={styles.columnContainer}>
+        <Animated.View style={[styles.columnContainer, contentShiftStyle]}>
           {/* Left: Text */}
           <View style={styles.leftColumn}>
             {/* Category */}
@@ -197,7 +215,7 @@ export function ArticleReelCard({ article, height }: ArticleReelCardProps) {
               <Text style={styles.actionLabel}>Share</Text>
             </View>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </View>
   );
@@ -243,7 +261,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     gap: 12,
-    bottom: 48,
   },
 
   leftColumn: {

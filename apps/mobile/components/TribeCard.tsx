@@ -24,6 +24,11 @@ interface TribeCardProps {
   onJoin?: () => void;
 }
 
+const getDemoAvatarUri = (id: string, name: string) => {
+  const seed = encodeURIComponent(`${id}-${name || "tribe"}`);
+  return `https://api.dicebear.com/7.x/initials/png?seed=${seed}&backgroundType=gradientLinear`;
+};
+
 export default function TribeCard({
   tribe,
   onPress,
@@ -49,18 +54,12 @@ export default function TribeCard({
             { backgroundColor: theme.brand.primary + "15" },
           ]}
         >
-          {tribe.avatar_url ? (
-            <Image
-              source={{ uri: tribe.avatar_url }}
-              style={styles.avatarImg}
-            />
-          ) : (
-            <Ionicons
-              name="shield-half-outline"
-              size={22}
-              color={theme.brand.primary}
-            />
-          )}
+          <Image
+            source={{
+              uri: tribe.avatar_url || getDemoAvatarUri(tribe.id, tribe.name),
+            }}
+            style={styles.avatarImg}
+          />
         </View>
 
         {/* Info */}

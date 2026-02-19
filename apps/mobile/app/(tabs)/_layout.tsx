@@ -64,6 +64,19 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="global-search"
+        options={{
+          title: "Global Search",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "search" : "search-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
       {/* Hidden: moved to Community sub-tabs */}
       <Tabs.Screen
         name="tribes"

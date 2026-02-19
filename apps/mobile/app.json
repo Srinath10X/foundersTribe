@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/splash-icon.png"
+        "foregroundImage": "./assets/images/icon.png"
       },
       "package": "com.founderstribe.ai",
       "edgeToEdgeEnabled": true,
@@ -28,18 +28,19 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/logo.svg"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/logo-light.png",
+          "imageWidth": 220,
           "resizeMode": "contain",
           "backgroundColor": "#FAFAF9",
           "dark": {
+            "image": "./assets/images/logo-dark.png",
             "backgroundColor": "#000000"
           }
         }
