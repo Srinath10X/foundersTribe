@@ -65,6 +65,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="matching"
+        options={{
+          title: "Matching",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "flame" : "flame-outline"}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="tribes"
         options={{
           title: "Tribes",
