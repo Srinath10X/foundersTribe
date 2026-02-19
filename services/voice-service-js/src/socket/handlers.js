@@ -67,10 +67,12 @@ export function registerSocketHandlers(io) {
 
         const roomState = await roomService.getRoomState(data.roomId);
 
+        // Broadcast to others that this participant joined
         socket.to(data.roomId).emit("participant_joined", {
           participant: result.participant,
         });
 
+        // Broadcast updated participant count to everyone (including lobby)
         io.emit("room_updated", {
           roomId: data.roomId,
           participant_count: roomState.participants.length,
@@ -392,15 +394,20 @@ export function registerSocketHandlers(io) {
           });
         }
 
-        socket.to(data.roomId).emit("participant_reconnected", {
-          userId: user.id,
-        });
+        // Notify others that this user reconnected — send full participant
+        // data so clients can update their list (mark as connected again)
+        if (myParticipant) {
+          socket.to(data.roomId).emit("participant_updated", {
+            participant: myParticipant,
+          });
+        }
 
         success(cb, {
           room: roomState.room,
           participants: roomState.participants,
           missedMessages,
           livekitToken,
+          myParticipant,
         });
       } catch (err) {
         logger.error({ err }, "restore_room_state failed");
@@ -427,6 +434,7 @@ export function registerSocketHandlers(io) {
           try {
             await roomService.markDisconnected(user_id, room_id, socket.id);
 
+            // Notify others that this user temporarily disconnected
             socket.to(room_id).emit("participant_disconnected", {
               userId: user_id,
             });

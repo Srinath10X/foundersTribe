@@ -46,3 +46,5 @@ apps/mob/app-example
 # generated native folders
 apps/mob/ios
 apps/mob/android
+
+deploy/

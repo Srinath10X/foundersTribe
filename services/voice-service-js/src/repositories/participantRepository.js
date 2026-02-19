@@ -2,6 +2,38 @@ import { supabase } from "../config/supabase.js";
 import { logger } from "../utils/logger.js";
 
 export class ParticipantRepository {
+  /**
+   * Enrich participant records with user_name from the profiles table.
+   */
+  async enrichWithProfiles(participants) {
+    if (!participants || participants.length === 0) return participants;
+    const userIds = [...new Set(participants.map((p) => p.user_id))];
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", userIds);
+
+    if (error || !profiles) {
+      logger.warn({ error }, "Failed to fetch profiles for enrichment");
+      return participants.map((p) => ({ ...p, user_name: null }));
+    }
+
+    const profileMap = new Map(profiles.map((p) => [p.id, p.display_name]));
+    return participants.map((p) => ({
+      ...p,
+      user_name: profileMap.get(p.user_id) || null,
+    }));
+  }
+
+  /**
+   * Enrich a single participant record with user_name from the profiles table.
+   */
+  async enrichOneWithProfile(participant) {
+    if (!participant) return participant;
+    const enriched = await this.enrichWithProfiles([participant]);
+    return enriched[0];
+  }
+
   async addParticipant(roomId, userId, role, socketId) {
     const { data, error } = await supabase
       .from("participants")

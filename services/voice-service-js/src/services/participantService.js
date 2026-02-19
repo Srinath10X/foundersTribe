@@ -58,7 +58,7 @@ export async function promoteUser(actorId, targetId, roomId, newRole) {
 
   const micEnabled = newRole !== "listener";
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -66,6 +66,7 @@ export async function promoteUser(actorId, targetId, roomId, newRole) {
       mic_enabled: micEnabled,
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const canPublish = ["host", "co-host", "speaker"].includes(newRole);
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
@@ -88,7 +89,7 @@ export async function demoteUser(actorId, targetId, roomId) {
     throw new AppError("Cannot demote a user with equal or higher role", 403);
   }
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -96,6 +97,7 @@ export async function demoteUser(actorId, targetId, roomId) {
       mic_enabled: false,
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
     canPublish: false,
@@ -110,7 +112,7 @@ export async function grantMic(actorId, targetId, roomId) {
   await validateActorPrivileges(actorId, roomId, ["host", "co-host"]);
   await getTargetParticipant(targetId, roomId);
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -118,6 +120,7 @@ export async function grantMic(actorId, targetId, roomId) {
       role: "speaker",
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
     canPublish: true,
@@ -142,7 +145,7 @@ export async function revokeMic(actorId, targetId, roomId) {
     );
   }
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -150,6 +153,7 @@ export async function revokeMic(actorId, targetId, roomId) {
       role: "listener",
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
     canPublish: false,

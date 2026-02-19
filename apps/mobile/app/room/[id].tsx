@@ -111,6 +111,9 @@ export default function RoomScreen() {
   const isReconnectingLiveKitRef = useRef(false);
   // Track the roomId for reconnection logic
   const activeRoomIdRef = useRef<string | null>(null);
+  // Stable router ref so event handlers don't need router in their dep arrays
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
 
   const displayRole = (role: string) => {
     if (role === "listener") return "audience";
@@ -121,15 +124,18 @@ export default function RoomScreen() {
     myRole === "host" || myRole === "co-host" || myRole === "speaker";
 
   // Merge server participant data with LiveKit speaking data
-  const mergedParticipants = serverParticipants.map((sp) => {
-    const lkp = livekitParticipants.find((p) => p.identity === sp.user_id);
-    return {
-      ...sp,
-      isSpeaking: lkp?.isSpeaking || false,
-      isMicEnabled: lkp?.isMicEnabled || false,
-      displayName: sp.user_name || sp.user_id.slice(0, 8),
-    };
-  });
+  // Filter out disconnected participants to keep the list clean
+  const mergedParticipants = serverParticipants
+    .filter((sp) => sp.is_connected !== false)
+    .map((sp) => {
+      const lkp = livekitParticipants.find((p) => p.identity === sp.user_id);
+      return {
+        ...sp,
+        isSpeaking: lkp?.isSpeaking || false,
+        isMicEnabled: lkp?.isMicEnabled || false,
+        displayName: sp.user_name || sp.user_id.slice(0, 8),
+      };
+    });
 
   const handleLeaveRoom = useCallback(() => {
     activeRoomIdRef.current = null;
@@ -143,8 +149,9 @@ export default function RoomScreen() {
     isReconnectingLiveKitRef.current = true; // prevent ConnectionStateChanged from double-navigating
     roomRef.current?.disconnect();
     roomRef.current = null;
-    router.replace("/(tabs)/community");
-  }, [roomId, router]);
+    routerRef.current.replace("/(tabs)/community");
+  // roomId is the only real dep — routerRef is stable
+  }, [roomId]);
 
   // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
   const reconnectLiveKit = useCallback(
@@ -191,14 +198,38 @@ export default function RoomScreen() {
     [],
   );
 
-  // LiveKit event listener attachment — extracted so we can re-attach after token swap
+  // LiveKit event listener attachment — extracted so we can re-attach after token swap.
+  // IMPORTANT: removeAllListeners() is called first to prevent duplicate handlers
+  // when this is called again after a token swap (reconnectLiveKit).
   const attachLiveKitListeners = useCallback((lkRoom: Room) => {
+    // Remove any previously attached listeners on this room instance first
+    lkRoom.removeAllListeners();
+
     const updateLKParticipants = () => {
       const all = [
         lkRoom.localParticipant,
         ...Array.from(lkRoom.remoteParticipants.values()),
       ];
       setLivekitParticipants(all.map((p) => getParticipantInfo(p)));
+    };
+
+    const handleConnectionStateChanged = (state: ConnectionState) => {
+      // Skip if we're intentionally swapping LiveKit tokens
+      if (isReconnectingLiveKitRef.current) return;
+
+      setConnectionState(state);
+      if (state === ConnectionState.Disconnected) {
+        Alert.alert(
+          "Disconnected",
+          "You have been disconnected from the room.",
+        );
+        activeRoomIdRef.current = null;
+        socketRef.current?.removeAllListeners();
+        socketRef.current?.disconnect();
+        socketRef.current = null;
+        roomRef.current = null;
+        routerRef.current.replace("/(tabs)/community");
+      }
     };
 
     lkRoom
@@ -209,27 +240,11 @@ export default function RoomScreen() {
       .on(RoomEvent.TrackUnpublished, updateLKParticipants)
       .on(RoomEvent.LocalTrackPublished, updateLKParticipants)
       .on(RoomEvent.LocalTrackUnpublished, updateLKParticipants)
-      .on(RoomEvent.ConnectionStateChanged, (state) => {
-        // Skip if we're intentionally swapping LiveKit tokens
-        if (isReconnectingLiveKitRef.current) return;
-
-        setConnectionState(state);
-        if (state === ConnectionState.Disconnected) {
-          Alert.alert(
-            "Disconnected",
-            "You have been disconnected from the room.",
-          );
-          activeRoomIdRef.current = null;
-          socketRef.current?.removeAllListeners();
-          socketRef.current?.disconnect();
-          socketRef.current = null;
-          roomRef.current = null;
-          router.replace("/(tabs)/community");
-        }
-      });
+      .on(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
 
     updateLKParticipants();
-  }, [router]);
+  // No external deps — uses only refs (stable) and setters (stable)
+  }, []);
 
   // Setup socket and LiveKit
   useEffect(() => {
@@ -351,11 +366,16 @@ export default function RoomScreen() {
           "participant_joined",
           (data: { participant: ServerParticipant }) => {
             setServerParticipants((prev) => {
-              const exists = prev.some(
+              const idx = prev.findIndex(
                 (p) => p.user_id === data.participant.user_id,
               );
-              if (exists) return prev;
-              return [...prev, data.participant];
+              if (idx >= 0) {
+                // User already in list (e.g. reconnected) — update their data
+                const updated = [...prev];
+                updated[idx] = { ...data.participant, is_connected: true };
+                return updated;
+              }
+              return [...prev, { ...data.participant, is_connected: true }];
             });
           },
         );
@@ -369,14 +389,36 @@ export default function RoomScreen() {
         socket!.on(
           "participant_updated",
           (data: { participant: ServerParticipant }) => {
-            setServerParticipants((prev) =>
-              prev.map((p) =>
-                p.user_id === data.participant.user_id ? data.participant : p,
-              ),
-            );
+            setServerParticipants((prev) => {
+              const exists = prev.some(
+                (p) => p.user_id === data.participant.user_id,
+              );
+              if (exists) {
+                return prev.map((p) =>
+                  p.user_id === data.participant.user_id
+                    ? data.participant
+                    : p,
+                );
+              }
+              // Participant not in list yet (e.g. reconnected) — add them
+              return [...prev, data.participant];
+            });
             if (data.participant.user_id === currentUserId) {
               setMyRole(data.participant.role);
             }
+          },
+        );
+
+        socket!.on(
+          "participant_disconnected",
+          (data: { userId: string }) => {
+            setServerParticipants((prev) =>
+              prev.map((p) =>
+                p.user_id === data.userId
+                  ? { ...p, is_connected: false }
+                  : p,
+              ),
+            );
           },
         );
 
@@ -459,46 +501,54 @@ export default function RoomScreen() {
           const currentRoomId = activeRoomIdRef.current;
           if (!currentRoomId || !socket?.connected) return;
 
-          const lastMsg = chatMessages[chatMessages.length - 1];
-          socket!.emit(
-            "restore_room_state",
-            {
-              roomId: currentRoomId,
-              lastMessageAt: lastMsg?.created_at,
-            },
-            (response: any) => {
-              if (response.success) {
-                console.log("[Room] Room state restored after reconnect");
-                const d = response.data;
-                if (d.participants) setServerParticipants(d.participants);
-                if (d.missedMessages?.length) {
-                  setChatMessages((prev) => {
-                    const newMsgs = d.missedMessages
-                      .map(normalizeMessage)
-                      .filter(
-                        (m: ChatMessage) => !prev.some((p) => p.id === m.id),
-                      );
-                    return [...prev, ...newMsgs];
-                  });
+          // Use setChatMessages callback to get current messages without stale closure
+          setChatMessages((currentMessages) => {
+            const lastMsg = currentMessages[currentMessages.length - 1];
+            socket!.emit(
+              "restore_room_state",
+              {
+                roomId: currentRoomId,
+                lastMessageAt: lastMsg?.created_at,
+              },
+              (response: any) => {
+                if (response.success) {
+                  console.log("[Room] Room state restored after reconnect");
+                  const d = response.data;
+                  if (d.participants) setServerParticipants(d.participants);
+                  if (d.missedMessages?.length) {
+                    setChatMessages((prev) => {
+                      const newMsgs = d.missedMessages
+                        .map(normalizeMessage)
+                        .filter(
+                          (m: ChatMessage) => !prev.some((p) => p.id === m.id),
+                        );
+                      return [...prev, ...newMsgs];
+                    });
+                  }
+                  // Update my role from restored server state
+                  if (d.myParticipant) {
+                    setMyRole(d.myParticipant.role);
+                  }
+                  // Reconnect LiveKit with fresh token
+                  if (d.livekitToken) {
+                    const me = d.myParticipant || d.participants?.find(
+                      (p: ServerParticipant) => p.user_id === currentUserId,
+                    );
+                    reconnectLiveKit(d.livekitToken, me?.role || "listener");
+                  }
+                  setConnectionState(ConnectionState.Connected);
+                } else {
+                  console.error("[Room] Failed to restore room state:", response.error);
+                  Alert.alert("Error", "Failed to restore room. Returning to community.");
+                  activeRoomIdRef.current = null;
+                  socketRef.current?.disconnect();
+                  router.replace("/(tabs)/community");
                 }
-                // Reconnect LiveKit with fresh token
-                if (d.livekitToken) {
-                  const me = d.participants?.find(
-                    (p: ServerParticipant) => p.user_id === currentUserId,
-                  );
-                  reconnectLiveKit(d.livekitToken, me?.role || "listener");
-                }
-                setConnectionState(ConnectionState.Connected);
-              } else {
-                console.error("[Room] Failed to restore room state:", response.error);
-                // Room may no longer exist
-                Alert.alert("Error", "Failed to restore room. Returning to community.");
-                activeRoomIdRef.current = null;
-                socketRef.current?.disconnect();
-                router.replace("/(tabs)/community");
-              }
-            },
-          );
+              },
+            );
+            // Return unchanged — we're just reading the current state
+            return currentMessages;
+          });
         });
 
         socket!.io.on("reconnect_failed", () => {
