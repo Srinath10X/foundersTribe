@@ -60,13 +60,15 @@ export async function joinRoom(userId, roomId, socketId) {
       "Participant restored",
     );
   } else {
+    // Restore host role if this user is the room creator
+    const role = room.host_id === userId ? "host" : "listener";
     participant = await participantRepository.addParticipant(
       roomId,
       userId,
-      "listener",
+      role,
       socketId,
     );
-    logger.info({ roomId, userId }, "New participant joined");
+    logger.info({ roomId, userId, role }, "New participant joined");
   }
 
   const livekitToken = await generateLiveKitToken(
