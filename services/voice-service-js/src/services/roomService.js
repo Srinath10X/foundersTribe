@@ -1,4 +1,4 @@
-import { generateLiveKitToken } from "../config/livekit.js";
+import { generateLiveKitToken, livekitWsUrl } from "../config/livekit.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/AppError.js";
 import { roomRepository } from "../repositories/roomRepository.js";
@@ -20,12 +20,13 @@ function getGrantsForRole(role) {
 export async function createRoom(userId, title, type = "public") {
   const room = await roomRepository.createRoom(userId, title, type);
 
-  const participant = await participantRepository.addParticipant(
+  let participant = await participantRepository.addParticipant(
     room.id,
     userId,
     "host",
     null,
   );
+  participant = await participantRepository.enrichOneWithProfile(participant);
 
   const livekitToken = await generateLiveKitToken(
     userId,
@@ -34,7 +35,7 @@ export async function createRoom(userId, title, type = "public") {
   );
 
   logger.info({ roomId: room.id, userId }, "Room created");
-  return { room, participant, livekitToken };
+  return { room, participant, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function joinRoom(userId, roomId, socketId) {
@@ -52,6 +53,13 @@ export async function joinRoom(userId, roomId, socketId) {
   let participant = await participantRepository.getParticipant(roomId, userId);
 
   if (participant) {
+    // Existing participant — restore connection and preserve role
+    // If user was the host but their role got reset, fix it
+    let role = participant.role;
+    if (room.host_id === userId && role === "listener") {
+      role = "host";
+      await participantRepository.updateParticipant(roomId, userId, { role: "host", mic_enabled: true });
+    }
     await participantRepository.updateSocketId(roomId, userId, socketId);
     const updated = await participantRepository.getParticipant(roomId, userId);
     if (updated) participant = updated;
@@ -60,14 +68,19 @@ export async function joinRoom(userId, roomId, socketId) {
       "Participant restored",
     );
   } else {
+    // Restore host role if this user is the room creator
+    const role = room.host_id === userId ? "host" : "listener";
     participant = await participantRepository.addParticipant(
       roomId,
       userId,
-      "listener",
+      role,
       socketId,
     );
-    logger.info({ roomId, userId }, "New participant joined");
+    logger.info({ roomId, userId, role }, "New participant joined");
   }
+
+  // Enrich with display name from profiles
+  participant = await participantRepository.enrichOneWithProfile(participant);
 
   const livekitToken = await generateLiveKitToken(
     userId,
@@ -75,7 +88,7 @@ export async function joinRoom(userId, roomId, socketId) {
     getGrantsForRole(participant.role),
   );
 
-  return { participant, livekitToken, room };
+  return { participant, livekitToken, livekitUrl: livekitWsUrl, room };
 }
 
 export async function leaveRoom(userId, roomId) {
@@ -122,8 +135,12 @@ export async function getRoomState(roomId) {
     throw new AppError("Room not found", 404);
   }
 
-  const participants =
+  const rawParticipants =
     await participantRepository.getConnectedParticipants(roomId);
+
+  // Enrich with display names from profiles
+  const participants =
+    await participantRepository.enrichWithProfiles(rawParticipants);
 
   return { room, participants };
 }

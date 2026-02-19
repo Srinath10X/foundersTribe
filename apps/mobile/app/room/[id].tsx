@@ -26,6 +26,7 @@ import {
 } from "livekit-client";
 import { io, Socket } from "socket.io-client";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from "expo-av";
 
 import {
   VOICE_API_URL,
@@ -96,6 +97,10 @@ export default function RoomScreen() {
   const [roomTitle, setRoomTitle] = useState("Room");
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
+  const [selectedParticipant, setSelectedParticipant] = useState<
+    (ServerParticipant & { isSpeaking: boolean; isMicEnabled: boolean; displayName: string }) | null
+  >(null);
+  const [isActionModalOpen, setIsActionModalOpen] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const roomRef = useRef<Room | null>(null);
@@ -106,6 +111,11 @@ export default function RoomScreen() {
   const isReconnectingLiveKitRef = useRef(false);
   // Track the roomId for reconnection logic
   const activeRoomIdRef = useRef<string | null>(null);
+  // Stable router ref so event handlers don't need router in their dep arrays
+  const routerRef = useRef(router);
+  // Guard to prevent concurrent mic toggles (causes duplicate track listener warning)
+  const isMicTogglingRef = useRef(false);
+  useEffect(() => { routerRef.current = router; }, [router]);
 
   const displayRole = (role: string) => {
     if (role === "listener") return "audience";
@@ -116,15 +126,18 @@ export default function RoomScreen() {
     myRole === "host" || myRole === "co-host" || myRole === "speaker";
 
   // Merge server participant data with LiveKit speaking data
-  const mergedParticipants = serverParticipants.map((sp) => {
-    const lkp = livekitParticipants.find((p) => p.identity === sp.user_id);
-    return {
-      ...sp,
-      isSpeaking: lkp?.isSpeaking || false,
-      isMicEnabled: lkp?.isMicEnabled || false,
-      displayName: sp.user_name || sp.user_id.slice(0, 8),
-    };
-  });
+  // Filter out disconnected participants to keep the list clean
+  const mergedParticipants = serverParticipants
+    .filter((sp) => sp.is_connected !== false)
+    .map((sp) => {
+      const lkp = livekitParticipants.find((p) => p.identity === sp.user_id);
+      return {
+        ...sp,
+        isSpeaking: lkp?.isSpeaking || false,
+        isMicEnabled: lkp?.isMicEnabled || false,
+        displayName: sp.user_name || sp.user_id.slice(0, 8),
+      };
+    });
 
   const handleLeaveRoom = useCallback(() => {
     activeRoomIdRef.current = null;
@@ -138,16 +151,32 @@ export default function RoomScreen() {
     isReconnectingLiveKitRef.current = true; // prevent ConnectionStateChanged from double-navigating
     roomRef.current?.disconnect();
     roomRef.current = null;
-    router.replace("/(tabs)/community");
-  }, [roomId, router]);
+    routerRef.current.replace("/(tabs)/community");
+  // roomId is the only real dep — routerRef is stable
+  }, [roomId]);
 
   // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
   const reconnectLiveKit = useCallback(
-    async (newToken: string, newRole: string) => {
+    async (newToken: string, newRole: string, livekitUrl?: string) => {
       isReconnectingLiveKitRef.current = true;
       try {
         roomRef.current?.disconnect();
-        const newRoom = await connectToLiveKitRoom(newToken);
+        // Ensure speaker preferred before reconnecting LiveKit
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+            playsInSilentModeIOS: true,
+            shouldDuckAndroid: true,
+            interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+            playThroughEarpieceAndroid: false,
+            staysActiveInBackground: true,
+          });
+          console.log("[Room] Audio mode set before LiveKit reconnect (speaker preferred)");
+        } catch (err) {
+          console.warn("[Room] Failed to set audio mode before reconnect:", err);
+        }
+        const newRoom = await connectToLiveKitRoom(newToken, livekitUrl);
         setRoom(newRoom);
         roomRef.current = newRoom;
         setConnectionState(ConnectionState.Connected);
@@ -171,14 +200,38 @@ export default function RoomScreen() {
     [],
   );
 
-  // LiveKit event listener attachment — extracted so we can re-attach after token swap
+  // LiveKit event listener attachment — extracted so we can re-attach after token swap.
+  // IMPORTANT: removeAllListeners() is called first to prevent duplicate handlers
+  // when this is called again after a token swap (reconnectLiveKit).
   const attachLiveKitListeners = useCallback((lkRoom: Room) => {
+    // Remove any previously attached listeners on this room instance first
+    lkRoom.removeAllListeners();
+
     const updateLKParticipants = () => {
       const all = [
         lkRoom.localParticipant,
         ...Array.from(lkRoom.remoteParticipants.values()),
       ];
       setLivekitParticipants(all.map((p) => getParticipantInfo(p)));
+    };
+
+    const handleConnectionStateChanged = (state: ConnectionState) => {
+      // Skip if we're intentionally swapping LiveKit tokens
+      if (isReconnectingLiveKitRef.current) return;
+
+      setConnectionState(state);
+      if (state === ConnectionState.Disconnected) {
+        Alert.alert(
+          "Disconnected",
+          "You have been disconnected from the room.",
+        );
+        activeRoomIdRef.current = null;
+        socketRef.current?.removeAllListeners();
+        socketRef.current?.disconnect();
+        socketRef.current = null;
+        roomRef.current = null;
+        routerRef.current.replace("/(tabs)/community");
+      }
     };
 
     lkRoom
@@ -189,27 +242,11 @@ export default function RoomScreen() {
       .on(RoomEvent.TrackUnpublished, updateLKParticipants)
       .on(RoomEvent.LocalTrackPublished, updateLKParticipants)
       .on(RoomEvent.LocalTrackUnpublished, updateLKParticipants)
-      .on(RoomEvent.ConnectionStateChanged, (state) => {
-        // Skip if we're intentionally swapping LiveKit tokens
-        if (isReconnectingLiveKitRef.current) return;
-
-        setConnectionState(state);
-        if (state === ConnectionState.Disconnected) {
-          Alert.alert(
-            "Disconnected",
-            "You have been disconnected from the room.",
-          );
-          activeRoomIdRef.current = null;
-          socketRef.current?.removeAllListeners();
-          socketRef.current?.disconnect();
-          socketRef.current = null;
-          roomRef.current = null;
-          router.replace("/(tabs)/community");
-        }
-      });
+      .on(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
 
     updateLKParticipants();
-  }, [router]);
+  // No external deps — uses only refs (stable) and setters (stable)
+  }, []);
 
   // Setup socket and LiveKit
   useEffect(() => {
@@ -222,6 +259,23 @@ export default function RoomScreen() {
       try {
         setConnectionState(ConnectionState.Connecting);
         console.log("[Room] Connecting socket to:", VOICE_API_URL);
+
+        // Ensure audio routes to speaker by default where possible
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+            playsInSilentModeIOS: true,
+            shouldDuckAndroid: true,
+            interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+            // false = prefer speaker on Android (don't play through earpiece)
+            playThroughEarpieceAndroid: false,
+            staysActiveInBackground: true,
+          });
+          console.log("[Room] Audio mode set (speaker preferred)");
+        } catch (err) {
+          console.warn("[Room] Failed to set audio mode:", err);
+        }
 
         // 1. Connect Socket.IO
         socket = io(VOICE_API_URL, {
@@ -271,7 +325,10 @@ export default function RoomScreen() {
         }
 
         // 3. Connect LiveKit
-        const livekitRoom = await connectToLiveKitRoom(result.livekitToken);
+        const livekitRoom = await connectToLiveKitRoom(
+          result.livekitToken,
+          result.livekitUrl,
+        );
         if (cancelled) {
           livekitRoom.disconnect();
           return;
@@ -314,11 +371,16 @@ export default function RoomScreen() {
           "participant_joined",
           (data: { participant: ServerParticipant }) => {
             setServerParticipants((prev) => {
-              const exists = prev.some(
+              const idx = prev.findIndex(
                 (p) => p.user_id === data.participant.user_id,
               );
-              if (exists) return prev;
-              return [...prev, data.participant];
+              if (idx >= 0) {
+                // User already in list (e.g. reconnected) — update their data
+                const updated = [...prev];
+                updated[idx] = { ...data.participant, is_connected: true };
+                return updated;
+              }
+              return [...prev, { ...data.participant, is_connected: true }];
             });
           },
         );
@@ -332,41 +394,87 @@ export default function RoomScreen() {
         socket!.on(
           "participant_updated",
           (data: { participant: ServerParticipant }) => {
-            setServerParticipants((prev) =>
-              prev.map((p) =>
-                p.user_id === data.participant.user_id ? data.participant : p,
-              ),
-            );
+            setServerParticipants((prev) => {
+              const exists = prev.some(
+                (p) => p.user_id === data.participant.user_id,
+              );
+              if (exists) {
+                return prev.map((p) =>
+                  p.user_id === data.participant.user_id
+                    ? data.participant
+                    : p,
+                );
+              }
+              // Participant not in list yet (e.g. reconnected) — add them
+              return [...prev, data.participant];
+            });
             if (data.participant.user_id === currentUserId) {
               setMyRole(data.participant.role);
             }
           },
         );
 
+        socket!.on(
+          "participant_disconnected",
+          (data: { userId: string }) => {
+            setServerParticipants((prev) =>
+              prev.map((p) =>
+                p.user_id === data.userId
+                  ? { ...p, is_connected: false }
+                  : p,
+              ),
+            );
+          },
+        );
+
         // FIX #4: role_changed — reconnect LiveKit without tearing down socket
         socket!.on(
           "role_changed",
-          (data: { participant: ServerParticipant; livekitToken: string }) => {
+          (data: {
+            participant: ServerParticipant;
+            livekitToken: string;
+            livekitUrl?: string;
+          }) => {
             setMyRole(data.participant.role);
-            reconnectLiveKit(data.livekitToken, data.participant.role);
+            reconnectLiveKit(
+              data.livekitToken,
+              data.participant.role,
+              data.livekitUrl,
+            );
           },
         );
 
         // FIX #4: mic_granted — reconnect LiveKit without tearing down socket
         socket!.on(
           "mic_granted",
-          (data: { participant: ServerParticipant; livekitToken: string }) => {
+          (data: {
+            participant: ServerParticipant;
+            livekitToken: string;
+            livekitUrl?: string;
+          }) => {
             setMyRole(data.participant.role);
-            reconnectLiveKit(data.livekitToken, data.participant.role);
+            reconnectLiveKit(
+              data.livekitToken,
+              data.participant.role,
+              data.livekitUrl,
+            );
           },
         );
 
         // FIX #4: mic_revoked — reconnect LiveKit with listener permissions
         socket!.on(
           "mic_revoked",
-          (data: { participant: ServerParticipant; livekitToken: string }) => {
+          (data: {
+            participant: ServerParticipant;
+            livekitToken: string;
+            livekitUrl?: string;
+          }) => {
             setMyRole(data.participant.role);
-            reconnectLiveKit(data.livekitToken, data.participant.role);
+            reconnectLiveKit(
+              data.livekitToken,
+              data.participant.role,
+              data.livekitUrl,
+            );
           },
         );
 
@@ -422,46 +530,58 @@ export default function RoomScreen() {
           const currentRoomId = activeRoomIdRef.current;
           if (!currentRoomId || !socket?.connected) return;
 
-          const lastMsg = chatMessages[chatMessages.length - 1];
-          socket!.emit(
-            "restore_room_state",
-            {
-              roomId: currentRoomId,
-              lastMessageAt: lastMsg?.created_at,
-            },
-            (response: any) => {
-              if (response.success) {
-                console.log("[Room] Room state restored after reconnect");
-                const d = response.data;
-                if (d.participants) setServerParticipants(d.participants);
-                if (d.missedMessages?.length) {
-                  setChatMessages((prev) => {
-                    const newMsgs = d.missedMessages
-                      .map(normalizeMessage)
-                      .filter(
-                        (m: ChatMessage) => !prev.some((p) => p.id === m.id),
-                      );
-                    return [...prev, ...newMsgs];
-                  });
+          // Use setChatMessages callback to get current messages without stale closure
+          setChatMessages((currentMessages) => {
+            const lastMsg = currentMessages[currentMessages.length - 1];
+            socket!.emit(
+              "restore_room_state",
+              {
+                roomId: currentRoomId,
+                lastMessageAt: lastMsg?.created_at,
+              },
+              (response: any) => {
+                if (response.success) {
+                  console.log("[Room] Room state restored after reconnect");
+                  const d = response.data;
+                  if (d.participants) setServerParticipants(d.participants);
+                  if (d.missedMessages?.length) {
+                    setChatMessages((prev) => {
+                      const newMsgs = d.missedMessages
+                        .map(normalizeMessage)
+                        .filter(
+                          (m: ChatMessage) => !prev.some((p) => p.id === m.id),
+                        );
+                      return [...prev, ...newMsgs];
+                    });
+                  }
+                  // Update my role from restored server state
+                  if (d.myParticipant) {
+                    setMyRole(d.myParticipant.role);
+                  }
+                  // Reconnect LiveKit with fresh token
+                  if (d.livekitToken) {
+                    const me = d.myParticipant || d.participants?.find(
+                      (p: ServerParticipant) => p.user_id === currentUserId,
+                    );
+                    reconnectLiveKit(
+                      d.livekitToken,
+                      me?.role || "listener",
+                      d.livekitUrl,
+                    );
+                  }
+                  setConnectionState(ConnectionState.Connected);
+                } else {
+                  console.error("[Room] Failed to restore room state:", response.error);
+                  Alert.alert("Error", "Failed to restore room. Returning to community.");
+                  activeRoomIdRef.current = null;
+                  socketRef.current?.disconnect();
+                  router.replace("/(tabs)/community");
                 }
-                // Reconnect LiveKit with fresh token
-                if (d.livekitToken) {
-                  const me = d.participants?.find(
-                    (p: ServerParticipant) => p.user_id === currentUserId,
-                  );
-                  reconnectLiveKit(d.livekitToken, me?.role || "listener");
-                }
-                setConnectionState(ConnectionState.Connected);
-              } else {
-                console.error("[Room] Failed to restore room state:", response.error);
-                // Room may no longer exist
-                Alert.alert("Error", "Failed to restore room. Returning to community.");
-                activeRoomIdRef.current = null;
-                socketRef.current?.disconnect();
-                router.replace("/(tabs)/community");
-              }
-            },
-          );
+              },
+            );
+            // Return unchanged — we're just reading the current state
+            return currentMessages;
+          });
         });
 
         socket!.io.on("reconnect_failed", () => {
@@ -502,6 +622,9 @@ export default function RoomScreen() {
 
   // Toggle mic
   const handleToggleMic = async () => {
+    // Prevent concurrent calls — each call to setMicrophoneEnabled recreates the
+    // media track internally, which triggers the duplicate event-listener warning
+    if (isMicTogglingRef.current) return;
     if (!room?.localParticipant) return;
     if (!canSpeak) {
       Alert.alert(
@@ -510,9 +633,28 @@ export default function RoomScreen() {
       );
       return;
     }
+    isMicTogglingRef.current = true;
     const newState = !isMicEnabled;
-    await toggleMic(room.localParticipant, newState);
-    setIsMicEnabled(newState);
+    try {
+      // Ensure speaker routing before enabling microphone
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true,
+      });
+    } catch (err) {
+      console.warn("[Room] Failed to set audio mode before toggle:", err);
+    }
+    try {
+      await toggleMic(room.localParticipant, newState);
+      setIsMicEnabled(newState);
+    } finally {
+      isMicTogglingRef.current = false;
+    }
   };
 
   // Send chat message
@@ -540,20 +682,151 @@ export default function RoomScreen() {
     });
   };
 
-  // Promote audience → speaker
-  const handlePromote = (targetUserId: string) => {
+  // Promote user to a specific role
+  const handlePromote = (targetUserId: string, role: string) => {
     const socket = socketRef.current;
     if (!socket?.connected) return;
 
     socket.emit(
       "promote_user",
-      { targetId: targetUserId, roomId, role: "speaker" },
+      { targetId: targetUserId, roomId, role },
       (response: any) => {
         if (!response.success) {
           Alert.alert("Error", response.error || "Failed to promote user");
         }
       },
     );
+    setIsActionModalOpen(false);
+  };
+
+  // Demote user to listener
+  const handleDemote = (targetUserId: string) => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    socket.emit(
+      "demote_user",
+      { targetId: targetUserId, roomId },
+      (response: any) => {
+        if (!response.success) {
+          Alert.alert("Error", response.error || "Failed to demote user");
+        }
+      },
+    );
+    setIsActionModalOpen(false);
+  };
+
+  // Remove user from room
+  const handleRemoveUser = (targetUserId: string) => {
+    const socket = socketRef.current;
+    if (!socket?.connected) return;
+
+    Alert.alert(
+      "Remove User",
+      "Are you sure you want to remove this user from the room?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            socket.emit(
+              "remove_user",
+              { targetId: targetUserId, roomId },
+              (response: any) => {
+                if (!response.success) {
+                  Alert.alert(
+                    "Error",
+                    response.error || "Failed to remove user",
+                  );
+                }
+              },
+            );
+            setIsActionModalOpen(false);
+          },
+        },
+      ],
+    );
+  };
+
+  // Open participant action modal
+  const openParticipantActions = (
+    participant: (typeof mergedParticipants)[0],
+  ) => {
+    setSelectedParticipant(participant);
+    setIsActionModalOpen(true);
+  };
+
+  // Get available actions for a participant based on my role and their role
+  const getParticipantActions = (
+    participant: (typeof mergedParticipants)[0],
+  ) => {
+    const actions: {
+      label: string;
+      icon: string;
+      color?: string;
+      onPress: () => void;
+    }[] = [];
+    const targetRole = participant.role;
+
+    if (myRole === "host") {
+      if (targetRole === "listener") {
+        actions.push({
+          label: "Promote to Speaker",
+          icon: "mic-outline",
+          onPress: () => handlePromote(participant.user_id, "speaker"),
+        });
+        actions.push({
+          label: "Promote to Co-Host",
+          icon: "shield-outline",
+          onPress: () => handlePromote(participant.user_id, "co-host"),
+        });
+      }
+      if (targetRole === "speaker") {
+        actions.push({
+          label: "Promote to Co-Host",
+          icon: "shield-outline",
+          onPress: () => handlePromote(participant.user_id, "co-host"),
+        });
+        actions.push({
+          label: "Demote to Listener",
+          icon: "mic-off-outline",
+          onPress: () => handleDemote(participant.user_id),
+        });
+      }
+      if (targetRole === "co-host") {
+        actions.push({
+          label: "Demote to Listener",
+          icon: "mic-off-outline",
+          onPress: () => handleDemote(participant.user_id),
+        });
+      }
+      if (targetRole !== "host") {
+        actions.push({
+          label: "Remove from Room",
+          icon: "person-remove-outline",
+          color: "destructive",
+          onPress: () => handleRemoveUser(participant.user_id),
+        });
+      }
+    } else if (myRole === "co-host") {
+      if (targetRole === "listener") {
+        actions.push({
+          label: "Promote to Speaker",
+          icon: "mic-outline",
+          onPress: () => handlePromote(participant.user_id, "speaker"),
+        });
+      }
+      if (targetRole === "speaker") {
+        actions.push({
+          label: "Demote to Listener",
+          icon: "mic-off-outline",
+          onPress: () => handleDemote(participant.user_id),
+        });
+      }
+    }
+
+    return actions;
   };
 
   // Render participant item
@@ -563,10 +836,13 @@ export default function RoomScreen() {
     item: (typeof mergedParticipants)[0];
   }) => {
     const isMe = item.user_id === currentUserId;
-    const isAudience = item.role === "listener";
-    const showPromote = myRole === "host" && isAudience && !isMe;
+    const hasActions =
+      !isMe &&
+      (myRole === "host" || myRole === "co-host") &&
+      item.role !== "host" &&
+      (myRole === "host" || (myRole === "co-host" && item.role !== "co-host"));
 
-    return (
+    const card = (
       <View style={styles.participantCard}>
         <View
           style={[
@@ -615,22 +891,21 @@ export default function RoomScreen() {
         >
           {displayRole(item.role)}
         </Text>
-        {showPromote && (
-          <TouchableOpacity
-            style={[
-              styles.promoteButton,
-              { backgroundColor: theme.brand.primary },
-            ]}
-            onPress={() => handlePromote(item.user_id)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.promoteText, { color: theme.text.inverse }]}>
-              Promote
-            </Text>
-          </TouchableOpacity>
-        )}
       </View>
     );
+
+    if (hasActions) {
+      return (
+        <TouchableOpacity
+          onPress={() => openParticipantActions(item)}
+          activeOpacity={0.7}
+        >
+          {card}
+        </TouchableOpacity>
+      );
+    }
+
+    return card;
   };
 
   // Render chat message
@@ -1029,6 +1304,126 @@ export default function RoomScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Participant Actions Modal */}
+      <Modal
+        visible={isActionModalOpen}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setIsActionModalOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.actionModalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsActionModalOpen(false)}
+        >
+          <View
+            style={[
+              styles.actionModalContainer,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            {selectedParticipant && (
+              <>
+                <View style={styles.actionModalHeader}>
+                  <View
+                    style={[
+                      styles.actionModalAvatar,
+                      { backgroundColor: theme.brand.primary + "18" },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.actionModalAvatarText,
+                        { color: theme.brand.primary },
+                      ]}
+                    >
+                      {selectedParticipant.displayName.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.actionModalHeaderInfo}>
+                    <Text
+                      style={[
+                        styles.actionModalName,
+                        { color: theme.text.primary },
+                      ]}
+                    >
+                      {selectedParticipant.displayName}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.actionModalRole,
+                        { color: theme.text.tertiary },
+                      ]}
+                    >
+                      {displayRole(selectedParticipant.role)}
+                    </Text>
+                  </View>
+                </View>
+                <View
+                  style={[
+                    styles.actionModalDivider,
+                    { backgroundColor: theme.border },
+                  ]}
+                />
+                {getParticipantActions(selectedParticipant).map(
+                  (action, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.actionModalItem}
+                      onPress={action.onPress}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={action.icon as any}
+                        size={20}
+                        color={
+                          action.color === "destructive"
+                            ? theme.error
+                            : theme.text.primary
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.actionModalItemText,
+                          {
+                            color:
+                              action.color === "destructive"
+                                ? theme.error
+                                : theme.text.primary,
+                          },
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ),
+                )}
+                <TouchableOpacity
+                  style={[
+                    styles.actionModalCancel,
+                    { backgroundColor: theme.surfaceElevated },
+                  ]}
+                  onPress={() => setIsActionModalOpen(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.actionModalCancelText,
+                      { color: theme.text.secondary },
+                    ]}
+                  >
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Chat Modal */}
       <Modal
@@ -1511,5 +1906,74 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+  },
+  // Participant Action Modal
+  actionModalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  actionModalContainer: {
+    width: "80%",
+    borderRadius: Layout.radius.xl,
+    borderWidth: 1,
+    padding: Spacing.md,
+    gap: Spacing.xs,
+  },
+  actionModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingBottom: Spacing.xs,
+  },
+  actionModalAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  actionModalAvatarText: {
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  actionModalHeaderInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  actionModalName: {
+    ...Typography.presets.body,
+    fontWeight: "600",
+  },
+  actionModalRole: {
+    ...Typography.presets.caption,
+    textTransform: "capitalize",
+  },
+  actionModalDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: Spacing.xs,
+  },
+  actionModalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    borderRadius: Layout.radius.md,
+  },
+  actionModalItemText: {
+    ...Typography.presets.body,
+    fontWeight: "500",
+  },
+  actionModalCancel: {
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+    borderRadius: Layout.radius.md,
+    marginTop: Spacing.xs,
+  },
+  actionModalCancelText: {
+    ...Typography.presets.body,
+    fontWeight: "600",
   },
 });

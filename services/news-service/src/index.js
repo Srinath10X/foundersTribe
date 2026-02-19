@@ -5,11 +5,19 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const requiredEnv = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"];
+const missing = requiredEnv.filter((key) => !process.env[key]);
+
+if (missing.length > 0) {
+  console.error("❌ Missing environment variables:", missing);
+  process.exit(1);
+}
+
 const app = express();
 app.use(express.json());
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY,
+  process.env.SUPABASE_SERVICE_KEY,
 );
 
 const authenticate = async (req, res, next) => {
@@ -245,7 +253,7 @@ app.post("/api/user_liked_articles", authenticate, async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

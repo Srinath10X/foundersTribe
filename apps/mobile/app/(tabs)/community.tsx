@@ -1,669 +1,237 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  FlatList,
   Platform,
-  RefreshControl,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { io, Socket } from "socket.io-client";
+import { Image } from "expo-image";
 
-import CreateRoomModal from "../../components/CreateRoomModal";
+
+import TribesTab from "../../components/community/TribesTab";
+import FindCofounderTab from "../../components/community/FindCofounderTab";
+import FindFreelancerTab from "../../components/community/FindFreelancerTab";
+import VoiceChannelsTab from "../../components/community/VoiceChannelsTab";
+import CreateTribeModal from "../../components/CreateTribeModal";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
-import { VOICE_API_URL } from "../../lib/livekit";
+import * as tribeApi from "../../lib/tribeApi";
 import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
 
-interface RoomItem {
-  id: string;
-  title: string;
-  type: "public" | "private";
-  host_id: string;
-  participant_count: number;
-  is_active: boolean;
-  created_at?: string;
-}
+const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 
-type TabMode = "public" | "private";
+/* ── Sub-tab config ─────────────────────────────────────────── */
 
-/* ================================================================ */
-/*  Helpers                                                          */
-/* ================================================================ */
+type SubTab = "tribes" | "find-cofounder" | "find-freelancer";
+type ActiveView = SubTab | "voice-channels";
 
-function timeAgo(dateStr?: string): string {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
-/** REST-based room creation — avoids dual-socket race condition */
-async function createRoomViaREST(
-  title: string,
-  type: "public" | "private",
-  authToken: string,
-): Promise<{ room: RoomItem }> {
-  const res = await fetch(`${VOICE_API_URL}/api/create_room`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${authToken}`,
-    },
-    body: JSON.stringify({ title, type }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || "Failed to create room");
-  }
-  return res.json();
-}
-
-/* ================================================================ */
-/*  Live Pulse Animation                                             */
-/* ================================================================ */
-
-function LivePulse({ color }: { color: string }) {
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 0.3,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [pulse]);
-
-  return (
-    <View style={pulseStyles.wrap}>
-      <Animated.View
-        style={[pulseStyles.outer, { backgroundColor: color, opacity: pulse }]}
-      />
-      <View style={[pulseStyles.inner, { backgroundColor: color }]} />
-    </View>
-  );
-}
-
-const pulseStyles = StyleSheet.create({
-  wrap: { width: 20, height: 20, justifyContent: "center", alignItems: "center", marginTop: 2 },
-  outer: { position: "absolute", width: 16, height: 16, borderRadius: 8 },
-  inner: { width: 8, height: 8, borderRadius: 4 },
-});
+const SUB_TABS: {
+  key: SubTab;
+  label: string;
+  icon: string;
+  iconFocused: string;
+}[] = [
+  {
+    key: "tribes",
+    label: "Tribes",
+    icon: "shield-outline",
+    iconFocused: "shield",
+  },
+  {
+    key: "find-cofounder",
+    label: "Co-Founder",
+    icon: "people-outline",
+    iconFocused: "people",
+  },
+  {
+    key: "find-freelancer",
+    label: "Freelancer",
+    icon: "briefcase-outline",
+    iconFocused: "briefcase",
+  },
+];
 
 /* ================================================================ */
 /*  Community Screen                                                 */
 /* ================================================================ */
 
 export default function CommunityScreen() {
-  const router = useRouter();
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
+  const authToken = session?.access_token || "";
 
-  const [activeTab, setActiveTab] = useState<TabMode>("public");
-  const [rooms, setRooms] = useState<RoomItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isCreateModalVisible, setCreateModalVisible] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>("tribes");
+  const [showCreateTribe, setShowCreateTribe] = useState(false);
 
-  const currentUserId = session?.user?.id;
-  const authToken = session?.access_token;
+  /* ── Header action handlers ──────────────────────────────── */
 
-  /* ── Socket.io connection ───────────────────────────────── */
-
-  useEffect(() => {
-    if (!authToken) return;
-
-    const socket = io(VOICE_API_URL, {
-      transports: ["websocket"],
-      auth: { token: authToken },
+  const handleCreateTribe = async (
+    name: string,
+    description: string,
+    isPublic: boolean,
+  ) => {
+    await tribeApi.createTribe(authToken, {
+      name,
+      description: description || undefined,
+      is_public: isPublic,
     });
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      console.log("[Community] Connected to voice service:", socket.id);
-      setError(null);
-      fetchRooms();
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("[Community] Socket error:", err.message);
-      setError("Unable to connect to voice server");
-      setLoading(false);
-    });
-
-    /* Real-time: new room created */
-    socket.on(
-      "room_created",
-      (data: { room: RoomItem; participant_count: number }) => {
-        setRooms((prev) => {
-          if (prev.some((r) => r.id === data.room.id)) return prev;
-          return [
-            { ...data.room, participant_count: data.participant_count },
-            ...prev,
-          ];
-        });
-      },
-    );
-
-    /* Real-time: participant count changed */
-    socket.on(
-      "room_updated",
-      (data: { roomId: string; participant_count: number }) => {
-        setRooms((prev) =>
-          prev.map((r) =>
-            r.id === data.roomId
-              ? { ...r, participant_count: data.participant_count }
-              : r,
-          ),
-        );
-      },
-    );
-
-    /* Real-time: room ended/removed */
-    socket.on("room_removed", (data: { roomId: string }) => {
-      setRooms((prev) => prev.filter((r) => r.id !== data.roomId));
-    });
-
-    return () => {
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [authToken]);
-
-  /* ── Fetch all active rooms (REST) ──────────────────────── */
-
-  const fetchRooms = useCallback(async () => {
-    if (!authToken) return;
-    try {
-      const res = await fetch(`${VOICE_API_URL}/api/get_all_available_rooms`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRooms(data.rooms || []);
-        setError(null);
-      } else {
-        setError("Failed to load rooms");
-      }
-    } catch (err) {
-      console.error("[Community] Fetch rooms failed:", err);
-      setError("Network error — pull to retry");
-    } finally {
-      setLoading(false);
-    }
-  }, [authToken]);
-
-  /* ── Pull-to-refresh ────────────────────────────────────── */
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchRooms();
-    setRefreshing(false);
+    setShowCreateTribe(false);
   };
 
-  /* ── Join room → navigate to room page ──────────────────── */
+  /* ── Sub-tab content ─────────────────────────────────────── */
 
-  const handleJoinRoom = (roomId: string) => {
-    router.push(`/room/${roomId}` as any);
-  };
-
-  /* ── Create room via REST → navigate to room page ──────── */
-
-  const handleCreateRoom = async (roomName: string, isPublic: boolean) => {
-    if (!authToken) return;
-
-    try {
-      const result = await createRoomViaREST(
-        roomName,
-        isPublic ? "public" : "private",
-        authToken,
-      );
-      setCreateModalVisible(false);
-      router.push(`/room/${result.room.id}` as any);
-    } catch (err: any) {
-      console.error("[Community] Create room failed:", err.message);
+  const renderContent = () => {
+    switch (activeView) {
+      case "tribes":
+        return <TribesTab />;
+      case "find-cofounder":
+        return <FindCofounderTab />;
+      case "find-freelancer":
+        return <FindFreelancerTab />;
+      case "voice-channels":
+        return <VoiceChannelsTab />;
     }
   };
 
-  /* ── Retry ──────────────────────────────────────────────── */
-
-  const handleRetry = () => {
-    setLoading(true);
-    setError(null);
-    fetchRooms();
-  };
-
-  /* ── Derived data ───────────────────────────────────────── */
-
-  const publicRooms = rooms.filter((r) => r.type === "public");
-  const privateRooms = rooms.filter(
-    (r) => r.type === "private" || r.host_id === currentUserId,
-  );
-  const displayedRooms = activeTab === "public" ? publicRooms : privateRooms;
-
-  /* ── Accent helpers ─────────────────────────────────────── */
-
-  const accentGlow = theme.brand.primary + "20";
-  const accentBorder = theme.brand.primary + "40";
-
-  /* ── Room card ──────────────────────────────────────────── */
-
-  const RoomCard = ({ room }: { room: RoomItem }) => {
-    const isHost = room.host_id === currentUserId;
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.card,
-          {
-            backgroundColor: theme.surface,
-            borderColor:
-              room.participant_count > 0 ? accentBorder : theme.border,
-          },
-        ]}
-        onPress={() => handleJoinRoom(room.id)}
-        activeOpacity={0.7}
-      >
-        {/* Top: icon + title + live dot */}
-        <View style={styles.cardTopRow}>
-          <View style={[styles.roomIcon, { backgroundColor: accentGlow }]}>
-            <Ionicons
-              name={
-                room.type === "public"
-                  ? "radio-outline"
-                  : "lock-closed-outline"
-              }
-              size={20}
-              color={theme.brand.primary}
-            />
-          </View>
-
-          <View style={styles.cardTitleWrap}>
-            <Text
-              style={[styles.roomTitle, { color: theme.text.primary }]}
-              numberOfLines={2}
-            >
-              {room.title}
-            </Text>
-            {room.created_at && (
-              <Text
-                style={[styles.timeAgo, { color: theme.text.tertiary }]}
-              >
-                {timeAgo(room.created_at)}
-              </Text>
-            )}
-          </View>
-
-          {room.participant_count > 0 && <LivePulse color={theme.success} />}
-        </View>
-
-        {/* Bottom: meta chips + join button */}
-        <View style={styles.cardBottomRow}>
-          <View style={styles.metaRow}>
-            {/* Participant count */}
-            <View style={styles.metaChip}>
-              <Ionicons
-                name="people-outline"
-                size={14}
-                color={theme.text.tertiary}
-              />
-              <Text
-                style={[styles.metaChipText, { color: theme.text.tertiary }]}
-              >
-                {room.participant_count}{" "}
-                {room.participant_count === 1 ? "listening" : "listening"}
-              </Text>
-            </View>
-
-            {/* Host badge */}
-            {isHost && (
-              <View
-                style={[
-                  styles.chipBadge,
-                  { backgroundColor: theme.brand.primary + "20" },
-                ]}
-              >
-                <Ionicons name="star" size={10} color={theme.brand.primary} />
-                <Text
-                  style={[
-                    styles.chipBadgeText,
-                    { color: theme.brand.primary },
-                  ]}
-                >
-                  Host
-                </Text>
-              </View>
-            )}
-
-            {/* Public / Private label */}
-            <View
-              style={[
-                styles.chipBadge,
-                {
-                  backgroundColor:
-                    room.type === "public"
-                      ? theme.success + "15"
-                      : theme.info + "15",
-                },
-              ]}
-            >
-              <Ionicons
-                name={
-                  room.type === "public" ? "globe-outline" : "shield-outline"
-                }
-                size={10}
-                color={room.type === "public" ? theme.success : theme.info}
-              />
-              <Text
-                style={[
-                  styles.chipBadgeText,
-                  {
-                    color:
-                      room.type === "public" ? theme.success : theme.info,
-                  },
-                ]}
-              >
-                {room.type === "public" ? "Public" : "Private"}
-              </Text>
-            </View>
-          </View>
-
-          {/* Join / Rejoin button */}
-          <TouchableOpacity
-            style={[
-              styles.joinBtn,
-              {
-                backgroundColor: isHost
-                  ? theme.surfaceElevated
-                  : theme.brand.primary,
-                borderWidth: isHost ? 1 : 0,
-                borderColor: theme.border,
-              },
-            ]}
-            onPress={() => handleJoinRoom(room.id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isHost ? "enter-outline" : "headset-outline"}
-              size={14}
-              color={isHost ? theme.text.primary : theme.text.inverse}
-              style={{ marginRight: 4 }}
-            />
-            <Text
-              style={[
-                styles.joinBtnText,
-                {
-                  color: isHost ? theme.text.primary : theme.text.inverse,
-                },
-              ]}
-            >
-              {isHost ? "Rejoin" : "Tune In"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  /* ── Empty state ────────────────────────────────────────── */
-
-  const EmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <View style={[styles.emptyIconWrap, { backgroundColor: accentGlow }]}>
-        <Ionicons
-          name={
-            activeTab === "public" ? "radio-outline" : "lock-closed-outline"
-          }
-          size={40}
-          color={theme.brand.primary}
-        />
-      </View>
-      <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
-        {activeTab === "public" ? "No live rooms" : "No private rooms"}
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-        {activeTab === "public"
-          ? "Start a conversation — create the first room and invite others to join."
-          : "Create a private room to have an invite-only conversation."}
-      </Text>
-      <TouchableOpacity
-        style={[styles.ctaBtn, { backgroundColor: theme.brand.primary }]}
-        onPress={() => setCreateModalVisible(true)}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={18} color={theme.text.inverse} />
-        <Text style={[styles.ctaBtnText, { color: theme.text.inverse }]}>
-          Create Room
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  /* ── Error state ────────────────────────────────────────── */
-
-  const ErrorState = () => (
-    <View style={styles.emptyContainer}>
-      <View
-        style={[styles.emptyIconWrap, { backgroundColor: theme.error + "15" }]}
-      >
-        <Ionicons
-          name="cloud-offline-outline"
-          size={40}
-          color={theme.error}
-        />
-      </View>
-      <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
-        Connection Issue
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-        {error}
-      </Text>
-      <TouchableOpacity
-        style={[styles.ctaBtn, { backgroundColor: theme.brand.primary }]}
-        onPress={handleRetry}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name="refresh-outline"
-          size={18}
-          color={theme.text.inverse}
-        />
-        <Text style={[styles.ctaBtnText, { color: theme.text.inverse }]}>
-          Try Again
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  /* ── Tab button ─────────────────────────────────────────── */
-
-  const TabButton = ({
-    tab,
-    label,
-    count,
-    icon,
-  }: {
-    tab: TabMode;
-    label: string;
-    count: number;
-    icon: string;
-  }) => {
-    const isActive = activeTab === tab;
-    return (
-      <TouchableOpacity
-        style={[
-          styles.tabButton,
-          isActive && { backgroundColor: theme.brand.primary },
-        ]}
-        onPress={() => setActiveTab(tab)}
-        activeOpacity={0.8}
-      >
-        <Ionicons
-          name={icon as any}
-          size={15}
-          color={isActive ? theme.text.inverse : theme.text.tertiary}
-          style={{ marginRight: 6 }}
-        />
-        <Text
-          style={[
-            styles.tabText,
-            { color: theme.text.secondary },
-            isActive && { color: theme.text.inverse, fontWeight: "600" },
-          ]}
-        >
-          {label}
-        </Text>
-        {count > 0 && (
-          <View
-            style={[
-              styles.tabBadge,
-              {
-                backgroundColor: isActive
-                  ? "rgba(255,255,255,0.25)"
-                  : theme.brand.primary + "20",
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabBadgeText,
-                {
-                  color: isActive ? theme.text.inverse : theme.brand.primary,
-                },
-              ]}
-            >
-              {count}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
-  /* ── Render ─────────────────────────────────────────────── */
+  /* ── Render ──────────────────────────────────────────────── */
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.headerTitle, { color: theme.text.primary }]}>
-            Community
-          </Text>
-          {rooms.length > 0 && (
-            <View style={styles.liveCountWrap}>
-              <View
-                style={[
-                  styles.liveCountDot,
-                  { backgroundColor: theme.success },
-                ]}
-              />
-              <Text
-                style={[styles.liveCountText, { color: theme.text.tertiary }]}
-              >
-                {rooms.length} live
-              </Text>
-            </View>
-          )}
-        </View>
-        <Text style={[styles.headerSub, { color: theme.text.tertiary }]}>
-          Join live audio conversations
-        </Text>
-      </View>
-
-      {/* Segmented Control */}
-      <View
-        style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
-      >
-        <TabButton
-          tab="public"
-          label="Public"
-          count={publicRooms.length}
-          icon="globe-outline"
-        />
-        <TabButton
-          tab="private"
-          label="Private"
-          count={privateRooms.length}
-          icon="lock-closed-outline"
-        />
-      </View>
-
-      {/* Content */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.brand.primary} />
-          <Text
-            style={[styles.loadingText, { color: theme.text.tertiary }]}
-          >
-            Finding rooms…
-          </Text>
-        </View>
-      ) : error && rooms.length === 0 ? (
-        <ErrorState />
-      ) : (
-        <FlatList
-          data={displayedRooms}
-          renderItem={({ item }) => <RoomCard room={item} />}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<EmptyState />}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.brand.primary}
-            />
+        <Image
+          source={
+            isDark
+              ? require("@/assets/images/logo-dark.png")
+              : require("@/assets/images/logo-light.png")
           }
+          style={styles.brandLogo}
+          contentFit="contain"
         />
-      )}
 
-      {/* Create Room Modal */}
-      <CreateRoomModal
-        isVisible={isCreateModalVisible}
-        onClose={() => setCreateModalVisible(false)}
-        onCreate={handleCreateRoom}
+        {/* Header action buttons */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.headerActions}
+        >
+          {/* Create a Tribe */}
+          <TouchableOpacity
+            style={[
+              styles.headerBtn,
+              { backgroundColor: theme.brand.primary },
+            ]}
+            onPress={() => setShowCreateTribe(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add-circle-outline" size={16} color={theme.text.inverse} />
+            <Text style={[styles.headerBtnText, { color: theme.text.inverse }]}>
+              Create a Tribe
+            </Text>
+          </TouchableOpacity>
+
+          {/* Channels */}
+          <TouchableOpacity
+            style={[
+              styles.headerBtn,
+              activeView === "voice-channels"
+                ? { backgroundColor: theme.brand.primary }
+                : {
+                    backgroundColor: theme.surface,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                  },
+            ]}
+            onPress={() => setActiveView("voice-channels")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={activeView === "voice-channels" ? "mic" : "mic-outline"}
+              size={16}
+              color={activeView === "voice-channels" ? theme.text.inverse : theme.brand.primary}
+            />
+            <Text
+              style={[
+                styles.headerBtnText,
+                {
+                  color: activeView === "voice-channels"
+                    ? theme.text.inverse
+                    : theme.text.primary,
+                },
+              ]}
+            >
+              Channels
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      {/* ── Content ────────────────────────────────────────── */}
+      {renderContent()}
+
+      {/* ── Sub-tabs just above bottom tab bar ─────────────── */}
+      <View style={styles.subTabContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.subTabRow}
+        >
+          {SUB_TABS.map((tab) => {
+            const isActive = activeView === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.subTab,
+                  {
+                    backgroundColor: isActive
+                      ? theme.brand.primary
+                      : theme.surface,
+                    borderWidth: isActive ? 0 : 1,
+                    borderColor: theme.border,
+                  },
+                ]}
+                onPress={() => setActiveView(tab.key)}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={(isActive ? tab.iconFocused : tab.icon) as any}
+                  size={15}
+                  color={isActive ? theme.text.inverse : theme.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.subTabText,
+                    {
+                      color: isActive
+                        ? theme.text.inverse
+                        : theme.text.secondary,
+                      fontWeight: isActive ? "700" : "500",
+                    },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* ── Modals ─────────────────────────────────────────── */}
+      <CreateTribeModal
+        visible={showCreateTribe}
+        onClose={() => setShowCreateTribe(false)}
+        onCreate={handleCreateTribe}
       />
-
-      {/* FAB — Create Room */}
-      <TouchableOpacity
-        style={[
-          styles.fab,
-          { backgroundColor: theme.brand.primary },
-          Layout.shadows.lg,
-        ]}
-        onPress={() => setCreateModalVisible(true)}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="mic-outline" size={26} color={theme.text.inverse} />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -681,184 +249,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerTitle: {
+  brandLogo: {
+    height: 24,
+    width: 140,
     marginVertical: Spacing.xs,
     marginLeft: Spacing.xs,
-    ...Typography.presets.h1,
   },
-  headerSub: {
-    ...Typography.presets.bodySmall,
-    marginLeft: Spacing.xs,
-    marginTop: 2,
+  headerActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingRight: Spacing.lg,
   },
-  liveCountWrap: {
+  headerBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xxs,
-    borderRadius: Layout.radius.full,
-  },
-  liveCountDot: { width: 8, height: 8, borderRadius: 4 },
-  liveCountText: { ...Typography.presets.caption },
-
-  /* Tabs */
-  segmentedControl: {
-    flexDirection: "row",
-    borderRadius: Layout.radius.md,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    padding: Spacing.xxs,
-  },
-  tabButton: {
-    flex: 1,
-    flexDirection: "row",
-    paddingVertical: Spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: Layout.radius.sm,
-  },
-  tabText: { ...Typography.presets.body },
-  tabBadge: {
-    marginLeft: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 1,
-    borderRadius: Layout.radius.full,
-    minWidth: 20,
-    alignItems: "center",
-  },
-  tabBadgeText: {
-    ...Typography.presets.caption,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
-  /* List */
-  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: 120 },
-
-  /* Card */
-  card: {
-    borderRadius: Layout.radius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
-  },
-  cardTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: Spacing.sm,
-  },
-  roomIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Layout.radius.md,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: Spacing.sm,
-  },
-  cardTitleWrap: { flex: 1, marginRight: Spacing.xs },
-  roomTitle: {
-    ...Typography.presets.h3,
-    fontSize: Typography.sizes.md,
-    lineHeight: 22,
-  },
-  timeAgo: { ...Typography.presets.caption, marginTop: 2 },
-  cardBottomRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
-    flex: 1,
-    marginRight: Spacing.sm,
-  },
-  metaChip: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaChipText: { ...Typography.presets.caption },
-  chipBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: Layout.radius.full,
-  },
-  chipBadgeText: {
-    ...Typography.presets.label,
-    fontSize: 9,
-    letterSpacing: 0.4,
-  },
-  joinBtn: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    borderRadius: Layout.radius.sm,
+    borderRadius: Layout.radius.full,
   },
-  joinBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
+  headerBtnText: {
+    ...Typography.presets.bodySmall,
+    fontWeight: "600",
+  },
 
-  /* Empty / Error */
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 60,
-    paddingHorizontal: Spacing.xxl,
+  /* Sub-tabs above bottom tab bar */
+  subTabContainer: {
+    position: "absolute",
+    bottom: TAB_BAR_HEIGHT,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    paddingBottom: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
   },
-  emptyIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.lg,
+  subTabRow: {
+    flexDirection: "row",
+    gap: Spacing.xs,
   },
-  emptyTitle: {
-    ...Typography.presets.h2,
-    marginBottom: Spacing.xs,
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    ...Typography.presets.body,
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: Spacing.lg,
-  },
-  ctaBtn: {
+  subTab: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Layout.radius.sm,
+    gap: 5,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Layout.radius.full,
   },
-  ctaBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
-
-  /* Loading */
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: Spacing.md,
-  },
-  loadingText: { ...Typography.presets.bodySmall },
-
-  /* FAB */
-  fab: {
-    position: "absolute",
-    bottom: 100,
-    right: Spacing.lg,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
+  subTabText: {
+    fontSize: 13,
+    fontFamily: "Poppins_600SemiBold",
   },
 });

@@ -14,7 +14,7 @@ import { apiRateLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { registerSocketHandlers } from "./socket/handlers.js";
 import { clearAllGracePeriods, initGracePeriod } from "./socket/gracePeriod.js";
-import roomsRouter from "./routes/rooms.js";
+import createRoomsRouter from "./routes/rooms.js";
 import healthRouter from "./routes/health.js";
 import { logger } from "./utils/logger.js";
 
@@ -23,10 +23,12 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   const app = express();
-
+  app.set('trust proxy', 1);  
   const server = http.createServer(app);
 
+  // ------------------------
   // Security middleware
+  // ------------------------
   app.use(helmet());
   app.use(
     cors({
@@ -37,65 +39,80 @@ async function main() {
   app.use(express.json({ limit: "10kb" }));
   app.use(apiRateLimiter);
 
-  // Request logging
   app.use((req, _res, next) => {
     logger.debug({ method: req.method, url: req.url }, "Request");
     next();
   });
 
-  // Routes
   app.use("/api/health", healthRouter);
-  app.use("/api", roomsRouter);
 
-  // Error handler
-  app.use(errorHandler);
-
-  // ---- Socket.io Server ----
+  // ------------------------
+  // Socket.io
+  // ------------------------
   const io = new SocketIOServer(server, {
     cors: {
       origin: env.CORS_ORIGIN,
       credentials: true,
     },
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    maxHttpBufferSize: 1e6, // 1MB
+    // Cloud Run kills idle connections after 60s.
+    // Keep-alive via frequent pings well within that window.
+    pingInterval: 10000,   // ping every 10s (was 25s)
+    pingTimeout: 20000,    // give 20s for pong (was 60s)
+    // Cloud Run: start with polling then upgrade to WebSocket
+    transports: ["polling", "websocket"],
+    maxHttpBufferSize: 1e6,
     connectionStateRecovery: {
-      maxDisconnectionDuration: 30000,
+      maxDisconnectionDuration: 120000, // 2 min recovery window
     },
   });
 
-  try {
-    const adapter = await createRedisAdapter();
-    io.adapter(adapter);
-    logger.info("✅ Socket.io Redis adapter connected");
-
-    // Initialize grace period system with a standalone Redis client
-    try {
-      const graceRedis = await createRedisClient();
-      initGracePeriod(graceRedis);
-    } catch (graceErr) {
-      logger.warn(
-        { err: graceErr },
-        "⚠️ Grace period Redis failed — using local-only mode",
-      );
-    }
-  } catch (err) {
-    logger.warn(
-      { err },
-      "⚠️ Redis adapter failed — running without horizontal scaling",
-    );
-  }
+  app.use("/api", createRoomsRouter(io));
+  app.use(errorHandler);
 
   io.use(socketAuthMiddleware);
-
   registerSocketHandlers(io);
 
-  server.listen(parseInt(env.PORT), () => {
-    logger.info(`🚀 Server running on port ${env.PORT}`);
+  // ------------------------
+  // 🚀 START SERVER FIRST
+  // ------------------------
+  const PORT = process.env.PORT || 3002;
+
+  server.listen(parseInt(PORT), () => {
+    logger.info(`🚀 Server running on port ${PORT}`);
     logger.info(`📡 Socket.io ready`);
     logger.info(`🔗 CORS origin: ${env.CORS_ORIGIN}`);
   });
 
+  // ------------------------
+  // 🔥 Background Init (Non-blocking)
+  // ------------------------
+  (async () => {
+    try {
+      const adapter = await createRedisAdapter();
+      io.adapter(adapter);
+      logger.info("✅ Redis adapter connected");
+    } catch (err) {
+      logger.warn(
+        { err },
+        "⚠️ Redis adapter failed — running without horizontal scaling",
+      );
+    }
+
+    try {
+      const graceRedis = await createRedisClient();
+      initGracePeriod(graceRedis);
+      logger.info("✅ Grace period Redis connected");
+    } catch (err) {
+      logger.warn(
+        { err },
+        "⚠️ Grace period Redis failed — local-only mode",
+      );
+    }
+  })();
+
+  // ------------------------
+  // Graceful Shutdown
+  // ------------------------
   const shutdown = async () => {
     logger.info("Shutting down gracefully...");
     clearAllGracePeriods();
@@ -114,6 +131,7 @@ async function main() {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 }
+
 
 main().catch((err) => {
   logger.fatal({ err }, "Failed to start server");

@@ -11,10 +11,6 @@ import { authMiddleware, socketAuthMiddleware } from "./middleware/auth.js";
 import { apiRateLimiter } from "./middleware/rateLimiter.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { registerSocketHandlers } from "./socket/handlers.js";
-// import { supabase } from "../config/supabase.js";
-
-
-
 
 // --- Routes ---
 import healthRoutes from "./routes/health.js";
@@ -29,30 +25,32 @@ import profileRoutes from "./routes/profiles.js";
 const app = express();
 const server = http.createServer(app);
 
-// --- Socket.io ---
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(","),
-    methods: ["GET", "POST"],
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-});
-
-// --- Middleware ---
+// ---------------------------------------------------
+// 🔒 Middleware
+// ---------------------------------------------------
 app.use(helmet());
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(","),
+    origin:
+      env.CORS_ORIGIN === "*"
+        ? "*"
+        : env.CORS_ORIGIN.split(","),
+    credentials: true,
   }),
 );
+
 app.use(express.json({ limit: "1mb" }));
 app.use(apiRateLimiter);
 
-// --- Public routes ---
+// ---------------------------------------------------
+// 🌐 Public Routes
+// ---------------------------------------------------
 app.use("/api/health", healthRoutes);
 
-// --- Protected routes ---
+// ---------------------------------------------------
+// 🔐 Protected Routes
+// ---------------------------------------------------
 app.use("/api/tribes", authMiddleware, tribeRoutes);
 app.use("/api/tribes/:tribeId/groups", authMiddleware, groupRoutes);
 app.use("/api/groups/:groupId/messages", authMiddleware, messageRoutes);
@@ -62,42 +60,67 @@ app.use("/api/invites", authMiddleware, inviteRoutes);
 app.use("/api/moderation", authMiddleware, moderationRoutes);
 app.use("/api/profiles", authMiddleware, profileRoutes);
 
-// --- Error handler ---
+// ---------------------------------------------------
+// ❌ Error Handler (must be last)
+// ---------------------------------------------------
 app.use(errorHandler);
 
-// --- Start server ---
-async function start() {
-  try {
-    // Connect Redis adapter for Socket.io
-    const adapter = await createRedisAdapter();
-    io.adapter(adapter);
-    logger.info("✅ Socket.io Redis adapter connected");
+// ---------------------------------------------------
+// 🔌 Socket.io Setup
+// ---------------------------------------------------
+const io = new SocketIOServer(server, {
+  cors: {
+    origin:
+      env.CORS_ORIGIN === "*"
+        ? "*"
+        : env.CORS_ORIGIN.split(","),
+    methods: ["GET", "POST"],
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e6,
+});
 
-    // Socket.io auth middleware
-    io.use(socketAuthMiddleware);
+// ---------------------------------------------------
+// 🚀 Start Server (Non-Blocking for Cloud Run)
+// ---------------------------------------------------
+const PORT = process.env.PORT || 3003;
 
-    // Register socket event handlers
-    registerSocketHandlers(io);
+function start() {
+  // 🔥 1️⃣ Bind to PORT immediately (Cloud Run requirement)
+  server.listen(PORT, () => {
+    logger.info(`🚀 tribe-service running on port ${PORT}`);
+    logger.info(`📡 Environment: ${env.NODE_ENV}`);
+  });
 
-    server.listen(env.PORT, () => {
-      logger.info(`🚀 tribe-service running on port ${env.PORT}`);
-      logger.info(`📡 Environment: ${env.NODE_ENV}`);
-    });
-    // const { data, error } = await supabase.auth.signInWithPassword({
-    //   email: 'outofbounds311@gmail.com',
-    //   password: 'Praveenkumar'
-    // })
+  // 🔥 2️⃣ Background async initialization (non-blocking)
+  (async () => {
+    try {
+      const adapter = await createRedisAdapter();
+      io.adapter(adapter);
+      logger.info("✅ Socket.io Redis adapter connected");
+    } catch (err) {
+      logger.warn(
+        { err },
+        "⚠️ Redis adapter failed — running without horizontal scaling",
+      );
+    }
 
-    // console.log(data.session)
-  } catch (err) {
-    logger.error({ err }, "❌ Failed to start tribe-service");
-    process.exit(1);
-  }
+    try {
+      io.use(socketAuthMiddleware);
+      registerSocketHandlers(io);
+      logger.info("✅ Socket.io handlers registered");
+    } catch (err) {
+      logger.error({ err }, "❌ Socket initialization failed");
+    }
+  })();
 }
 
 start();
 
-// --- Graceful shutdown ---
+// ---------------------------------------------------
+// 🛑 Graceful Shutdown
+// ---------------------------------------------------
 const shutdown = async (signal) => {
   logger.info(`${signal} received. Shutting down...`);
 
@@ -108,7 +131,6 @@ const shutdown = async (signal) => {
     process.exit(0);
   });
 
-  // Force exit after 10s
   setTimeout(() => {
     logger.error("Forced shutdown after 10s timeout");
     process.exit(1);

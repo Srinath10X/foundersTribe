@@ -46,6 +46,7 @@ export function registerSocketHandlers(io) {
           room: result.room,
           participant: result.participant,
           livekitToken: result.livekitToken,
+          livekitUrl: result.livekitUrl,
         });
       } catch (err) {
         logger.error({ err }, "create_room failed");
@@ -67,10 +68,12 @@ export function registerSocketHandlers(io) {
 
         const roomState = await roomService.getRoomState(data.roomId);
 
+        // Broadcast to others that this participant joined
         socket.to(data.roomId).emit("participant_joined", {
           participant: result.participant,
         });
 
+        // Broadcast updated participant count to everyone (including lobby)
         io.emit("room_updated", {
           roomId: data.roomId,
           participant_count: roomState.participants.length,
@@ -87,6 +90,7 @@ export function registerSocketHandlers(io) {
           room: result.room,
           participant: result.participant,
           livekitToken: result.livekitToken,
+          livekitUrl: result.livekitUrl,
           participants: roomState.participants,
           messages: chronologicalMessages,
         });
@@ -194,6 +198,7 @@ export function registerSocketHandlers(io) {
             ts.emit("mic_granted", {
               participant: result.participant,
               livekitToken: result.livekitToken,
+              livekitUrl: result.livekitUrl,
             });
           }
         }
@@ -224,6 +229,7 @@ export function registerSocketHandlers(io) {
             ts.emit("mic_revoked", {
               participant: result.participant,
               livekitToken: result.livekitToken,
+              livekitUrl: result.livekitUrl,
             });
           }
         }
@@ -256,6 +262,7 @@ export function registerSocketHandlers(io) {
               ts.emit("role_changed", {
                 participant: result.participant,
                 livekitToken: result.livekitToken,
+                livekitUrl: result.livekitUrl,
               });
             }
           }
@@ -287,6 +294,7 @@ export function registerSocketHandlers(io) {
             ts.emit("role_changed", {
               participant: result.participant,
               livekitToken: result.livekitToken,
+              livekitUrl: result.livekitUrl,
             });
           }
         }
@@ -380,27 +388,35 @@ export function registerSocketHandlers(io) {
           (p) => p.user_id === user.id,
         );
         let livekitToken;
+        let livekitUrl;
 
         if (myParticipant) {
           const canPublish = ["host", "co-host", "speaker"].includes(
             myParticipant.role,
           );
-          const { generateLiveKitToken } = await import("../config/livekit.js");
+          const { generateLiveKitToken, livekitWsUrl } = await import("../config/livekit.js");
           livekitToken = await generateLiveKitToken(user.id, data.roomId, {
             canPublish,
             canSubscribe: true,
           });
+          livekitUrl = livekitWsUrl;
         }
 
-        socket.to(data.roomId).emit("participant_reconnected", {
-          userId: user.id,
-        });
+        // Notify others that this user reconnected — send full participant
+        // data so clients can update their list (mark as connected again)
+        if (myParticipant) {
+          socket.to(data.roomId).emit("participant_updated", {
+            participant: myParticipant,
+          });
+        }
 
         success(cb, {
           room: roomState.room,
           participants: roomState.participants,
           missedMessages,
           livekitToken,
+          livekitUrl,
+          myParticipant,
         });
       } catch (err) {
         logger.error({ err }, "restore_room_state failed");
@@ -427,6 +443,7 @@ export function registerSocketHandlers(io) {
           try {
             await roomService.markDisconnected(user_id, room_id, socket.id);
 
+            // Notify others that this user temporarily disconnected
             socket.to(room_id).emit("participant_disconnected", {
               userId: user_id,
             });

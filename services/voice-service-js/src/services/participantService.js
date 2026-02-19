@@ -1,4 +1,4 @@
-import { generateLiveKitToken } from "../config/livekit.js";
+import { generateLiveKitToken, livekitWsUrl } from "../config/livekit.js";
 import { logger } from "../utils/logger.js";
 import { AppError } from "../utils/AppError.js";
 import { participantRepository } from "../repositories/participantRepository.js";
@@ -58,7 +58,7 @@ export async function promoteUser(actorId, targetId, roomId, newRole) {
 
   const micEnabled = newRole !== "listener";
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -66,6 +66,7 @@ export async function promoteUser(actorId, targetId, roomId, newRole) {
       mic_enabled: micEnabled,
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const canPublish = ["host", "co-host", "speaker"].includes(newRole);
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
@@ -74,7 +75,7 @@ export async function promoteUser(actorId, targetId, roomId, newRole) {
   });
 
   logger.info({ actorId, targetId, roomId, newRole }, "User promoted");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function demoteUser(actorId, targetId, roomId) {
@@ -88,7 +89,7 @@ export async function demoteUser(actorId, targetId, roomId) {
     throw new AppError("Cannot demote a user with equal or higher role", 403);
   }
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -96,6 +97,7 @@ export async function demoteUser(actorId, targetId, roomId) {
       mic_enabled: false,
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
     canPublish: false,
@@ -103,14 +105,14 @@ export async function demoteUser(actorId, targetId, roomId) {
   });
 
   logger.info({ actorId, targetId, roomId }, "User demoted to listener");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function grantMic(actorId, targetId, roomId) {
   await validateActorPrivileges(actorId, roomId, ["host", "co-host"]);
   await getTargetParticipant(targetId, roomId);
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -118,6 +120,7 @@ export async function grantMic(actorId, targetId, roomId) {
       role: "speaker",
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
     canPublish: true,
@@ -125,7 +128,7 @@ export async function grantMic(actorId, targetId, roomId) {
   });
 
   logger.info({ actorId, targetId, roomId }, "Mic granted");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function revokeMic(actorId, targetId, roomId) {
@@ -142,7 +145,7 @@ export async function revokeMic(actorId, targetId, roomId) {
     );
   }
 
-  const updated = await participantRepository.updateParticipant(
+  let updated = await participantRepository.updateParticipant(
     roomId,
     targetId,
     {
@@ -150,6 +153,7 @@ export async function revokeMic(actorId, targetId, roomId) {
       role: "listener",
     },
   );
+  updated = await participantRepository.enrichOneWithProfile(updated);
 
   const livekitToken = await generateLiveKitToken(targetId, roomId, {
     canPublish: false,
@@ -157,7 +161,7 @@ export async function revokeMic(actorId, targetId, roomId) {
   });
 
   logger.info({ actorId, targetId, roomId }, "Mic revoked");
-  return { participant: updated, livekitToken };
+  return { participant: updated, livekitToken, livekitUrl: livekitWsUrl };
 }
 
 export async function removeUser(actorId, targetId, roomId) {

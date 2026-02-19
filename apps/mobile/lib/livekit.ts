@@ -35,6 +35,7 @@ export const joinRoomViaSocket = (
   room: any;
   participant: any;
   livekitToken: string;
+  livekitUrl?: string;
   participants: any[];
   messages: any[];
 }> => {
@@ -65,6 +66,7 @@ export const createRoomViaSocket = (
   room: any;
   participant: any;
   livekitToken: string;
+  livekitUrl?: string;
 }> => {
   return new Promise((resolve, reject) => {
     if (!socket.connected) {
@@ -87,12 +89,14 @@ export const createRoomViaSocket = (
  */
 export const connectToLiveKitRoom = async (
   token: string,
+  livekitUrl?: string,
   options?: RoomOptions,
 ): Promise<Room> => {
   const room = new Room(options);
+  const url = livekitUrl || LIVEKIT_WS_URL;
 
   try {
-    await room.connect(LIVEKIT_WS_URL, token);
+    await room.connect(url, token);
     console.log('Connected to LiveKit room:', room.name);
     return room;
   } catch (error) {
