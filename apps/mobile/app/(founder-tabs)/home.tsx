@@ -1,7 +1,6 @@
 import DiscoverTab from "@/components/home/DiscoverTab";
 import FeedTab from "@/components/home/FeedTab";
 import LibraryTab from "@/components/home/LibraryTab";
-import RoleSwitcher from "@/components/RoleSwitcher";
 import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -155,26 +154,23 @@ export default function HomeScreen() {
               style={styles.brandLogo}
               contentFit="contain"
             />
-            <View style={styles.headerRight}>
-              <RoleSwitcher />
-              <TouchableOpacity
-                style={[
-                  styles.iconButton,
-                  {
-                    backgroundColor: isDark
-                      ? "rgba(255,255,255,0.1)"
-                      : "rgba(0,0,0,0.06)",
-                  },
-                ]}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={20}
-                  color={isDark ? "#FFFFFF" : "#000000"}
-                />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[
+                styles.iconButton,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.1)"
+                    : "rgba(0,0,0,0.06)",
+                },
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={20}
+                color={isDark ? "#FFFFFF" : "#000000"}
+              />
+            </TouchableOpacity>
           </View>
         </LinearGradient>
       </View>
@@ -219,11 +215,6 @@ const styles = StyleSheet.create({
   brandLogo: {
     height: 24,
     width: 140,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
   },
   iconButton: {
     width: 36,

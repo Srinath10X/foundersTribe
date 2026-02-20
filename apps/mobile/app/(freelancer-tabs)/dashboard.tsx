@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 
-import RoleSwitcher from "@/components/RoleSwitcher";
 import { Avatar, FlowScreen, PrimaryButton, SurfaceCard, T, people, useFlowNav, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 
 const activeJobs = [
@@ -23,9 +22,6 @@ export default function TalentDashboardScreen() {
             <T weight="bold" color={palette.text} style={styles.name}>Alex Rivera</T>
             <T weight="medium" color={palette.subText} style={styles.role}>Senior UI Designer</T>
           </View>
-        </View>
-        <View style={styles.headerActions}>
-          <RoleSwitcher />
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
             <Ionicons name="notifications-outline" size={18} color={palette.subText} />
           </TouchableOpacity>
@@ -84,10 +80,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    gap: 10,
   },
-  userRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "space-between" },
+  userRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   name: { fontSize: 21 },
   role: { fontSize: 13 },
   iconBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
