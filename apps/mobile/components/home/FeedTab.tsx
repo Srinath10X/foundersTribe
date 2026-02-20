@@ -32,7 +32,7 @@ const REEL_WIDTH =
 const REEL_HEIGHT =
   Platform.OS === "web"
     ? Math.min(windowHeight, Layout.webMaxHeight)
-    : windowHeight - TAB_BAR_HEIGHT - SUB_TAB_BAR_HEIGHT;
+    : windowHeight;
 
 interface Article {
   id: number;
@@ -199,7 +199,8 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
             </View>
             <Text style={styles.footerTitle}>All Articles Complete</Text>
             <Text style={styles.footerSubtitle}>
-              You&apos;ve seen every story in your feed.{"\n"}Pull down to refresh for new articles.
+              You&apos;ve seen every story in your feed.{"\n"}Pull down to
+              refresh for new articles.
             </Text>
             <TouchableOpacity
               style={styles.footerButton}
@@ -231,8 +232,21 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }]}>
-            <Ionicons name="newspaper-outline" size={48} color={theme.text.muted} />
+          <View
+            style={[
+              styles.emptyIconCircle,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(0,0,0,0.04)",
+              },
+            ]}
+          >
+            <Ionicons
+              name="newspaper-outline"
+              size={48}
+              color={theme.text.muted}
+            />
           </View>
           <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
             No articles yet

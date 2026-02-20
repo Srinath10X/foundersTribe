@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { LinearTransition } from "react-native-reanimated";
+import { BlurView } from "expo-blur";
 
 import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -81,7 +82,7 @@ export default function CustomTabBar({
   descriptors,
   navigation,
 }: BottomTabBarProps) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { role } = useRole();
 
   // Filter out hidden routes (expo-router sets href to null for hidden screens)
@@ -156,13 +157,34 @@ export default function CustomTabBar({
     );
   });
 
+  const content = isFounder ? (
+    <>
+      <View style={barStyles.tabsSection}>{tabItems}</View>
+      <View
+        style={[barStyles.divider, { backgroundColor: theme.border }]}
+      />
+      <View style={barStyles.switchSection}>
+        <ModeSwitchPill />
+      </View>
+    </>
+  ) : (
+    <>
+      <View style={barStyles.switchSection}>
+        <ModeSwitchPill />
+      </View>
+      <View
+        style={[barStyles.divider, { backgroundColor: theme.border }]}
+      />
+      <View style={barStyles.tabsSection}>{tabItems}</View>
+    </>
+  );
+
   return (
     <Animated.View
       layout={LinearTransition.duration(200)}
       style={[
         barStyles.wrapper,
         {
-          backgroundColor: theme.surface,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.15,
@@ -171,29 +193,21 @@ export default function CustomTabBar({
         },
       ]}
     >
-      {isFounder ? (
-        <>
-          {/* Founder: tabs first, then divider, then switch pill */}
-          <View style={barStyles.tabsSection}>{tabItems}</View>
-          <View
-            style={[barStyles.divider, { backgroundColor: theme.border }]}
-          />
-          <View style={barStyles.switchSection}>
-            <ModeSwitchPill />
-          </View>
-        </>
-      ) : (
-        <>
-          {/* Freelancer: switch pill first, then divider, then tabs */}
-          <View style={barStyles.switchSection}>
-            <ModeSwitchPill />
-          </View>
-          <View
-            style={[barStyles.divider, { backgroundColor: theme.border }]}
-          />
-          <View style={barStyles.tabsSection}>{tabItems}</View>
-        </>
-      )}
+      {/* Glass surface — BlurView fills the pill shape */}
+      <BlurView
+        intensity={Platform.OS === "ios" ? 80 : 120}
+        tint={isDark ? "dark" : "light"}
+        style={[
+          barStyles.blurFill,
+          { backgroundColor: isDark
+              ? "rgba(30, 30, 30, 0.65)"
+              : "rgba(255, 255, 255, 0.70)" },
+        ]}
+      />
+      {/* Content layer sits on top of the blur */}
+      <View style={barStyles.contentLayer}>
+        {content}
+      </View>
     </Animated.View>
   );
 }
@@ -206,10 +220,19 @@ const barStyles = StyleSheet.create({
     right: BAR_MX,
     height: BAR_HEIGHT,
     borderRadius: 999,
+    overflow: "hidden",
+  },
+  blurFill: {
+    // Fills the entire pill shape behind the content
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 999,
+  },
+  contentLayer: {
+    // Sits on top of blur, holds the actual tabs + switch
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 6,
-    overflow: "hidden",
   },
   tabsSection: {
     flex: 1,

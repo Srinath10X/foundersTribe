@@ -42,7 +42,7 @@ export default function SubTabBar<T extends string>({
           backgroundColor: theme.surface,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 10 },
-          opacity: 0.7,
+          opacity: 0.8,
           shadowOpacity: 0.15,
           shadowRadius: 20,
           elevation: 8,
@@ -61,7 +61,7 @@ export default function SubTabBar<T extends string>({
           const isActive = activeKey === tab.key;
           const tintColor = isActive
             ? theme.brand.primary
-            : (theme.text.secondary ?? theme.text.muted);
+            : theme.text.secondary ?? theme.text.muted;
 
           return (
             <TouchableOpacity
