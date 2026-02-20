@@ -1,9 +1,10 @@
+import { SupabaseClient } from "@supabase/supabase-js";
 import { MessageRepository } from "../repositories/messageRepository.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
 import { mapSupabaseError } from "./dbErrorMap.js";
 import { AppError } from "../utils/AppError.js";
 
-async function ensureCanChat(db, contractId) {
+async function ensureCanChat(db: SupabaseClient, contractId: string) {
   const { data: contract, error } = await db
     .from("contracts")
     .select("id, status")
@@ -23,7 +24,7 @@ async function ensureCanChat(db, contractId) {
   }
 }
 
-export async function createMessage(db, contractId, senderId, payload) {
+export async function createMessage(db: SupabaseClient, contractId: string, senderId: string, payload: Record<string, any>) {
   try {
     await ensureCanChat(db, contractId);
     const repo = new MessageRepository(db);
@@ -38,10 +39,10 @@ export async function createMessage(db, contractId, senderId, payload) {
   }
 }
 
-export async function listMessages(db, contractId, query) {
+export async function listMessages(db: SupabaseClient, contractId: string, query: Record<string, any>) {
   await ensureCanChat(db, contractId);
   const repo = new MessageRepository(db);
-  const limit = Math.min(Number(query.limit || 50), 100);
+  const limit: number = Math.min(Number(query.limit || 50), 100);
   const cursor = decodeCursor(query.cursor);
   const rows = await repo.listMessages(contractId, limit, cursor);
 
@@ -55,7 +56,7 @@ export async function listMessages(db, contractId, query) {
   return { items, next_cursor: nextCursor };
 }
 
-export async function markMessagesRead(db, contractId, userId) {
+export async function markMessagesRead(db: SupabaseClient, contractId: string, userId: string) {
   try {
     await ensureCanChat(db, contractId);
     const repo = new MessageRepository(db);

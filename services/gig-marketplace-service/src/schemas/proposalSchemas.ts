@@ -22,3 +22,5 @@ export const acceptProposalSchema = z.object({
   body: z.object({}).optional(),
   query: z.object({}).optional(),
 });
+
+export const rejectProposalSchema = acceptProposalSchema;

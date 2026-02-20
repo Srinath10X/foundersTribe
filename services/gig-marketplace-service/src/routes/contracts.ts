@@ -16,7 +16,7 @@ router.get("/", validate(listContractsSchema), async (req, res, next) => {
 
 router.get("/:id", validate(contractByIdSchema), async (req, res, next) => {
   try {
-    const data = await contractService.getContractById(req.db, req.params.id);
+    const data = await contractService.getContractById(req.db, req.params.id as string);
     res.json({ data });
   } catch (err) {
     next(err);
@@ -25,7 +25,7 @@ router.get("/:id", validate(contractByIdSchema), async (req, res, next) => {
 
 router.post("/:id/complete", validate(contractActionSchema), async (req, res, next) => {
   try {
-    const data = await contractService.markContractComplete(req.db, req.params.id);
+    const data = await contractService.markContractComplete(req.db, req.params.id as string);
     res.json({ data });
   } catch (err) {
     next(err);
@@ -34,7 +34,7 @@ router.post("/:id/complete", validate(contractActionSchema), async (req, res, ne
 
 router.post("/:id/approve", validate(contractActionSchema), async (req, res, next) => {
   try {
-    const data = await contractService.approveContract(req.db, req.params.id);
+    const data = await contractService.approveContract(req.db, req.params.id as string);
     res.json({ data });
   } catch (err) {
     next(err);

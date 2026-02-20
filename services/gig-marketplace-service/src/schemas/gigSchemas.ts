@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { cursorLimitQuery, gigStatusEnum, uuidSchema } from "./common.js";
 
-const createGigBody = z.object({
+const baseGigBody = z.object({
   title: z.string().min(10).max(120),
   description: z.string().min(30).max(5000),
   budget_type: z.enum(["fixed", "hourly"]),
@@ -12,12 +12,14 @@ const createGigBody = z.object({
   is_remote: z.boolean().optional(),
   location_text: z.string().max(120).optional(),
   status: gigStatusEnum.optional(),
-}).refine((data) => data.budget_max >= data.budget_min, {
+});
+
+const createGigBody = baseGigBody.refine((data) => data.budget_max >= data.budget_min, {
   message: "budget_max must be >= budget_min",
   path: ["budget_max"],
 });
 
-const patchGigBody = createGigBody.partial();
+const patchGigBody = baseGigBody.partial();
 
 export const createGigSchema = z.object({
   body: createGigBody,

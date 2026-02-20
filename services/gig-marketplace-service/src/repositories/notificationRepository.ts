@@ -1,9 +1,13 @@
+import { SupabaseClient } from "@supabase/supabase-js";
+
 export class NotificationRepository {
-  constructor(db) {
+  db: SupabaseClient;
+
+  constructor(db: SupabaseClient) {
     this.db = db;
   }
 
-  async listNotifications(unreadOnly, limit, cursor) {
+  async listNotifications(unreadOnly: boolean, limit: number, cursor: { createdAt: string, id: string } | null) {
     let query = this.db
       .from("notifications")
       .select("*")

@@ -1,15 +1,19 @@
+import { SupabaseClient } from "@supabase/supabase-js";
+
 export class GigRepository {
-  constructor(db) {
+  db: SupabaseClient;
+
+  constructor(db: SupabaseClient) {
     this.db = db;
   }
 
-  async createGig(payload) {
+  async createGig(payload: Record<string, any>) {
     const { data, error } = await this.db.from("gigs").insert(payload).select("*").single();
     if (error) throw error;
     return data;
   }
 
-  async getGigById(id) {
+  async getGigById(id: string) {
     const { data, error } = await this.db
       .from("gigs")
       .select("*, gig_tags(tag_id, tags(id, slug, label)), founder:user_profiles!gigs_founder_id_fkey(id, full_name, avatar_url, handle)")
@@ -19,18 +23,18 @@ export class GigRepository {
     return data;
   }
 
-  async updateGig(id, patch) {
+  async updateGig(id: string, patch: Record<string, any>) {
     const { data, error } = await this.db.from("gigs").update(patch).eq("id", id).select("*").single();
     if (error) throw error;
     return data;
   }
 
-  async deleteGig(id) {
+  async deleteGig(id: string) {
     const { error } = await this.db.from("gigs").delete().eq("id", id);
     if (error) throw error;
   }
 
-  async listGigs(filters, limit, cursorParts) {
+  async listGigs(filters: Record<string, any>, limit: number, cursorParts: { createdAt: string, id: string } | null) {
     if (filters.tag) {
       const tagSlugs = String(filters.tag)
         .split(",")
@@ -44,7 +48,7 @@ export class GigRepository {
           .in("tags.slug", tagSlugs);
 
         if (tagError) throw tagError;
-        const taggedGigIds = [...new Set((taggedRows || []).map((r) => r.gig_id))];
+        const taggedGigIds = [...new Set((taggedRows || []).map((r: any) => r.gig_id))];
         if (taggedGigIds.length === 0) {
           return { rows: [], count: 0 };
         }
@@ -66,6 +70,7 @@ export class GigRepository {
     if (filters.budget_min) query = query.gte("budget_min", Number(filters.budget_min));
     if (filters.budget_max) query = query.lte("budget_max", Number(filters.budget_max));
     if (filters.gig_ids) query = query.in("id", filters.gig_ids);
+    if (filters.founder_id) query = query.eq("founder_id", filters.founder_id);
 
     if (cursorParts) {
       query = query.or(

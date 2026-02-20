@@ -1,15 +1,19 @@
+import { SupabaseClient } from "@supabase/supabase-js";
+
 export class MessageRepository {
-  constructor(db) {
+  db: SupabaseClient;
+
+  constructor(db: SupabaseClient) {
     this.db = db;
   }
 
-  async insertMessage(payload) {
+  async insertMessage(payload: Record<string, any>) {
     const { data, error } = await this.db.from("messages").insert(payload).select("*").single();
     if (error) throw error;
     return data;
   }
 
-  async listMessages(contractId, limit, cursor) {
+  async listMessages(contractId: string, limit: number, cursor: { createdAt: string, id: string } | null) {
     let query = this.db
       .from("messages")
       .select("*")
@@ -27,7 +31,7 @@ export class MessageRepository {
     return data || [];
   }
 
-  async markRead(contractId, userId) {
+  async markRead(contractId: string, userId: string) {
     const { error } = await this.db
       .from("messages")
       .update({ read_at: new Date().toISOString() })

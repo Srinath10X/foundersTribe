@@ -7,7 +7,7 @@ const router = Router({ mergeParams: true });
 
 router.post("/", validate(createMessageSchema), async (req, res, next) => {
   try {
-    const data = await messageService.createMessage(req.db, req.params.id, req.user.id, req.body);
+    const data = await messageService.createMessage(req.db, req.params.id as string, req.user.id, req.body);
     res.status(201).json({ data });
   } catch (err) {
     next(err);
@@ -16,7 +16,7 @@ router.post("/", validate(createMessageSchema), async (req, res, next) => {
 
 router.get("/", validate(listMessagesSchema), async (req, res, next) => {
   try {
-    const data = await messageService.listMessages(req.db, req.params.id, req.query);
+    const data = await messageService.listMessages(req.db, req.params.id as string, req.query);
     res.json(data);
   } catch (err) {
     next(err);
@@ -25,7 +25,7 @@ router.get("/", validate(listMessagesSchema), async (req, res, next) => {
 
 router.post("/read", validate(readMessagesSchema), async (req, res, next) => {
   try {
-    const data = await messageService.markMessagesRead(req.db, req.params.id, req.user.id);
+    const data = await messageService.markMessagesRead(req.db, req.params.id as string, req.user.id);
     res.json({ data });
   } catch (err) {
     next(err);

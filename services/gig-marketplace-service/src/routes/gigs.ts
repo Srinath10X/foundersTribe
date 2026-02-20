@@ -23,9 +23,18 @@ router.get("/", validate(listGigsSchema), async (req, res, next) => {
   }
 });
 
+router.get("/me", validate(listGigsSchema), async (req, res, next) => {
+  try {
+    const data = await gigService.listGigs(req.db, { ...req.query, founder_id: req.user.id });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:id", validate(getGigSchema), async (req, res, next) => {
   try {
-    const data = await gigService.getGigById(req.db, req.params.id);
+    const data = await gigService.getGigById(req.db, req.params.id as string);
     res.json({ data });
   } catch (err) {
     next(err);
@@ -34,7 +43,7 @@ router.get("/:id", validate(getGigSchema), async (req, res, next) => {
 
 router.patch("/:id", validate(updateGigSchema), async (req, res, next) => {
   try {
-    const data = await gigService.updateGig(req.db, req.params.id, req.body);
+    const data = await gigService.updateGig(req.db, req.params.id as string, req.user.id, req.body);
     res.json({ data });
   } catch (err) {
     next(err);
@@ -43,7 +52,7 @@ router.patch("/:id", validate(updateGigSchema), async (req, res, next) => {
 
 router.delete("/:id", validate(deleteGigSchema), async (req, res, next) => {
   try {
-    await gigService.deleteGig(req.db, req.params.id);
+    await gigService.deleteGig(req.db, req.params.id as string, req.user.id);
     res.status(204).send();
   } catch (err) {
     next(err);

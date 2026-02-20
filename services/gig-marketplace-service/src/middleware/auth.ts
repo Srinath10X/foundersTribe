@@ -1,6 +1,7 @@
+import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin, getSupabaseForToken } from "../config/supabase.js";
 
-export const authMiddleware = async (req, res, next) => {
+export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
 
   if (!token) {

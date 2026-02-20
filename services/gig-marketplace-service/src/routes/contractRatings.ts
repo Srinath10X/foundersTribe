@@ -7,7 +7,7 @@ const router = Router({ mergeParams: true });
 
 router.post("/", validate(createRatingSchema), async (req, res, next) => {
   try {
-    const data = await ratingService.createRating(req.db, req.params.id, req.user.id, req.body);
+    const data = await ratingService.createRating(req.db, req.params.id as string, req.user.id, req.body);
     res.status(201).json({ data });
   } catch (err) {
     next(err);

@@ -1,8 +1,9 @@
+import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { AppError } from "../utils/AppError.js";
 import { logger } from "../utils/logger.js";
 
-const mapStatusToCode = (status) => {
+const mapStatusToCode = (status: number) => {
   if (status === 400) return "bad_request";
   if (status === 401) return "unauthorized";
   if (status === 403) return "forbidden";
@@ -12,7 +13,7 @@ const mapStatusToCode = (status) => {
   return "internal_error";
 };
 
-export const errorHandler = (err, req, res, _next) => {
+export const errorHandler = (err: any, req: Request, res: Response, _next: NextFunction) => {
   logger.error(
     {
       err,

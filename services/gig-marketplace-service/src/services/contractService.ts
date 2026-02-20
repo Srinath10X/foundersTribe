@@ -1,11 +1,12 @@
+import { SupabaseClient } from "@supabase/supabase-js";
 import { ContractRepository } from "../repositories/contractRepository.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
 import { AppError } from "../utils/AppError.js";
 import { mapSupabaseError } from "./dbErrorMap.js";
 
-export async function listContracts(db, query) {
+export async function listContracts(db: SupabaseClient, query: Record<string, any>) {
   const repo = new ContractRepository(db);
-  const limit = Math.min(Number(query.limit || 20), 100);
+  const limit: number = Math.min(Number(query.limit || 20), 100);
   const cursor = decodeCursor(query.cursor);
 
   const rows = await repo.listContracts(query, limit, cursor);
@@ -19,14 +20,14 @@ export async function listContracts(db, query) {
   return { items, next_cursor: nextCursor };
 }
 
-export async function getContractById(db, id) {
+export async function getContractById(db: SupabaseClient, id: string) {
   const repo = new ContractRepository(db);
   const contract = await repo.getContractById(id);
   if (!contract) throw new AppError("Contract not found", 404, "not_found");
   return contract;
 }
 
-export async function markContractComplete(db, id) {
+export async function markContractComplete(db: SupabaseClient, id: string) {
   try {
     const repo = new ContractRepository(db);
     await repo.markComplete(id);
@@ -36,7 +37,7 @@ export async function markContractComplete(db, id) {
   }
 }
 
-export async function approveContract(db, id) {
+export async function approveContract(db: SupabaseClient, id: string) {
   try {
     const repo = new ContractRepository(db);
     await repo.approve(id);

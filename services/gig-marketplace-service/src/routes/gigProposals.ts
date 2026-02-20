@@ -7,7 +7,7 @@ const router = Router({ mergeParams: true });
 
 router.post("/", validate(createProposalSchema), async (req, res, next) => {
   try {
-    const data = await proposalService.createProposal(req.db, req.params.id, req.user.id, req.body);
+    const data = await proposalService.createProposal(req.db, req.params.id as string, req.user.id, req.body);
     res.status(201).json({ data });
   } catch (err) {
     next(err);
@@ -16,7 +16,7 @@ router.post("/", validate(createProposalSchema), async (req, res, next) => {
 
 router.get("/", validate(listProposalsSchema), async (req, res, next) => {
   try {
-    const data = await proposalService.listProposals(req.db, req.params.id, req.query);
+    const data = await proposalService.listProposals(req.db, req.params.id as string, req.query);
     res.json(data);
   } catch (err) {
     next(err);

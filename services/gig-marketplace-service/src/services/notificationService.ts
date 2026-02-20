@@ -1,9 +1,10 @@
+import { SupabaseClient } from "@supabase/supabase-js";
 import { NotificationRepository } from "../repositories/notificationRepository.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
 
-export async function listNotifications(db, query) {
+export async function listNotifications(db: SupabaseClient, query: Record<string, any>) {
   const repo = new NotificationRepository(db);
-  const limit = Math.min(Number(query.limit || 20), 100);
+  const limit: number = Math.min(Number(query.limit || 20), 100);
   const cursor = decodeCursor(query.cursor);
   const rows = await repo.listNotifications(query.unread === "true", limit, cursor);
 

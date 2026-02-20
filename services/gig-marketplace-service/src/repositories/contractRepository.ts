@@ -1,9 +1,13 @@
+import { SupabaseClient } from "@supabase/supabase-js";
+
 export class ContractRepository {
-  constructor(db) {
+  db: SupabaseClient;
+
+  constructor(db: SupabaseClient) {
     this.db = db;
   }
 
-  async listContracts(filters, limit, cursor) {
+  async listContracts(filters: Record<string, any>, limit: number, cursor: { createdAt: string, id: string } | null) {
     let query = this.db
       .from("contracts")
       .select("*")
@@ -22,7 +26,7 @@ export class ContractRepository {
     return data || [];
   }
 
-  async getContractById(id) {
+  async getContractById(id: string) {
     const { data, error } = await this.db
       .from("contracts")
       .select("*, gigs(id, title, status), founder:user_profiles!contracts_founder_id_fkey(id, full_name, avatar_url, handle), freelancer:user_profiles!contracts_freelancer_id_fkey(id, full_name, avatar_url, handle)")
@@ -32,13 +36,13 @@ export class ContractRepository {
     return data;
   }
 
-  async markComplete(id) {
+  async markComplete(id: string) {
     const { data, error } = await this.db.rpc("mark_contract_complete", { p_contract_id: id });
     if (error) throw error;
     return data;
   }
 
-  async approve(id) {
+  async approve(id: string) {
     const { data, error } = await this.db.rpc("approve_contract", { p_contract_id: id });
     if (error) throw error;
     return data;

@@ -1,6 +1,6 @@
 import { AppError } from "../utils/AppError.js";
 
-export function mapSupabaseError(error, fallback = "Database error") {
+export function mapSupabaseError(error: any, fallback: string = "Database error") {
   if (!error) return new AppError(fallback, 500, "internal_error");
 
   const code = error.code || error.status || "";
