@@ -605,7 +605,7 @@ export default function EditProfileScreen() {
                       #{index + 1}
                     </Text>
                     <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                     </TouchableOpacity>
                   </View>
                   <TextInput
@@ -661,7 +661,7 @@ export default function EditProfileScreen() {
                     <TouchableOpacity
                       onPress={() => setCompletedGigs(completedGigs.filter((_, i) => i !== index))}
                     >
-                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                     </TouchableOpacity>
                   </View>
                   <TextInput
@@ -719,7 +719,7 @@ export default function EditProfileScreen() {
                     #{index + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeWork(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
                 <TextInput
@@ -774,7 +774,7 @@ export default function EditProfileScreen() {
                     #{index + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeLink(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
                 <TextInput

@@ -891,7 +891,7 @@ export default function ProfileScreen() {
                 title="Logout"
                 subtitle="Sign out of your account"
                 onPress={handleLogout}
-                accentColor="#EF4444"
+                accentColor="#FF3B30"
               />
             </View>
           </View>

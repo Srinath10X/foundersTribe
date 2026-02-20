@@ -11,13 +11,11 @@ import {
 } from "react-native";
 import { Stack, useFocusEffect, useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
@@ -27,6 +25,7 @@ import FindCofounderTab from "../../components/community/FindCofounderTab";
 import FindFreelancerTab from "../../components/community/FindFreelancerTab";
 import VoiceChannelsTab from "../../components/community/VoiceChannelsTab";
 import CreateTribeModal from "../../components/CreateTribeModal";
+import SubTabBar from "../../components/SubTabBar";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
 import * as tribeApi from "../../lib/tribeApi";
@@ -44,7 +43,7 @@ const SUB_TABS: {
   key: SubTab;
   label: string;
   icon: string;
-  iconFocused: string;
+  iconFocused?: string;
 }[] = [
   {
     key: "tribes",
@@ -80,8 +79,6 @@ export default function CommunityScreen() {
   const [tribesMode, setTribesMode] = useState<"explore" | "my">("explore");
   const [showCreateTribe, setShowCreateTribe] = useState(false);
   const [isSubTabVisible, setIsSubTabVisible] = useState(true);
-  const tabWidth = (windowWidth - 48) / 3;
-  const indicatorX = useSharedValue(0);
   const subTabVisibility = useSharedValue(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showTribeHeaderActions =
@@ -123,24 +120,6 @@ export default function CommunityScreen() {
     });
     return unsubscribe;
   }, [navigation, showSubTabsTemporarily]);
-
-  const getSubTabIndex = useCallback((view: ActiveView) => {
-    return SUB_TABS.findIndex((t) => t.key === view);
-  }, []);
-
-  useEffect(() => {
-    const index = getSubTabIndex(activeView);
-    if (index >= 0) {
-      indicatorX.value = withSpring(index * tabWidth, {
-        damping: 20,
-        stiffness: 180,
-      });
-    }
-  }, [activeView, getSubTabIndex, indicatorX, tabWidth]);
-
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: indicatorX.value }],
-  }));
 
   const subTabVisibilityStyle = useAnimatedStyle(() => ({
     opacity: subTabVisibility.value,
@@ -340,81 +319,15 @@ export default function CommunityScreen() {
 
       {/* ── Sub-tabs just above bottom tab bar ─────────────── */}
       <Animated.View style={[styles.subTabContainer, subTabVisibilityStyle]}>
-        <BlurView
-          intensity={Platform.OS === "ios" ? 90 : 120}
-          tint={isDark ? "dark" : "light"}
-          style={styles.bottomBlur}
-        >
-          <View
-            style={[
-              styles.glassTabBar,
-              {
-                backgroundColor: isDark
-                  ? "rgba(0,0,0,0.45)"
-                  : "rgba(255,255,255,0.65)",
-                borderColor: isDark
-                  ? "rgba(255,255,255,0.12)"
-                  : "rgba(0,0,0,0.08)",
-              },
-            ]}
-          >
-            <Animated.View
-              style={[
-                styles.activeIndicator,
-                {
-                  width: tabWidth,
-                  opacity: getSubTabIndex(activeView) >= 0 ? 1 : 0,
-                  backgroundColor: isDark
-                    ? "rgba(255,0,0,0.12)"
-                    : "rgba(255,0,0,0.08)",
-                },
-                indicatorStyle,
-              ]}
-            />
-
-            {SUB_TABS.map((tab) => {
-              const isActive = activeView === tab.key;
-              return (
-                <TouchableOpacity
-                  key={tab.key}
-                  style={[styles.tabButton, { width: tabWidth }]}
-                  onPress={() => {
-                    setActiveView(tab.key);
-                    showSubTabsTemporarily();
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={(isActive ? tab.iconFocused : tab.icon) as any}
-                    size={18}
-                    color={
-                      isActive
-                        ? "#FF0000"
-                        : isDark
-                        ? "rgba(255,255,255,0.5)"
-                        : "rgba(0,0,0,0.4)"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      {
-                        color: isActive
-                          ? "#FF0000"
-                          : isDark
-                          ? "rgba(255,255,255,0.5)"
-                          : "rgba(0,0,0,0.4)",
-                        fontWeight: isActive ? "700" : "500",
-                      },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </BlurView>
+        <SubTabBar
+          tabs={SUB_TABS}
+          activeKey={activeView as SubTab}
+          isDark={isDark}
+          onTabPress={(tab) => {
+            setActiveView(tab);
+            showSubTabsTemporarily();
+          }}
+        />
       </Animated.View>
 
       {activeView === "tribes" && (
@@ -489,36 +402,7 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 100,
     paddingBottom: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-  },
-  bottomBlur: {
-    borderRadius: Layout.radius.xl,
-    overflow: "hidden",
-  },
-  glassTabBar: {
-    flexDirection: "row",
-    borderRadius: Layout.radius.xl,
-    borderWidth: 1,
-    paddingVertical: 6,
-    position: "relative",
-  },
-  activeIndicator: {
-    position: "absolute",
-    top: 6,
-    bottom: 6,
-    left: 0,
-    borderRadius: Layout.radius.lg,
-  },
-  tabButton: {
-    paddingVertical: Spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 2,
-    gap: 4,
-  },
-  tabLabel: {
-    ...Typography.presets.caption,
-    fontFamily: "Poppins_600SemiBold",
+    paddingHorizontal: Math.max((windowWidth - 420) / 2, 16),
   },
   createFab: {
     position: "absolute",

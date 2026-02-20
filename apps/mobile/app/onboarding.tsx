@@ -359,7 +359,7 @@ export default function Onboarding() {
               <View style={styles.rowBetween}>
                 <Text style={[styles.itemIndex, { color: theme.text.muted }]}>#{index + 1}</Text>
                 <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                  <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                 </TouchableOpacity>
               </View>
               <TextInput
@@ -401,7 +401,7 @@ export default function Onboarding() {
             <View style={styles.rowBetween}>
               <Text style={[styles.itemIndex, { color: theme.text.muted }]}>#{index + 1}</Text>
               <TouchableOpacity onPress={() => removeSocialLink(index)}>
-                <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
               </TouchableOpacity>
             </View>
             <TextInput

@@ -1,9 +1,9 @@
 import DiscoverTab from "@/components/home/DiscoverTab";
 import FeedTab from "@/components/home/FeedTab";
 import LibraryTab from "@/components/home/LibraryTab";
+import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useFocusEffect, useNavigation } from "expo-router";
@@ -13,7 +13,6 @@ import {
   Platform,
   StatusBar,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,7 +20,6 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 
@@ -34,7 +32,7 @@ const SUB_TABS: {
   key: SubTab;
   label: string;
   icon: string;
-  iconFocused: string;
+  iconFocused?: string;
 }[] = [
   { key: "feed", label: "Feed", icon: "newspaper-outline", iconFocused: "newspaper" },
   { key: "discover", label: "Discover", icon: "compass-outline", iconFocused: "compass" },
@@ -46,10 +44,8 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState<SubTab>("feed");
   const [isSubTabVisible, setIsSubTabVisible] = useState(true);
-  const indicatorX = useSharedValue(0);
   const subTabVisibility = useSharedValue(1);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tabWidth = (windowWidth - 48) / 3;
 
   const clearHideTimer = useCallback(() => {
     if (hideTimer.current) {
@@ -89,20 +85,12 @@ export default function HomeScreen() {
   }, [navigation, showSubTabsTemporarily]);
 
   const handleTabPress = useCallback(
-    (tab: SubTab, index: number) => {
+    (tab: SubTab) => {
       setActiveTab(tab);
-      indicatorX.value = withSpring(index * tabWidth, {
-        damping: 20,
-        stiffness: 180,
-      });
       showSubTabsTemporarily();
     },
-    [showSubTabsTemporarily, tabWidth]
+    [showSubTabsTemporarily]
   );
-
-  const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: indicatorX.value }],
-  }));
 
   const subTabVisibilityStyle = useAnimatedStyle(() => ({
     opacity: subTabVisibility.value,
@@ -168,80 +156,14 @@ export default function HomeScreen() {
         </LinearGradient>
       </View>
 
-      {/* Bottom Glassmorphism Sub-Tabs */}
+      {/* Bottom Sub-Tabs */}
       <Animated.View style={[styles.bottomTabContainer, subTabVisibilityStyle]}>
-        <BlurView
-          intensity={Platform.OS === "ios" ? 90 : 120}
-          tint={isDark ? "dark" : "light"}
-          style={styles.bottomBlur}
-        >
-          <View
-            style={[
-              styles.glassTabBar,
-              {
-                backgroundColor: isDark
-                  ? "rgba(0,0,0,0.45)"
-                  : "rgba(255,255,255,0.65)",
-                borderColor: isDark
-                  ? "rgba(255,255,255,0.12)"
-                  : "rgba(0,0,0,0.08)",
-              },
-            ]}
-          >
-            {/* Animated active indicator */}
-            <Animated.View
-              style={[
-                styles.activeIndicator,
-                {
-                  width: tabWidth,
-                  backgroundColor: isDark
-                    ? "rgba(255,0,0,0.12)"
-                    : "rgba(255,0,0,0.08)",
-                },
-                indicatorStyle,
-              ]}
-            />
-
-            {SUB_TABS.map((tab, index) => {
-              const isActive = activeTab === tab.key;
-              return (
-                <TouchableOpacity
-                  key={tab.key}
-                  style={[styles.tabButton, { width: tabWidth }]}
-                  onPress={() => handleTabPress(tab.key, index)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={(isActive ? tab.iconFocused : tab.icon) as any}
-                    size={18}
-                    color={
-                      isActive
-                        ? "#FF0000"
-                        : isDark
-                        ? "rgba(255,255,255,0.5)"
-                        : "rgba(0,0,0,0.4)"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.tabLabel,
-                      {
-                        color: isActive
-                          ? "#FF0000"
-                          : isDark
-                          ? "rgba(255,255,255,0.5)"
-                          : "rgba(0,0,0,0.4)",
-                        fontWeight: isActive ? "700" : "500",
-                      },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </BlurView>
+        <SubTabBar
+          tabs={SUB_TABS}
+          activeKey={activeTab}
+          isDark={isDark}
+          onTabPress={handleTabPress}
+        />
       </Animated.View>
     </View>
   );
@@ -290,37 +212,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
-    paddingHorizontal: 16,
+    paddingHorizontal: Math.max((windowWidth - 420) / 2, 16),
     paddingBottom: 8,
-  },
-  bottomBlur: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  glassTabBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 48,
-    borderRadius: 16,
-    borderWidth: 0.5,
-    paddingHorizontal: 4,
-  },
-  activeIndicator: {
-    position: "absolute",
-    height: 40,
-    borderRadius: 12,
-    left: 4,
-  },
-  tabButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    height: 48,
-    gap: 6,
-  },
-  tabLabel: {
-    fontSize: 13,
-    letterSpacing: -0.2,
-    fontFamily: "Poppins_600SemiBold",
   },
 });
