@@ -388,6 +388,50 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs"
   );
 }
 
+export function BottomTalentNav({
+  activeLabel,
+}: {
+  activeLabel: "dashboard" | "gigs" | "contracts" | "messages" | "profile";
+}) {
+  const { palette } = useFlowPalette();
+  const router = useRouter();
+  type NavKey = "dashboard" | "gigs" | "contracts" | "messages" | "profile";
+  type NavItem = { key: NavKey; icon: keyof typeof Ionicons.glyphMap; label: string; route: string };
+
+  const navItems: NavItem[] = [
+    { key: "dashboard", icon: "grid", label: "Dashboard", route: "/talent-stack" },
+    { key: "gigs", icon: "briefcase", label: "Gigs", route: "/talent-stack/browse-gigs" },
+    { key: "contracts", icon: "document-text", label: "Contracts", route: "/talent-stack/contracts" },
+    { key: "messages", icon: "chatbubble", label: "Messages", route: "/talent-stack/messages" },
+    { key: "profile", icon: "person-circle", label: "Profile", route: "/talent-stack/profile" },
+  ];
+
+  return (
+    <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}>
+      {navItems.map((item) => {
+        const active = item.key === activeLabel;
+        return (
+          <TouchableOpacity
+            key={item.label}
+            style={styles.navItem}
+            activeOpacity={0.8}
+            onPress={() => router.replace(item.route as never)}
+          >
+            <Ionicons name={item.icon} size={21} color={active ? palette.accent : palette.mutedText} />
+            <T
+              weight={active ? "semiBold" : "medium"}
+              color={active ? palette.accent : palette.mutedText}
+              style={{ fontSize: 11, marginTop: 4 }}
+            >
+              {item.label}
+            </T>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 export function Avatar({
   source,
   size = 48,

@@ -137,6 +137,7 @@ function RootLayoutNav() {
         const isAllowedPath =
           segment === "(tabs)" ||
           segment === "freelancer-stack" ||
+          segment === "talent-stack" ||
           segment === "room" ||
           segment === "tribe" ||
           segment === "article" ||
