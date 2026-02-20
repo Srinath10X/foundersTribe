@@ -42,6 +42,12 @@ type Profile = {
   idea_video_url: string | null;
   previous_works: PreviousWork[];
   social_links: SocialLink[];
+  user_type: "founder" | "freelancer" | null;
+  contact?: string | null;
+  location?: string | null;
+  role?: string | null;
+  rating?: number | null;
+  completed_gigs?: any[] | null;
 };
 
 const PLATFORM_ICONS: Record<string, string> = {
@@ -143,6 +149,12 @@ export default function ProfileScreen() {
               idea_video_url: null,
               previous_works: [],
               social_links: [],
+              user_type: null,
+              contact: null,
+              location: null,
+              role: null,
+              rating: null,
+              completed_gigs: [],
             });
           }
         }
@@ -400,6 +412,32 @@ export default function ProfileScreen() {
           <Text style={[styles.userEmail, { color: theme.text.secondary }]}>
             {userEmail}
           </Text>
+
+          {profile?.user_type && (
+            <View
+              style={[
+                styles.roleBadge,
+                {
+                  backgroundColor:
+                    profile.user_type === "founder"
+                      ? "#3B82F6"
+                      : "#10B981",
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  profile.user_type === "founder" ? "rocket" : "code-working"
+                }
+                size={12}
+                color="#fff"
+              />
+              <Text style={styles.roleBadgeText}>
+                {profile.user_type.charAt(0).toUpperCase() +
+                  profile.user_type.slice(1)}
+              </Text>
+            </View>
+          )}
           <TouchableOpacity
             style={[styles.editProfileBtn, { borderColor: theme.brand.primary }]}
             onPress={handleEditProfile}
@@ -508,82 +546,151 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Business Idea Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-              BUSINESS IDEAS
-            </Text>
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
-              {businessIdeas.length > 0 ? (
-                <View style={styles.cardContent}>
-                  {businessIdeas.map((item, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.experienceItem,
-                        index < businessIdeas.length - 1 && {
-                          borderBottomWidth: 1,
-                          borderBottomColor: theme.border,
-                        },
-                      ]}
-                    >
+          {/* Freelancer Specific Section: Details */}
+          {profile?.user_type === "freelancer" && (profile.contact || profile.location || profile.role) && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+                DETAILS
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+                {profile.role && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="briefcase-outline" size={18} color={theme.text.tertiary} />
+                    <Text style={[styles.detailText, { color: theme.text.primary }]}>{profile.role}</Text>
+                  </View>
+                )}
+                {profile.location && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="location-outline" size={18} color={theme.text.tertiary} />
+                    <Text style={[styles.detailText, { color: theme.text.primary }]}>{profile.location}</Text>
+                  </View>
+                )}
+                {profile.contact && (
+                  <View style={styles.detailRow}>
+                    <Ionicons name="mail-outline" size={18} color={theme.text.tertiary} />
+                    <Text style={[styles.detailText, { color: theme.text.primary }]}>{profile.contact}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Founder Specific Section: Business Ideas */}
+          {profile?.user_type === "founder" && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+                BUSINESS IDEAS
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+                {businessIdeas.length > 0 ? (
+                  <View style={styles.cardContent}>
+                    {businessIdeas.map((item, index) => (
                       <View
+                        key={index}
                         style={[
-                          styles.experienceDot,
-                          { backgroundColor: theme.brand.primary },
+                          styles.experienceItem,
+                          index < businessIdeas.length - 1 && {
+                            borderBottomWidth: 1,
+                            borderBottomColor: theme.border,
+                          },
                         ]}
-                      />
-                      <Text style={[styles.bodyText, { color: theme.text.secondary, flex: 1 }]}>
-                        {item.idea}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.cardContent}>
-                  <Text style={[styles.emptyText, { color: theme.text.muted }]}>
-                    Share your business ideas via Edit Profile
-                  </Text>
-                </View>
-              )}
-              {ideaVideoUrl && (
-                <TouchableOpacity
-                  style={[styles.videoRow, { borderTopColor: theme.border }]}
-                  onPress={() => openURL(ideaVideoUrl)}
-                  activeOpacity={0.7}
-                >
-                  {videoThumbnail ? (
-                    <Image
-                      source={{ uri: videoThumbnail }}
-                      style={styles.videoThumb}
-                    />
-                  ) : (
-                    <View
-                      style={[
-                        styles.videoThumb,
-                        { backgroundColor: theme.surfaceElevated, justifyContent: "center", alignItems: "center" },
-                      ]}
-                    >
-                      <Ionicons name="play-circle" size={24} color={theme.text.muted} />
-                    </View>
-                  )}
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={[styles.videoLabel, { color: theme.text.primary }]}>
-                      Pitch Video
-                    </Text>
-                    <Text style={[styles.videoUrl, { color: theme.text.muted }]} numberOfLines={1}>
-                      {ideaVideoUrl}
+                      >
+                        <View
+                          style={[
+                            styles.experienceDot,
+                            { backgroundColor: theme.brand.primary },
+                          ]}
+                        />
+                        <Text style={[styles.bodyText, { color: theme.text.secondary, flex: 1 }]}>
+                          {item.idea}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.cardContent}>
+                    <Text style={[styles.emptyText, { color: theme.text.muted }]}>
+                      Share your business ideas via Edit Profile
                     </Text>
                   </View>
-                  <Ionicons
-                    name="open-outline"
-                    size={14}
-                    color={theme.text.muted}
-                  />
-                </TouchableOpacity>
-              )}
+                )}
+                {ideaVideoUrl && (
+                  <TouchableOpacity
+                    style={[styles.videoRow, { borderTopColor: theme.border }]}
+                    onPress={() => openURL(ideaVideoUrl)}
+                    activeOpacity={0.7}
+                  >
+                    {videoThumbnail ? (
+                      <Image
+                        source={{ uri: videoThumbnail }}
+                        style={styles.videoThumb}
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.videoThumb,
+                          { backgroundColor: theme.surfaceElevated, justifyContent: "center", alignItems: "center" },
+                        ]}
+                      >
+                        <Ionicons name="play-circle" size={24} color={theme.text.muted} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={[styles.videoLabel, { color: theme.text.primary }]}>
+                        Pitch Video
+                      </Text>
+                      <Text style={[styles.videoUrl, { color: theme.text.muted }]} numberOfLines={1}>
+                        {ideaVideoUrl}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="open-outline"
+                      size={14}
+                      color={theme.text.muted}
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
+          )}
+
+          {/* Freelancer Specific Section: Completed Gigs */}
+          {profile?.user_type === "freelancer" && Array.isArray(profile.completed_gigs) && profile.completed_gigs.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+                COMPLETED GIGS
+              </Text>
+              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+                {profile.completed_gigs.map((gig, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.experienceItem,
+                      index < (profile.completed_gigs?.length || 0) - 1 && {
+                        borderBottomWidth: 1,
+                        borderBottomColor: theme.border,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.experienceDot,
+                        { backgroundColor: "#10B981" },
+                      ]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.experienceRole, { color: theme.text.primary }]}>
+                        {gig.title}
+                      </Text>
+                      <Text style={[styles.experienceCompany, { color: theme.text.secondary }]}>
+                        {gig.description}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* Experience Section */}
           {previousWorks.length > 0 && (
@@ -1039,5 +1146,34 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginBottom: 8,
     fontFamily: "BricolageGrotesque_700Bold",
+  },
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  roleBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+  detailText: {
+    fontSize: 15,
+    fontWeight: "500",
   },
 });

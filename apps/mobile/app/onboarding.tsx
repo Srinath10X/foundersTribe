@@ -34,11 +34,15 @@ export default function Onboarding() {
 
   const token = session?.access_token || "";
 
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selected, setSelected] = useState<string[]>([]);
+  const [userType, setUserType] = useState<"founder" | "freelancer" | null>(
+    null,
+  );
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [savingInterests, setSavingInterests] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingRole, setSavingRole] = useState(false);
   const [categories, setCategories] = useState<
     { id: string; label: string; image: string }[]
   >([]);
@@ -46,6 +50,10 @@ export default function Onboarding() {
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [contact, setContact] = useState("");
+  const [location, setLocation] = useState("");
+  const [role, setRole] = useState("");
+  const [completedGigs, setCompletedGigs] = useState<any[]>([]);
   const [businessIdeas, setBusinessIdeas] = useState<{ idea: string }[]>([
     EMPTY_IDEA,
   ]);
@@ -63,6 +71,11 @@ export default function Onboarding() {
       setFullName(data.display_name || "");
       setBio(data.bio || "");
       setLinkedinUrl(data.linkedin_url || "");
+      setContact(data.contact || "");
+      setLocation(data.location || "");
+      setRole(data.role || "");
+      setCompletedGigs(Array.isArray(data.completed_gigs) ? data.completed_gigs : []);
+      setUserType(data.user_type || null);
 
       if (Array.isArray(data.business_ideas) && data.business_ideas.length > 0) {
         setBusinessIdeas(
@@ -183,11 +196,16 @@ export default function Onboarding() {
         display_name: fullName.trim() || undefined,
         bio: bio.trim() || null,
         linkedin_url: normalizeUrl(linkedinUrl) || null,
-        business_ideas: validBusinessIdeas,
-        business_idea: validBusinessIdeas[0] || null,
+        user_type: userType,
+        contact: contact.trim() || null,
+        location: location.trim() || null,
+        role: role.trim() || null,
+        completed_gigs: completedGigs,
+        business_ideas: userType === "founder" ? validBusinessIdeas : [],
+        business_idea: userType === "founder" ? validBusinessIdeas[0] || null : null,
         social_links: validSocialLinks,
       });
-      setStep(2);
+      setStep(3);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save profile details");
     } finally {
@@ -195,7 +213,23 @@ export default function Onboarding() {
     }
   };
 
-  const handleSkipProfile = () => setStep(2);
+  const saveRoleStepAndContinue = async () => {
+    if (!token || !userType) return;
+    setSavingRole(true);
+    try {
+      await tribeApi.updateMyProfile(token, {
+        user_type: userType,
+      });
+      setStep(2);
+    } catch (error: any) {
+      Alert.alert("Error", error?.message || "Failed to save your role");
+    } finally {
+      setSavingRole(false);
+    }
+  };
+
+  const handleSkipProfile = () => setStep(3);
+  const handleSkipRole = () => setStep(2);
 
   const toggleInterest = (id: string) => {
     const normalizedId = id.toLowerCase().replace(/ /g, "_");
@@ -279,36 +313,81 @@ export default function Onboarding() {
           autoCapitalize="none"
           keyboardType="url"
         />
+
+        {userType === "freelancer" && (
+          <>
+            <Text style={[styles.label, { color: theme.text.secondary }]}>Contact Info</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text.primary }]}
+              value={contact}
+              onChangeText={setContact}
+              placeholder="Email or WhatsApp"
+              placeholderTextColor={theme.text.muted}
+            />
+
+            <Text style={[styles.label, { color: theme.text.secondary }]}>Freelancer Role</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text.primary }]}
+              value={role}
+              onChangeText={setRole}
+              placeholder="e.g. Fullstack Developer, UI Designer"
+              placeholderTextColor={theme.text.muted}
+            />
+
+            <Text style={[styles.label, { color: theme.text.secondary }]}>Location</Text>
+            <TextInput
+              style={[styles.input, { borderColor: theme.border, color: theme.text.primary }]}
+              value={location}
+              onChangeText={setLocation}
+              placeholder="City, Country"
+              placeholderTextColor={theme.text.muted}
+            />
+          </>
+        )}
       </View>
 
-      <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <View style={styles.rowBetween}>
-          <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>Business Ideas</Text>
-          <TouchableOpacity onPress={addBusinessIdea}>
-            <Ionicons name="add-circle" size={22} color={theme.brand.primary} />
-          </TouchableOpacity>
-        </View>
-        {businessIdeas.map((item, index) => (
-          <View key={index} style={[styles.dynamicItem, { borderColor: theme.border }]}>
-            <View style={styles.rowBetween}>
-              <Text style={[styles.itemIndex, { color: theme.text.muted }]}>#{index + 1}</Text>
-              <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                <Ionicons name="trash-outline" size={18} color="#EF4444" />
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={[styles.input, styles.multilineInput, { borderColor: theme.border, color: theme.text.primary }]}
-              value={item.idea}
-              onChangeText={(value) => updateBusinessIdea(index, value)}
-              placeholder="Tell us about the product/ idea/ problem statement you working on"
-              placeholderTextColor={theme.text.muted}
-              multiline
-              textAlignVertical="top"
-              maxLength={2000}
-            />
+      {userType === "founder" ? (
+        <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>Business Ideas</Text>
+            <TouchableOpacity onPress={addBusinessIdea}>
+              <Ionicons name="add-circle" size={22} color={theme.brand.primary} />
+            </TouchableOpacity>
           </View>
-        ))}
-      </View>
+          {businessIdeas.map((item, index) => (
+            <View key={index} style={[styles.dynamicItem, { borderColor: theme.border }]}>
+              <View style={styles.rowBetween}>
+                <Text style={[styles.itemIndex, { color: theme.text.muted }]}>#{index + 1}</Text>
+                <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
+                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[styles.input, styles.multilineInput, { borderColor: theme.border, color: theme.text.primary }]}
+                value={item.idea}
+                onChangeText={(value) => updateBusinessIdea(index, value)}
+                placeholder="Tell us about the product/ idea/ problem statement you working on"
+                placeholderTextColor={theme.text.muted}
+                multiline
+                textAlignVertical="top"
+                maxLength={2000}
+              />
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>Experience</Text>
+            <TouchableOpacity onPress={addSocialLink}>
+              {/* Reusing social link UI pattern for simplicity in onboarding, but we'll use previous_works state eventually if needed. For now let's just use bio/role/location for freelancer experience in Step 2 */}
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.emptyText, { color: theme.text.muted, marginTop: 8 }]}>
+            You can add detailed experience in your profile later.
+          </Text>
+        </View>
+      )}
 
       <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
         <View style={styles.rowBetween}>
@@ -350,6 +429,114 @@ export default function Onboarding() {
             />
           </View>
         ))}
+      </View>
+    </ScrollView>
+  );
+
+  const renderRoleStep = () => (
+    <ScrollView
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Animated.View
+        entering={FadeInUp.delay(100).duration(500)}
+        style={styles.titleSection}
+      >
+        <Text style={[styles.mainTitle, { color: theme.text.primary }]}>
+          Choose Your Path
+        </Text>
+        <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
+          Are you here to build a startup or offer your skills?
+        </Text>
+      </Animated.View>
+
+      <View style={styles.roleGrid}>
+        <TouchableOpacity
+          style={[
+            styles.roleLargeCard,
+            {
+              backgroundColor: theme.surface,
+              borderColor:
+                userType === "founder" ? theme.brand.primary : theme.border,
+            },
+          ]}
+          onPress={() => setUserType("founder")}
+          activeOpacity={0.8}
+        >
+          <View
+            style={[
+              styles.roleIconCircle,
+              {
+                backgroundColor:
+                  userType === "founder"
+                    ? theme.brand.primary
+                    : theme.surfaceElevated,
+              },
+            ]}
+          >
+            <Ionicons
+              name="rocket"
+              size={32}
+              color={userType === "founder" ? "#fff" : theme.text.secondary}
+            />
+          </View>
+          <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
+            Founder
+          </Text>
+          <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
+            I have an idea or a startup and want to find collaborators, talent,
+            or grow.
+          </Text>
+          {userType === "founder" && (
+            <View style={styles.roleCheckMark}>
+              <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.roleLargeCard,
+            {
+              backgroundColor: theme.surface,
+              borderColor:
+                userType === "freelancer" ? theme.brand.primary : theme.border,
+            },
+          ]}
+          onPress={() => setUserType("freelancer")}
+          activeOpacity={0.8}
+        >
+          <View
+            style={[
+              styles.roleIconCircle,
+              {
+                backgroundColor:
+                  userType === "freelancer"
+                    ? theme.brand.primary
+                    : theme.surfaceElevated,
+              },
+            ]}
+          >
+            <Ionicons
+              name="code-working"
+              size={32}
+              color={userType === "freelancer" ? "#fff" : theme.text.secondary}
+            />
+          </View>
+          <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
+            Freelancer
+          </Text>
+          <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
+            I have skills and want to find exciting projects to work on or join
+            founding teams.
+          </Text>
+          {userType === "freelancer" && (
+            <View style={styles.roleCheckMark}>
+              <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -410,7 +597,11 @@ export default function Onboarding() {
       <View style={styles.header}>
         <View style={{ width: 24 }} />
         <Text style={[styles.headerTitle, { color: theme.text.primary }]}>
-          {step === 1 ? "Set Up Profile" : "Personalize Your Feed"}
+          {step === 1
+            ? "Select Role"
+            : step === 2
+              ? "Set Up Profile"
+              : "Personalize Your Feed"}
         </Text>
         <View style={{ width: 24 }} />
       </View>
@@ -421,20 +612,27 @@ export default function Onboarding() {
             ONBOARDING PROGRESS
           </Text>
           <Text style={[styles.stepText, { color: theme.brand.primary }]}>
-            Step {step} of 2
+            Step {step} of 3
           </Text>
         </View>
         <View style={[styles.track, { backgroundColor: theme.surface }]}>
           <View
             style={[
               styles.bar,
-              { width: step === 1 ? "50%" : "100%", backgroundColor: theme.brand.primary },
+              {
+                width: step === 1 ? "33%" : step === 2 ? "66%" : "100%",
+                backgroundColor: theme.brand.primary,
+              },
             ]}
           />
         </View>
       </View>
 
-      {step === 1 ? renderProfileStep() : renderInterestStep()}
+      {step === 1
+        ? renderRoleStep()
+        : step === 2
+          ? renderProfileStep()
+          : renderInterestStep()}
 
       <View
         style={[
@@ -446,10 +644,46 @@ export default function Onboarding() {
           <View style={styles.footerRow}>
             <TouchableOpacity
               style={[styles.skipBtn, { borderColor: theme.border }]}
+              onPress={handleSkipRole}
+              disabled={savingRole}
+            >
+              <Text style={[styles.skipText, { color: theme.text.secondary }]}>
+                Skip
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.continueBtn,
+                {
+                  backgroundColor: theme.brand.primary,
+                  flex: 1,
+                  marginBottom: 0,
+                  opacity: !userType ? 0.5 : 1,
+                },
+              ]}
+              onPress={saveRoleStepAndContinue}
+              disabled={savingRole || !userType}
+            >
+              {savingRole ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <Text style={styles.continueText}>Select & Continue</Text>
+                  <Ionicons name="arrow-forward" size={20} color="white" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : step === 2 ? (
+          <View style={styles.footerRow}>
+            <TouchableOpacity
+              style={[styles.skipBtn, { borderColor: theme.border }]}
               onPress={handleSkipProfile}
               disabled={savingProfile}
             >
-              <Text style={[styles.skipText, { color: theme.text.secondary }]}>Skip</Text>
+              <Text style={[styles.skipText, { color: theme.text.secondary }]}>
+                Skip
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -600,4 +834,44 @@ const styles = StyleSheet.create({
   },
   continueText: { color: "white", fontSize: 16, fontWeight: "700" },
   countText: { fontSize: 12, textAlign: "center" },
+  emptyText: {
+    fontSize: 14,
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  roleGrid: {
+    gap: 16,
+    marginTop: Spacing.sm,
+  },
+  roleLargeCard: {
+    borderRadius: 20,
+    borderWidth: 2,
+    padding: 24,
+    position: "relative",
+    alignItems: "center",
+  },
+  roleIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  roleTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  roleDesc: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    opacity: 0.8,
+  },
+  roleCheckMark: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+  },
 });
