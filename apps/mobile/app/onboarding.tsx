@@ -75,7 +75,11 @@ export default function Onboarding() {
       setLocation(data.location || "");
       setRole(data.role || "");
       setCompletedGigs(Array.isArray(data.completed_gigs) ? data.completed_gigs : []);
-      setUserType(data.user_type || null);
+      setUserType(
+        typeof data.user_type === "string"
+          ? (data.user_type.toLowerCase() as "founder" | "freelancer")
+          : (data.user_type || null)
+      );
 
       if (Array.isArray(data.business_ideas) && data.business_ideas.length > 0) {
         setBusinessIdeas(

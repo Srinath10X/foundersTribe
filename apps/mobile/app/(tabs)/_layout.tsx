@@ -11,54 +11,81 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: theme.text.primary, // Dynamic Text Color
-        tabBarInactiveTintColor: theme.text.muted, // Dynamic Muted Color
         headerShown: false,
+
+        tabBarActiveTintColor: theme.brand.primary,
+        tabBarInactiveTintColor: theme.text.muted,
+
         tabBarStyle: {
-          backgroundColor: theme.surface, // Dynamic Surface (White/Black)
-          borderTopWidth: 0,
-          elevation: 0, // Remove shadow on Android
-          height: Platform.OS === "ios" ? 88 : 70,
-          paddingBottom: Platform.OS === "ios" ? 28 : 10,
-          paddingTop: 10,
           position: "absolute",
-          // Add blur or translucency if supported, otherwise solid theme color
+
+          marginHorizontal: 18,
+
+          left: 16,
+          right: 16,
+
+          bottom: Platform.OS === "ios" ? 20 : 14,
+
+          height: 60, // 🔥 tighter
+          paddingTop: 3,
+          paddingBottom: Platform.OS === "ios" ? 10 : 6,
+
+          backgroundColor: theme.surface,
+          opacity: 0.9,
+          borderTopWidth: 0,
+
+          borderRadius: 999,
+
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+
+          elevation: 6,
         },
+
+        tabBarItemStyle: {
+          justifyContent: "center",
+          alignItems: "center",
+          paddingVertical: 2,
+        },
+
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "600",
           fontFamily: "Poppins_600SemiBold",
         },
+
+        tabBarInactiveTintColor: theme.text.secondary ?? theme.text.muted,
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
-              size={24}
+              size={20}
               color={color}
             />
           ),
         }}
       />
-      {/* Hidden: moved to Home sub-tabs */}
       <Tabs.Screen
         name="search"
         options={{
-          href: null, // Hide from tab bar
+          href: null,
         }}
       />
       <Tabs.Screen
         name="community"
         options={{
-          title: "Community",
-          tabBarIcon: ({ color, size, focused }) => (
+          title: "Communities",
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "people" : "people-outline"}
-              size={24}
+              size={20}
               color={color}
             />
           ),
@@ -67,38 +94,36 @@ export default function TabLayout() {
       <Tabs.Screen
         name="global-search"
         options={{
-          title: "Global Search",
+          title: "Search",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "search" : "search-outline"}
-              size={24}
+              size={20}
               color={color}
             />
           ),
         }}
       />
-      {/* Hidden: moved to Community sub-tabs */}
       <Tabs.Screen
         name="tribes"
         options={{
-          href: null, // Hide from tab bar
+          href: null,
         }}
       />
-      {/* Hidden: moved to Home sub-tabs */}
       <Tabs.Screen
         name="bookmarks"
         options={{
-          href: null, // Hide from tab bar
+          href: null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "person" : "person-outline"}
-              size={24}
+              size={20}
               color={color}
             />
           ),

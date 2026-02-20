@@ -66,6 +66,9 @@ function normalizeProfile(profile) {
 
   // Enforce user_type allowed values
   let user_type = profile.user_type;
+  if (typeof user_type === "string") {
+    user_type = user_type.toLowerCase();
+  }
   if (user_type !== "founder" && user_type !== "freelancer") {
     user_type = null;
   }

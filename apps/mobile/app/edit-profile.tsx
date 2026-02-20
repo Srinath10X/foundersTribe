@@ -81,8 +81,7 @@ export default function EditProfileScreen() {
       .list(folder, { limit: 20 });
 
     if (error || !Array.isArray(files) || files.length === 0) return "";
-    const preferred =
-      files.find((f) => /^avatar\./i.test(f.name)) || files[0];
+    const preferred = files.find((f) => /^avatar\./i.test(f.name)) || files[0];
     if (!preferred?.name) return "";
 
     const fullPath = `${folder}/${preferred.name}`;
@@ -99,8 +98,11 @@ export default function EditProfileScreen() {
       const data = await tribeApi.getMyProfile(token);
       setDisplayName(data.display_name || "");
       setBio(data.bio || "");
-      const storedPhoto = typeof data.photo_url === "string" ? data.photo_url : "";
-      setPhotoPath(storedPhoto && !/^https?:\/\//i.test(storedPhoto) ? storedPhoto : "");
+      const storedPhoto =
+        typeof data.photo_url === "string" ? data.photo_url : "";
+      setPhotoPath(
+        storedPhoto && !/^https?:\/\//i.test(storedPhoto) ? storedPhoto : "",
+      );
       const resolvedFromProfile = await resolvePhotoUrl(storedPhoto);
       if (resolvedFromProfile) {
         setPhotoUrl(resolvedFromProfile);
@@ -112,8 +114,13 @@ export default function EditProfileScreen() {
         const sanitizedIdeas = data.business_ideas
           .filter((idea: unknown) => typeof idea === "string")
           .map((idea: string) => ({ idea }));
-        setBusinessIdeas(sanitizedIdeas.length ? sanitizedIdeas : [{ idea: "" }]);
-      } else if (typeof data.business_idea === "string" && data.business_idea.trim()) {
+        setBusinessIdeas(
+          sanitizedIdeas.length ? sanitizedIdeas : [{ idea: "" }],
+        );
+      } else if (
+        typeof data.business_idea === "string" &&
+        data.business_idea.trim()
+      ) {
         try {
           const parsed = JSON.parse(data.business_idea);
           if (Array.isArray(parsed)) {
@@ -131,13 +138,21 @@ export default function EditProfileScreen() {
         setBusinessIdeas([{ idea: "" }]);
       }
       setIdeaVideoUrl(data.idea_video_url || "");
-      setPreviousWorks(Array.isArray(data.previous_works) ? data.previous_works : []);
+      setPreviousWorks(
+        Array.isArray(data.previous_works) ? data.previous_works : [],
+      );
       setSocialLinks(Array.isArray(data.social_links) ? data.social_links : []);
       setContact(data.contact || "");
       setLocation(data.location || "");
       setRole(data.role || "");
-      setCompletedGigs(Array.isArray(data.completed_gigs) ? data.completed_gigs : []);
-      setUserType(data.user_type || null);
+      setCompletedGigs(
+        Array.isArray(data.completed_gigs) ? data.completed_gigs : [],
+      );
+      setUserType(
+        typeof data.user_type === "string"
+          ? (data.user_type.toLowerCase() as "founder" | "freelancer")
+          : (data.user_type || null)
+      );
     } catch (error) {
       console.error("Error loading profile:", error);
       // Fallback — load basic info from auth user
@@ -179,11 +194,15 @@ export default function EditProfileScreen() {
     if (source === "camera") {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Camera access is required to take a photo.");
+        Alert.alert(
+          "Permission needed",
+          "Camera access is required to take a photo.",
+        );
         return;
       }
     } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Photo library access is required.");
         return;
@@ -276,9 +295,10 @@ export default function EditProfileScreen() {
         business_ideas: cleanedIdeas,
         business_idea: cleanedIdeas.length ? cleanedIdeas[0] : null,
         idea_video_url: normalizeUrl(ideaVideoUrl),
-        previous_works: (Array.isArray(previousWorks) ? previousWorks : []).filter(
-          (w) => w && (w.company || w.role),
-        ),
+        previous_works: (Array.isArray(previousWorks)
+          ? previousWorks
+          : []
+        ).filter((w) => w && (w.company || w.role)),
         social_links: (Array.isArray(socialLinks) ? socialLinks : []).filter(
           (l) => l && l.url,
         ),
@@ -300,9 +320,16 @@ export default function EditProfileScreen() {
 
   // ── Dynamic list helpers ───────────────────────────────
   const addWork = () =>
-    setPreviousWorks([...previousWorks, { company: "", role: "", duration: "" }]);
+    setPreviousWorks([
+      ...previousWorks,
+      { company: "", role: "", duration: "" },
+    ]);
 
-  const updateWork = (index: number, field: keyof PreviousWork, value: string) => {
+  const updateWork = (
+    index: number,
+    field: keyof PreviousWork,
+    value: string,
+  ) => {
     const updated = [...previousWorks];
     updated[index] = { ...updated[index], [field]: value };
     setPreviousWorks(updated);
@@ -314,7 +341,11 @@ export default function EditProfileScreen() {
   const addLink = () =>
     setSocialLinks([...socialLinks, { platform: "", url: "", label: "" }]);
 
-  const updateLink = (index: number, field: keyof SocialLink, value: string) => {
+  const updateLink = (
+    index: number,
+    field: keyof SocialLink,
+    value: string,
+  ) => {
     const updated = [...socialLinks];
     updated[index] = { ...updated[index], [field]: value };
     setSocialLinks(updated);
@@ -356,7 +387,11 @@ export default function EditProfileScreen() {
       <View
         style={[
           styles.container,
-          { backgroundColor: theme.background, justifyContent: "center", alignItems: "center" },
+          {
+            backgroundColor: theme.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
         ]}
       >
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -411,7 +446,10 @@ export default function EditProfileScreen() {
             {photoUrl ? (
               <Image
                 source={{ uri: photoUrl }}
-                style={[styles.photoPreview, { borderColor: theme.brand.primary }]}
+                style={[
+                  styles.photoPreview,
+                  { borderColor: theme.brand.primary },
+                ]}
               />
             ) : (
               <View
@@ -429,7 +467,10 @@ export default function EditProfileScreen() {
               </View>
             )}
             <View
-              style={[styles.cameraIconBadge, { backgroundColor: theme.brand.primary }]}
+              style={[
+                styles.cameraIconBadge,
+                { backgroundColor: theme.brand.primary },
+              ]}
             >
               {uploading ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -459,7 +500,9 @@ export default function EditProfileScreen() {
                         ? theme.brand.primary
                         : theme.surfaceElevated,
                     borderColor:
-                      userType === "founder" ? theme.brand.primary : theme.border,
+                      userType === "founder"
+                        ? theme.brand.primary
+                        : theme.border,
                   },
                 ]}
                 onPress={() => setUserType("founder")}
@@ -473,7 +516,8 @@ export default function EditProfileScreen() {
                   style={[
                     styles.roleText,
                     {
-                      color: userType === "founder" ? "#fff" : theme.text.primary,
+                      color:
+                        userType === "founder" ? "#fff" : theme.text.primary,
                     },
                   ]}
                 >
@@ -590,8 +634,15 @@ export default function EditProfileScreen() {
                 <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
                   Business Ideas
                 </Text>
-                <TouchableOpacity onPress={addBusinessIdea} style={styles.addBtn}>
-                  <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+                <TouchableOpacity
+                  onPress={addBusinessIdea}
+                  style={styles.addBtn}
+                >
+                  <Ionicons
+                    name="add-circle"
+                    size={24}
+                    color={theme.brand.primary}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -601,11 +652,20 @@ export default function EditProfileScreen() {
                   style={[styles.dynamicItem, { borderColor: theme.border }]}
                 >
                   <View style={styles.dynamicItemHeader}>
-                    <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                    <Text
+                      style={[
+                        styles.dynamicItemIndex,
+                        { color: theme.text.muted },
+                      ]}
+                    >
                       #{index + 1}
                     </Text>
                     <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                      <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#FF3B30"
+                      />
                     </TouchableOpacity>
                   </View>
                   <TextInput
@@ -642,10 +702,19 @@ export default function EditProfileScreen() {
                   Completed Gigs
                 </Text>
                 <TouchableOpacity
-                  onPress={() => setCompletedGigs([...completedGigs, { title: "", description: "" }])}
+                  onPress={() =>
+                    setCompletedGigs([
+                      ...completedGigs,
+                      { title: "", description: "" },
+                    ])
+                  }
                   style={styles.addBtn}
                 >
-                  <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+                  <Ionicons
+                    name="add-circle"
+                    size={24}
+                    color={theme.brand.primary}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -655,13 +724,26 @@ export default function EditProfileScreen() {
                   style={[styles.dynamicItem, { borderColor: theme.border }]}
                 >
                   <View style={styles.dynamicItemHeader}>
-                    <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                    <Text
+                      style={[
+                        styles.dynamicItemIndex,
+                        { color: theme.text.muted },
+                      ]}
+                    >
                       Gig #{index + 1}
                     </Text>
                     <TouchableOpacity
-                      onPress={() => setCompletedGigs(completedGigs.filter((_, i) => i !== index))}
+                      onPress={() =>
+                        setCompletedGigs(
+                          completedGigs.filter((_, i) => i !== index),
+                        )
+                      }
                     >
-                      <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#FF3B30"
+                      />
                     </TouchableOpacity>
                   </View>
                   <TextInput
@@ -699,7 +781,11 @@ export default function EditProfileScreen() {
                 Experience
               </Text>
               <TouchableOpacity onPress={addWork} style={styles.addBtn}>
-                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={theme.brand.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -715,7 +801,12 @@ export default function EditProfileScreen() {
                 style={[styles.dynamicItem, { borderColor: theme.border }]}
               >
                 <View style={styles.dynamicItemHeader}>
-                  <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                  <Text
+                    style={[
+                      styles.dynamicItemIndex,
+                      { color: theme.text.muted },
+                    ]}
+                  >
                     #{index + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeWork(index)}>
@@ -754,7 +845,11 @@ export default function EditProfileScreen() {
                 Social Links
               </Text>
               <TouchableOpacity onPress={addLink} style={styles.addBtn}>
-                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={theme.brand.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -770,7 +865,12 @@ export default function EditProfileScreen() {
                 style={[styles.dynamicItem, { borderColor: theme.border }]}
               >
                 <View style={styles.dynamicItemHeader}>
-                  <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                  <Text
+                    style={[
+                      styles.dynamicItemIndex,
+                      { color: theme.text.muted },
+                    ]}
+                  >
                     #{index + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeLink(index)}>
