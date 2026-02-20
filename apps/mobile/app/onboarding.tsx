@@ -269,8 +269,8 @@ export default function Onboarding() {
       await refreshOnboardingStatus();
       const target =
         userType === "freelancer"
-          ? "/(freelancer-tabs)/dashboard"
-          : "/(founder-tabs)/home";
+          ? "/(role-pager)/(freelancer-tabs)/dashboard"
+          : "/(role-pager)/(founder-tabs)/home";
       setTimeout(() => router.replace(target), 300);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to complete onboarding");

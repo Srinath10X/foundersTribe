@@ -52,7 +52,7 @@ import {
   useFonts as usePoppinsFonts,
 } from "@expo-google-fonts/poppins";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -68,6 +68,7 @@ const BlackTheme = {
     border: "#1a1a1a",
   },
 };
+
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
@@ -117,8 +118,12 @@ function RootLayoutNav() {
     if (!fontsLoaded || authLoading || !isRoleLoaded) return;
 
     // 1. Analyze current state
-    const inFounderTabs = segments[0] === "(founder-tabs)";
-    const inFreelancerTabs = segments[0] === "(freelancer-tabs)";
+    // Tab groups are now nested under (role-pager), so check both segment[0] patterns
+    const inRolePager = segments[0] === "(role-pager)";
+    const inFounderTabs =
+      inRolePager && segments[1] === "(founder-tabs)";
+    const inFreelancerTabs =
+      inRolePager && segments[1] === "(freelancer-tabs)";
     const inOnboarding = segments[0] === "onboarding";
 
     if (session) {
@@ -134,8 +139,7 @@ function RootLayoutNav() {
 
         // whitelist allowed paths
         const isAllowedPath =
-          segment === "(founder-tabs)" ||
-          segment === "(freelancer-tabs)" ||
+          segment === "(role-pager)" ||
           segment === "freelancer-stack" ||
           segment === "talent-stack" ||
           segment === "room" ||
@@ -151,14 +155,14 @@ function RootLayoutNav() {
           console.log("DEBUG: Redirecting to role tabs from:", pathname);
           const target =
             role === "freelancer"
-              ? "/(freelancer-tabs)/dashboard"
-              : "/(founder-tabs)/home";
+              ? "/(role-pager)/(freelancer-tabs)/dashboard"
+              : "/(role-pager)/(founder-tabs)/home";
           setTimeout(() => router.replace(target), 0);
         }
       }
     } else {
       // 3. Handling Logged Out Users
-      if (inFounderTabs || inFreelancerTabs || inOnboarding) {
+      if (inRolePager || inOnboarding) {
         setTimeout(() => router.replace("/"), 0);
       }
     }
@@ -203,21 +207,8 @@ function RootLayoutNav() {
         <Stack.Screen name="login-callback" />
         <Stack.Screen name="onboarding" />
 
-        {/* Role-based tab navigators (only ONE is active at a time) */}
-        <Stack.Screen
-          name="(founder-tabs)"
-          options={{
-            animation: "fade",
-            animationDuration: 200,
-          }}
-        />
-        <Stack.Screen
-          name="(freelancer-tabs)"
-          options={{
-            animation: "fade",
-            animationDuration: 200,
-          }}
-        />
+        {/* Role pager: wraps both tab navigators in a horizontal PagerView */}
+        <Stack.Screen name="(role-pager)" />
 
         {/* Detail stacks (pushed on top of tabs) */}
         <Stack.Screen name="freelancer-stack" />

@@ -15,12 +15,12 @@ import {
 import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import TribeCard from "../../components/TribeCard";
-import CreateTribeModal from "../../components/CreateTribeModal";
-import { useTheme } from "../../context/ThemeContext";
-import { useAuth } from "../../context/AuthContext";
-import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
-import * as tribeApi from "../../lib/tribeApi";
+import TribeCard from "@/components/TribeCard";
+import CreateTribeModal from "@/components/CreateTribeModal";
+import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import { Typography, Spacing, Layout } from "@/constants/DesignSystem";
+import * as tribeApi from "@/lib/tribeApi";
 
 type TabMode = "my" | "explore";
 

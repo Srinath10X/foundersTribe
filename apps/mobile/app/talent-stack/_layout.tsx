@@ -34,7 +34,7 @@ export default function TalentStackLayout() {
       {!hideTabBar && (
         <TouchableOpacity
           style={[styles.exitFab, { backgroundColor: palette.accent }]}
-          onPress={() => router.replace("/(freelancer-tabs)/dashboard")}
+          onPress={() => router.replace("/(role-pager)/(freelancer-tabs)/dashboard")}
           activeOpacity={0.9}
         >
           <Ionicons name="exit-outline" size={24} color="#fff" />

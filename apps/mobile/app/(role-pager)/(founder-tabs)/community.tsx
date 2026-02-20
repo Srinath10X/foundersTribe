@@ -20,16 +20,16 @@ import Animated, {
 } from "react-native-reanimated";
 
 
-import TribesTab from "../../components/community/TribesTab";
-import FindCofounderTab from "../../components/community/FindCofounderTab";
-import FindFreelancerTab from "../../components/community/FindFreelancerTab";
-import VoiceChannelsTab from "../../components/community/VoiceChannelsTab";
-import CreateTribeModal from "../../components/CreateTribeModal";
-import SubTabBar from "../../components/SubTabBar";
-import { useTheme } from "../../context/ThemeContext";
-import { useAuth } from "../../context/AuthContext";
-import * as tribeApi from "../../lib/tribeApi";
-import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
+import TribesTab from "@/components/community/TribesTab";
+import FindCofounderTab from "@/components/community/FindCofounderTab";
+import FindFreelancerTab from "@/components/community/FindFreelancerTab";
+import VoiceChannelsTab from "@/components/community/VoiceChannelsTab";
+import CreateTribeModal from "@/components/CreateTribeModal";
+import SubTabBar from "@/components/SubTabBar";
+import { useTheme } from "@/context/ThemeContext";
+import { useAuth } from "@/context/AuthContext";
+import * as tribeApi from "@/lib/tribeApi";
+import { Typography, Spacing, Layout } from "@/constants/DesignSystem";
 
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 const { width: windowWidth } = Dimensions.get("window");

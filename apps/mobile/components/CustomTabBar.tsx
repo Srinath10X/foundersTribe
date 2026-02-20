@@ -1,13 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
 import React from "react";
-import { Platform, Pressable, StyleSheet, Text, View, LayoutAnimation, UIManager } from "react-native";
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, {
   LinearTransition,
   useAnimatedStyle,
@@ -27,31 +22,22 @@ export const BAR_BOTTOM = Platform.OS === "ios" ? 32 : 20;
 
 // ─── The mode switch pill (attached to edge) ────────────────────
 function ModeSwitchPill({ isLeft }: { isLeft: boolean }) {
-  const { role, switchRole } = useRole();
+  const { role, animatedSwitchRole, isSwitching } = useRole();
   const { theme, isDark } = useTheme();
-  const router = useRouter();
 
   // The pill always shows the OPPOSITE role
   const targetRole = role === "founder" ? "freelancer" : "founder";
   const targetLabel = targetRole === "founder" ? "To Founder" : "To Freelancer";
 
   const handleSwitch = () => {
+    // Debounce is handled inside animatedSwitchRole
+    if (isSwitching) return;
+
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      // Smooth native crossfade between the two navigation stacks
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
 
-    // We defer the role switch and route change slightly to guarantee
-    // the layout animation captures the full screen component swap.
-    requestAnimationFrame(() => {
-      switchRole(targetRole);
-      if (targetRole === "founder") {
-        router.replace("/(founder-tabs)/home");
-      } else {
-        router.replace("/(freelancer-tabs)/dashboard");
-      }
-    });
+    animatedSwitchRole(targetRole);
   };
 
   const scale = useSharedValue(1);

@@ -31,8 +31,8 @@ export default function Index() {
         // User authenticated -> Go to role-based tabs
         const target =
           role === "freelancer"
-            ? "/(freelancer-tabs)/dashboard"
-            : "/(founder-tabs)/home";
+            ? "/(role-pager)/(freelancer-tabs)/dashboard"
+            : "/(role-pager)/(founder-tabs)/home";
         router.replace(target);
       } else {
         // New/Guest user -> Show Branding/Landing

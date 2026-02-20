@@ -151,7 +151,7 @@ export default function RoomScreen() {
     isReconnectingLiveKitRef.current = true; // prevent ConnectionStateChanged from double-navigating
     roomRef.current?.disconnect();
     roomRef.current = null;
-    routerRef.current.replace("/(founder-tabs)/community");
+    routerRef.current.replace("/(role-pager)/(founder-tabs)/community");
   // roomId is the only real dep — routerRef is stable
   }, [roomId]);
 
@@ -230,7 +230,7 @@ export default function RoomScreen() {
         socketRef.current?.disconnect();
         socketRef.current = null;
         roomRef.current = null;
-        routerRef.current.replace("/(founder-tabs)/community");
+        routerRef.current.replace("/(role-pager)/(founder-tabs)/community");
       }
     };
 
@@ -487,7 +487,7 @@ export default function RoomScreen() {
           socketRef.current?.removeAllListeners();
           socketRef.current?.disconnect();
           socketRef.current = null;
-          router.replace("/(founder-tabs)/community");
+          router.replace("/(role-pager)/(founder-tabs)/community");
         });
 
         socket!.on("room_ended", () => {
@@ -499,7 +499,7 @@ export default function RoomScreen() {
           socketRef.current?.removeAllListeners();
           socketRef.current?.disconnect();
           socketRef.current = null;
-          router.replace("/(founder-tabs)/community");
+          router.replace("/(role-pager)/(founder-tabs)/community");
         });
 
         // FIX #5: Socket.IO reconnection — refresh auth token and restore room state
@@ -575,7 +575,7 @@ export default function RoomScreen() {
                   Alert.alert("Error", "Failed to restore room. Returning to community.");
                   activeRoomIdRef.current = null;
                   socketRef.current?.disconnect();
-                  router.replace("/(founder-tabs)/community");
+                  router.replace("/(role-pager)/(founder-tabs)/community");
                 }
               },
             );
@@ -595,7 +595,7 @@ export default function RoomScreen() {
           roomRef.current?.disconnect();
           roomRef.current = null;
           socketRef.current = null;
-          router.replace("/(founder-tabs)/community");
+          router.replace("/(role-pager)/(founder-tabs)/community");
         });
       } catch (error: any) {
         if (cancelled) return;
