@@ -43,19 +43,7 @@ export default function FreelancerTabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="contracts"
-        options={{
-          title: "Contracts",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "document-text" : "document-text-outline"}
-              size={20}
-              color={color}
-            />
-          ),
-        }}
-      />
+
       <Tabs.Screen
         name="messages"
         options={{

@@ -27,7 +27,7 @@ function ModeSwitchPill({ isLeft }: { isLeft: boolean }) {
 
   // The pill always shows the OPPOSITE role
   const targetRole = role === "founder" ? "freelancer" : "founder";
-  const targetLabel = targetRole === "founder" ? "To Founder" : "To Freelancer";
+  const targetLabel = targetRole === "founder" ? "Founder\nMode" : "Freelancer\nMode";
 
   const handleSwitch = () => {
     // Debounce is handled inside animatedSwitchRole
@@ -104,7 +104,7 @@ function ModeSwitchPill({ isLeft }: { isLeft: boolean }) {
       >
         <Animated.View style={[switchStyles.inner, animatedStyle]}>
           <View style={switchStyles.iconWrap}>
-            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
               <Path
                 d="M21,6H9A3,3,0,0,0,6,9H6a3,3,0,0,0,3,3h6a3,3,0,0,1,3,3h0a3,3,0,0,1-3,3H3"
                 stroke={isDark ? "#D4D4D4" : "#525252"}
@@ -158,7 +158,7 @@ const switchStyles = StyleSheet.create({
   },
   pressable: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -167,17 +167,17 @@ const switchStyles = StyleSheet.create({
     justifyContent: "center",
   },
   iconWrap: {
-    width: 28,
-    height: 28,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: 0,
   },
   label: {
-    fontSize: 10,
+    fontSize: 8.5,
     fontFamily: "Poppins_500Medium",
     textAlign: "center",
-    lineHeight: 12,
+    lineHeight: 11,
     includeFontPadding: false,
   },
 });

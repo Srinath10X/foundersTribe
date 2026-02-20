@@ -350,7 +350,7 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs"
   ];
 
   return (
-    <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}> 
+    <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}>
       <View style={styles.navTopDivider} />
       {navItems.map((item) => {
         const active = item.key === activeLabel;
@@ -402,7 +402,6 @@ export function BottomTalentNav({
   const navItems: NavItem[] = [
     { key: "dashboard", icon: "grid", label: "Dashboard", route: "/talent-stack" },
     { key: "gigs", icon: "briefcase", label: "Gigs", route: "/talent-stack/browse-gigs" },
-    { key: "contracts", icon: "document-text", label: "Contracts", route: "/talent-stack/contracts" },
     { key: "messages", icon: "chatbubble", label: "Messages", route: "/talent-stack/messages" },
     { key: "profile", icon: "person-circle", label: "Profile", route: "/talent-stack/profile" },
   ];
