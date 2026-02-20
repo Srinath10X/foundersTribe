@@ -46,6 +46,7 @@ export default function SubTabBar<T extends string>({
           shadowOpacity: 0.15,
           shadowRadius: 20,
           elevation: 8,
+          marginBottom: 12,
         },
       ]}
     >

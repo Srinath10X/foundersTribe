@@ -11,9 +11,9 @@ import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
 
 // ─── Layout constants ──────────────────────────────────────────
-const BAR_HEIGHT = 60;
-const BAR_BOTTOM = Platform.OS === "ios" ? 24 : 16;
-const BAR_MX = 16;
+export const BAR_HEIGHT = 68;
+export const BAR_BOTTOM = Platform.OS === "ios" ? 28 : 20;
+export const BAR_MX = 16;
 
 // ─── The "switch to other role" pill button ────────────────────
 function ModeSwitchPill() {
@@ -101,7 +101,7 @@ export default function CustomTabBar({
     const { options } = descriptors[route.key];
     const isFocused = state.index === state.routes.indexOf(route);
     const tintColor = isFocused
-      ? theme.brand.primary
+      ? "#FF3B30"
       : theme.text.secondary ?? theme.text.muted;
 
     const onPress = () => {
@@ -187,21 +187,23 @@ export default function CustomTabBar({
         {
           shadowColor: "#000",
           shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.15,
-          shadowRadius: 20,
+          shadowOpacity: 0.12,
+          shadowRadius: 16,
           elevation: 8,
         },
       ]}
     >
+      {/* Top divider for premium depth */}
+      <View style={barStyles.topDivider} />
       {/* Glass surface — BlurView fills the pill shape */}
       <BlurView
-        intensity={Platform.OS === "ios" ? 80 : 120}
+        intensity={Platform.OS === "ios" ? 100 : 140}
         tint={isDark ? "dark" : "light"}
         style={[
           barStyles.blurFill,
           { backgroundColor: isDark
-              ? "rgba(30, 30, 30, 0.65)"
-              : "rgba(255, 255, 255, 0.70)" },
+              ? "rgba(28, 28, 28, 0.72)"
+              : "rgba(255, 255, 255, 0.75)" },
         ]}
       />
       {/* Content layer sits on top of the blur */}
@@ -221,6 +223,15 @@ const barStyles = StyleSheet.create({
     height: BAR_HEIGHT,
     borderRadius: 999,
     overflow: "hidden",
+  },
+  topDivider: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    zIndex: 100,
   },
   blurFill: {
     // Fills the entire pill shape behind the content

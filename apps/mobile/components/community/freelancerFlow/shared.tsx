@@ -336,7 +336,7 @@ export function PrimaryButton({
 }
 
 export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs" | "create" | "chat" | "profile"; }) {
-  const { palette } = useFlowPalette();
+  const { palette, isDark } = useFlowPalette();
   const router = useRouter();
   type NavKey = "home" | "my gigs" | "create" | "chat" | "profile";
   type NavItem = { key: NavKey; icon: keyof typeof Ionicons.glyphMap; label: string; route: string };
@@ -351,6 +351,7 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs"
 
   return (
     <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}> 
+      <View style={styles.navTopDivider} />
       {navItems.map((item) => {
         const active = item.key === activeLabel;
         return (
@@ -362,8 +363,8 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs"
           >
             {item.key === "create" ? (
               <>
-                <View style={[styles.createPill, { backgroundColor: palette.accent }]}>
-                  <Ionicons name="add" size={22} color="#fff" />
+                <View style={[styles.createPill, { backgroundColor: palette.accent, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4 }]}>
+                  <Ionicons name="add" size={24} color="#fff" />
                 </View>
                 <T weight="semiBold" color={palette.accent} style={{ fontSize: 11, marginTop: 2 }}>
                   {item.label}
@@ -408,6 +409,7 @@ export function BottomTalentNav({
 
   return (
     <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}>
+      <View style={styles.navTopDivider} />
       {navItems.map((item) => {
         const active = item.key === activeLabel;
         return (
@@ -470,7 +472,7 @@ export const people = {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  scrollContent: { paddingBottom: 110 },
+  scrollContent: { paddingBottom: 120 },
   topBar: {
     paddingTop: Platform.OS === "ios" ? 58 : 36,
     paddingBottom: 12,
@@ -498,9 +500,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingHorizontal: Spacing.sm,
     paddingTop: 8,
-    paddingBottom: Platform.OS === "ios" ? 24 : 14,
+    paddingBottom: Platform.OS === "ios" ? 28 : 18,
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  navTopDivider: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
   navItem: {
     flex: 1,
@@ -508,11 +518,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   createPill: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -18,
+    marginTop: -16,
   },
 });

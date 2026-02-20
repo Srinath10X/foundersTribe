@@ -89,7 +89,7 @@ export default function HomeScreen() {
     useCallback(() => {
       showSubTabsTemporarily();
       return () => clearHideTimer();
-    }, [clearHideTimer, showSubTabsTemporarily]),
+    }, [clearHideTimer, showSubTabsTemporarily])
   );
 
   useEffect(() => {
@@ -104,7 +104,7 @@ export default function HomeScreen() {
       setActiveTab(tab);
       showSubTabsTemporarily();
     },
-    [showSubTabsTemporarily],
+    [showSubTabsTemporarily]
   );
 
   const subTabVisibilityStyle = useAnimatedStyle(() => ({

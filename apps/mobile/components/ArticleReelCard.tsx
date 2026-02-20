@@ -1,3 +1,4 @@
+import { BAR_BOTTOM, BAR_HEIGHT } from "@/components/CustomTabBar";
 import { Layout } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { useArticleInteractions } from "@/hooks/useArticleInteractions";
@@ -39,6 +40,9 @@ const REEL_WIDTH =
   Platform.OS === "web"
     ? Math.min(windowWidth, Layout.webMaxWidth)
     : windowWidth;
+
+/** Dynamic bottom spacing so the hero content clears the floating tab bar */
+const HERO_SECTION_MARGIN_BOTTOM = BAR_HEIGHT + BAR_BOTTOM;
 
 interface Article {
   id: number;
@@ -292,13 +296,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
   columnContainer: {
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 12,
+    marginBottom: HERO_SECTION_MARGIN_BOTTOM,
   },
 
   leftColumn: {
