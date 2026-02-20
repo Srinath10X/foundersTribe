@@ -66,7 +66,7 @@ export default function ContractDetailsScreen() {
 const styles = StyleSheet.create({
   freelancerCard: { marginHorizontal: 18, marginTop: 12, padding: 12 },
   freelancerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  name: { fontSize: 19 },
+  name: { fontSize: 18 },
   role: { fontSize: 13, marginTop: 2 },
   stars: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   rating: { fontSize: 12 },
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", gap: 8, marginHorizontal: 18, marginTop: 10 },
   kpi: { flex: 1, padding: 12 },
   kpiLabel: { fontSize: 10, letterSpacing: 0.7 },
-  kpiValue: { fontSize: 22, marginTop: 4 },
+  kpiValue: { fontSize: 20, marginTop: 4 },
   block: { marginHorizontal: 18, marginTop: 10, padding: 12 },
   blockTitle: { fontSize: 16 },
   blockBody: { fontSize: 13, marginTop: 6, lineHeight: 18 },

@@ -68,18 +68,22 @@ export default function GigDetailsScreen() {
       <View style={[styles.sectionPad, styles.spaced]}>
         <View style={styles.appHead}>
           <T weight="bold" color={palette.text} style={styles.head}>Top Applicants (12)</T>
-          <T weight="bold" color={palette.accent} style={{ fontSize: 13 }}>BEST MATCH</T>
+          <T weight="bold" color={palette.accent} style={{ fontSize: 12 }}>BEST MATCH</T>
         </View>
         {[{ n: "Alex Rivera", p: people.alex, v: "$1,200 • 14 days", r: "4.9" }, { n: "Sarah Chen", p: people.sarah, v: "$1,550 • 10 days", r: "5.0" }, { n: "Jordan Smith", p: people.jordan, v: "$950 • 21 days", r: "4.7" }].map((u) => (
           <View key={u.n} style={styles.appRow}>
             <Avatar source={u.p} size={50} />
-            <View style={{ flex: 1 }}>
-              <T weight="bold" color={palette.text} style={{ fontSize: 18 }}>{u.n}</T>
-              <T weight="medium" color={palette.subText} style={{ fontSize: 16 }}>Proposed: {u.v}</T>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T weight="bold" color={palette.text} style={{ fontSize: 16 }} numberOfLines={1}>
+                {u.n}
+              </T>
+              <T weight="medium" color={palette.subText} style={{ fontSize: 13 }} numberOfLines={1}>
+                Proposed: {u.v}
+              </T>
             </View>
             <View style={styles.starWrap}>
               <Ionicons name="star" size={15} color="#F4C430" />
-              <T weight="semiBold" color={palette.text} style={{ fontSize: 18 }}>{u.r}</T>
+              <T weight="semiBold" color={palette.text} style={{ fontSize: 16 }}>{u.r}</T>
             </View>
           </View>
         ))}
@@ -88,13 +92,13 @@ export default function GigDetailsScreen() {
           style={[styles.outlineBtn, { borderColor: palette.accent }]}
           onPress={() => nav.push("/freelancer-stack/gig-proposals")}
         >
-          <T weight="bold" color={palette.accent} style={{ fontSize: 18 }}>Review All Proposals</T>
+          <T weight="bold" color={palette.accent} style={{ fontSize: 16 }}>Review All Proposals</T>
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.exitLink} onPress={() => nav.push("/freelancer-stack/founder-dashboard")}>
+      <TouchableOpacity style={styles.exitLink} onPress={() => nav.replace("/freelancer-stack")}>
         <Ionicons name="close" size={22} color={palette.subText} />
-        <T weight="semiBold" color={palette.subText} style={{ fontSize: 17 }}>Exit to Dashboard</T>
+        <T weight="semiBold" color={palette.subText} style={{ fontSize: 15 }}>Exit to Dashboard</T>
       </TouchableOpacity>
 
       <View style={{ paddingHorizontal: 24, marginTop: 22 }}>
@@ -105,18 +109,18 @@ export default function GigDetailsScreen() {
 
 const styles = StyleSheet.create({
   sectionPad: { paddingHorizontal: 20, paddingTop: 16 },
-  title: { fontSize: 42 / 1.6, marginTop: 10 },
-  subtitle: { fontSize: 32 / 2.4, marginTop: 4 },
+  title: { fontSize: 20, marginTop: 10, lineHeight: 28 },
+  subtitle: { fontSize: 14, marginTop: 4 },
   rowStats: { flexDirection: "row", borderTopWidth: 1, borderBottomWidth: 1, marginTop: 14 },
   statCol: { flex: 1, padding: 16, borderRightWidth: 1 },
   label: { textTransform: "uppercase", fontSize: 12, letterSpacing: 0.7 },
-  value: { fontSize: 33 / 1.5, marginTop: 8 },
+  value: { fontSize: 18, marginTop: 8 },
   spaced: { borderBottomWidth: 1, paddingBottom: 18 },
-  head: { fontSize: 35 / 1.6, marginBottom: 12 },
-  body: { fontSize: 17, lineHeight: 30 },
+  head: { fontSize: 18, marginBottom: 12 },
+  body: { fontSize: 14, lineHeight: 22 },
   tags: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   tag: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  tagText: { fontSize: 18 / 1.1 },
+  tagText: { fontSize: 13 },
   appHead: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
   appRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12 },
   starWrap: { flexDirection: "row", alignItems: "center", gap: 4 },

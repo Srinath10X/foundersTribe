@@ -14,14 +14,14 @@ import {
 } from "@/components/community/freelancerFlow/shared";
 
 export default function LeaveReviewScreen() {
-  const { palette, isDark } = useFlowPalette();
+  const { palette } = useFlowPalette();
   const nav = useFlowNav();
 
   return (
     <FlowScreen>
       <FlowTopBar title="Leave a Review" left="close" onLeftPress={nav.back} divider />
 
-      <View style={[styles.body, { backgroundColor: isDark ? "#1A0809" : palette.bg }]}> 
+      <View style={[styles.body, { backgroundColor: palette.bg }]}> 
         <View style={styles.center}>
           <View style={[styles.avatarWrap, { borderColor: palette.accentSoft }]}> 
             <Avatar source={people.alex} size={112} />
@@ -35,7 +35,12 @@ export default function LeaveReviewScreen() {
           <T weight="medium" color={palette.text} style={styles.q}>How was your experience?</T>
           <View style={styles.stars}>
             {[1, 2, 3, 4, 5].map((n) => (
-              <Ionicons key={n} name="star" size={52 / 1.6} color={n < 5 ? palette.accent : isDark ? "#2A3753" : "#CFD7E4"} />
+              <Ionicons
+                key={n}
+                name="star"
+                size={30}
+                color={n < 5 ? palette.accent : palette.border}
+              />
             ))}
           </View>
           <T weight="bold" color={palette.accent} style={styles.ratingTxt}>Great (4/5)</T>
@@ -47,7 +52,10 @@ export default function LeaveReviewScreen() {
           textAlignVertical="top"
           placeholder="Tell us more about the collaboration..."
           placeholderTextColor={palette.subText}
-          style={[styles.feedbackInput, { borderColor: palette.accentSoft, color: palette.text, backgroundColor: isDark ? "#221114" : palette.surface }]}
+          style={[
+            styles.feedbackInput,
+            { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface },
+          ]}
         />
 
         <View style={styles.noteRow}>
@@ -79,22 +87,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  name: { fontSize: 56 / 1.8, marginTop: 12 },
-  role: { fontSize: 44 / 2.1, marginTop: 4 },
-  q: { fontSize: 58 / 2.2, marginTop: 28 },
+  name: { fontSize: 24, marginTop: 12 },
+  role: { fontSize: 15, marginTop: 4 },
+  q: { fontSize: 18, marginTop: 28 },
   stars: { flexDirection: "row", gap: 14, marginTop: 16 },
-  ratingTxt: { fontSize: 47 / 2.1, marginTop: 16 },
-  feedbackLabel: { fontSize: 35 / 2, marginTop: 26, marginBottom: 12 },
+  ratingTxt: { fontSize: 20, marginTop: 16 },
+  feedbackLabel: { fontSize: 16, marginTop: 26, marginBottom: 12 },
   feedbackInput: {
     minHeight: 180,
     borderWidth: 1,
     borderRadius: 18,
     padding: 16,
     fontFamily: "Poppins_500Medium",
-    fontSize: 42 / 2.2,
-    lineHeight: 58 / 2.2,
+    fontSize: 14,
+    lineHeight: 20,
   },
   noteRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 16 },
-  note: { flex: 1, fontSize: 35 / 2.3, lineHeight: 52 / 2.3 },
-  contractId: { textAlign: "center", marginTop: 20, letterSpacing: 1.4, fontSize: 29 / 2 },
+  note: { flex: 1, fontSize: 14, lineHeight: 21 },
+  contractId: { textAlign: "center", marginTop: 20, letterSpacing: 1.1, fontSize: 13 },
 });

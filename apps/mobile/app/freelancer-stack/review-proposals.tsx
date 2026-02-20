@@ -58,10 +58,10 @@ export default function ReviewProposalsScreen() {
 
       <View style={styles.filters}>
         <TouchableOpacity style={[styles.sortBtn, { backgroundColor: palette.card }]}>
-          <T weight="semiBold" color={palette.text} style={{ fontSize: 19 / 1.2 }}>Sort by: Lowest Price</T>
+          <T weight="semiBold" color={palette.text} style={{ fontSize: 15 }}>Sort by: Lowest Price</T>
           <Ionicons name="chevron-down" size={16} color={palette.subText} />
         </TouchableOpacity>
-        <T weight="medium" color={palette.subText} style={{ fontSize: 33 / 2.5 }}>12 Proposals</T>
+        <T weight="medium" color={palette.subText} style={{ fontSize: 13 }}>12 Proposals</T>
       </View>
 
       <View style={styles.list}>
@@ -69,12 +69,16 @@ export default function ReviewProposalsScreen() {
           <SurfaceCard key={p.name} style={[styles.card, isDark ? null : { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }]}> 
             <View style={styles.personRow}>
               <Avatar source={p.image} size={50} />
-              <View>
-                <T weight="bold" color={palette.text} style={{ fontSize: 31 / 1.6 }}>{p.name}</T>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T weight="bold" color={palette.text} style={{ fontSize: 18 }} numberOfLines={1}>
+                  {p.name}
+                </T>
                 <View style={styles.rating}>
                   <Ionicons name="star" size={14} color="#F4C430" />
-                  <T weight="semiBold" color={palette.text} style={{ fontSize: 17 / 1.2 }}>{p.rating}</T>
-                  <T weight="medium" color={palette.subText} style={{ fontSize: 16 / 1.2 }}>({p.reviews})</T>
+                  <T weight="semiBold" color={palette.text} style={{ fontSize: 14 }}>{p.rating}</T>
+                  <T weight="medium" color={palette.subText} style={{ fontSize: 13 }} numberOfLines={1}>
+                    ({p.reviews})
+                  </T>
                 </View>
               </View>
             </View>
@@ -115,7 +119,7 @@ export default function ReviewProposalsScreen() {
 const styles = StyleSheet.create({
   top: { paddingHorizontal: 20, paddingBottom: 14, borderBottomWidth: 1 },
   projectLabel: { fontSize: 12, letterSpacing: 1.2 },
-  projectTitle: { fontSize: 42 / 1.9, marginTop: 4 },
+  projectTitle: { fontSize: 21, marginTop: 4, lineHeight: 28 },
   filters: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginTop: 16, gap: 12 },
   sortBtn: {
     flex: 1,
@@ -133,10 +137,10 @@ const styles = StyleSheet.create({
   kpis: { flexDirection: "row", gap: 10, marginTop: 14 },
   kpiItem: { flex: 1, borderRadius: 12, padding: 11 },
   kpiLabel: { fontSize: 11, letterSpacing: 0.6 },
-  kpiValue: { fontSize: 22 / 1.2, marginTop: 4 },
-  desc: { fontSize: 17 / 1.1, lineHeight: 30 / 1.3, marginTop: 12 },
+  kpiValue: { fontSize: 18, marginTop: 4 },
+  desc: { fontSize: 14, lineHeight: 22, marginTop: 12 },
   actions: { flexDirection: "row", gap: 10, marginTop: 14 },
   secondary: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
   primary: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: "center" },
-  btnTxt: { fontSize: 29 / 1.8 },
+  btnTxt: { fontSize: 15 },
 });

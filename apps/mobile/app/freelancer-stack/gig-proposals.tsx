@@ -25,7 +25,7 @@ export default function GigProposalsScreen() {
 
   return (
     <FlowScreen>
-      <FlowTopBar title="Senior UI Designer" onLeftPress={nav.back} right="options" onRightPress={() => {}} />
+      <FlowTopBar title="Senior UI Designer" onLeftPress={nav.back} right="ellipsis-horizontal" onRightPress={() => {}} />
 
       <View style={[styles.headCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
         <View>
@@ -42,8 +42,10 @@ export default function GigProposalsScreen() {
           <SurfaceCard key={p.name} style={styles.card}>
             <View style={styles.personRow}>
               <Avatar source={p.image} size={46} />
-              <View style={{ flex: 1 }}>
-                <T weight="bold" color={palette.text} style={styles.name}>{p.name}</T>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T weight="bold" color={palette.text} style={styles.name} numberOfLines={1}>
+                  {p.name}
+                </T>
                 <View style={styles.ratingRow}>
                   <Ionicons name="star" size={14} color="#F4C430" />
                   <T weight="semiBold" color={palette.text} style={styles.rating}>{p.rating}</T>
@@ -92,21 +94,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   label: { fontSize: 11, letterSpacing: 0.8 },
-  title: { fontSize: 22, marginTop: 2 },
+  title: { fontSize: 20, marginTop: 2 },
   bestTag: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   bestText: { fontSize: 10, letterSpacing: 0.6 },
   listWrap: { paddingHorizontal: 18, paddingTop: 12, gap: 10 },
   card: { padding: 12 },
   personRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  name: { fontSize: 18 },
+  name: { fontSize: 17 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
   rating: { fontSize: 13 },
   muted: { fontSize: 12 },
   kpiRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   kpi: { flex: 1, borderRadius: 10, padding: 10 },
   kpiLabel: { fontSize: 10, letterSpacing: 0.7 },
-  kpiValue: { fontSize: 18, marginTop: 3 },
-  blurb: { fontSize: 13, marginTop: 9, lineHeight: 18 },
+  kpiValue: { fontSize: 17, marginTop: 3 },
+  blurb: { fontSize: 13, marginTop: 9, lineHeight: 19 },
   actions: { flexDirection: "row", gap: 8, marginTop: 10 },
   secondary: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
   primary: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: "center" },

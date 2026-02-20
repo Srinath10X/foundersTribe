@@ -3,6 +3,7 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { ReactNode } from "react";
 import {
+  Platform,
   ScrollView,
   StatusBar,
   StyleProp,
@@ -15,7 +16,7 @@ import {
   ViewStyle,
 } from "react-native";
 
-import { Layout, Spacing } from "@/constants/DesignSystem";
+import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 
 export type FlowPalette = {
@@ -23,6 +24,7 @@ export type FlowPalette = {
   surface: string;
   card: string;
   border: string;
+  borderLight: string;
   text: string;
   subText: string;
   mutedText: string;
@@ -41,16 +43,17 @@ export function useFlowPalette(): { palette: FlowPalette; isDark: boolean } {
     palette: {
       bg: theme.background,
       surface: theme.surface,
-      card: isDark ? "#1A1B1F" : "#FFFFFF",
+      card: theme.surfaceElevated,
       border: theme.border,
+      borderLight: theme.borderLight,
       text: theme.text.primary,
       subText: theme.text.secondary,
       mutedText: theme.text.tertiary,
-      accent: "#FF1B1C",
-      accentSoft: isDark ? "rgba(255, 27, 28, 0.22)" : "rgba(255, 27, 28, 0.12)",
-      success: isDark ? "#35D176" : "#129857",
-      warning: "#F4C430",
-      navBg: isDark ? "rgba(18,18,20,0.95)" : "rgba(255,255,255,0.95)",
+      accent: theme.brand.primary,
+      accentSoft: isDark ? "rgba(255,59,48,0.22)" : "rgba(255,59,48,0.12)",
+      success: theme.success,
+      warning: theme.warning,
+      navBg: theme.surface,
     },
   };
 }
@@ -75,9 +78,27 @@ export function T({
   weight?: "regular" | "medium" | "semiBold" | "bold";
 } & TextProps) {
   const flat = StyleSheet.flatten(style) || {};
-  const scaled = typeof flat.fontSize === "number" ? flat.fontSize * 0.74 : undefined;
-  const size = typeof scaled === "number" ? Math.max(10, Math.min(26, scaled)) : undefined;
-  const line = typeof flat.lineHeight === "number" ? flat.lineHeight * 0.74 : undefined;
+  const explicitSize = typeof flat.fontSize === "number" ? flat.fontSize : undefined;
+  const explicitLineHeight = typeof flat.lineHeight === "number" ? flat.lineHeight : undefined;
+
+  const resolvedSize = explicitSize ?? Typography.sizes.md;
+  const computedLineHeight =
+    explicitLineHeight ??
+    (resolvedSize <= Typography.sizes.xxs
+      ? Typography.lineHeights.xxs
+      : resolvedSize <= Typography.sizes.xs
+        ? Typography.lineHeights.xs
+        : resolvedSize <= Typography.sizes.sm
+          ? Typography.lineHeights.sm
+          : resolvedSize <= Typography.sizes.md
+            ? Typography.lineHeights.md
+            : resolvedSize <= Typography.sizes.lg
+              ? Typography.lineHeights.lg
+              : resolvedSize <= Typography.sizes.xl
+                ? Typography.lineHeights.xl
+                : resolvedSize <= Typography.sizes.xxl
+                  ? Typography.lineHeights.xxl
+                  : Typography.lineHeights.xxxl);
 
   return (
     <Text
@@ -87,9 +108,9 @@ export function T({
         {
           fontFamily: poppins[weight],
           color,
+          fontSize: resolvedSize,
+          lineHeight: computedLineHeight,
         },
-        size ? { fontSize: size } : null,
-        line ? { lineHeight: line } : null,
         style,
       ]}
     >
@@ -155,8 +176,8 @@ export function FlowTopBar({
         styles.topBar,
         {
           borderBottomWidth: divider ? 1 : 0,
-          borderBottomColor: palette.border,
-          backgroundColor: palette.bg,
+          borderBottomColor: palette.borderLight,
+          backgroundColor: palette.surface,
         },
       ]}
     >
@@ -191,9 +212,10 @@ export function SurfaceCard({
       style={[
         {
           backgroundColor: palette.card,
-          borderColor: palette.border,
+          borderColor: palette.borderLight,
           borderWidth: 1,
-          borderRadius: 16,
+          borderRadius: Layout.radius.lg,
+          ...Layout.shadows.sm,
         },
         style,
       ]}
@@ -213,12 +235,12 @@ export function Badge({
   const { palette, isDark } = useFlowPalette();
   const byTone = {
     success: {
-      bg: isDark ? "rgba(53,209,118,0.24)" : "#D8F6E6",
+      bg: isDark ? "rgba(95,168,118,0.24)" : "rgba(95,168,118,0.14)",
       text: palette.success,
     },
     progress: {
-      bg: isDark ? "rgba(80,130,255,0.24)" : "#DFE9FF",
-      text: "#2A63F6",
+      bg: isDark ? "rgba(116,165,212,0.24)" : "rgba(116,165,212,0.14)",
+      text: "#6091C7",
     },
     neutral: {
       bg: isDark ? "rgba(150,155,170,0.22)" : "#ECEFF4",
@@ -258,7 +280,7 @@ export function GhostButton({
         {
           borderColor: palette.border,
           borderWidth: 1,
-          borderRadius: 12,
+          borderRadius: Layout.radius.md,
           paddingVertical: 12,
           justifyContent: "center",
           alignItems: "center",
@@ -267,7 +289,7 @@ export function GhostButton({
         style,
       ]}
     >
-      <T weight="semiBold" color={palette.subText} style={{ fontSize: 17 }}>
+      <T weight="semiBold" color={palette.subText} style={{ fontSize: 15 }}>
         {label}
       </T>
     </TouchableOpacity>
@@ -294,7 +316,7 @@ export function PrimaryButton({
       style={[
         {
           backgroundColor: palette.accent,
-          borderRadius: 14,
+          borderRadius: Layout.radius.md,
           paddingVertical: 14,
           justifyContent: "center",
           alignItems: "center",
@@ -305,7 +327,7 @@ export function PrimaryButton({
         style,
       ]}
     >
-      <T weight="bold" color="#FFFFFF" style={{ fontSize: 18 }}>
+      <T weight="bold" color="#FFFFFF" style={{ fontSize: 16 }}>
         {label}
       </T>
       {icon ? <Ionicons name={icon} size={18} color="#FFFFFF" /> : null}
@@ -324,11 +346,11 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs"
     { key: "my gigs", icon: "briefcase", label: "My Gigs", route: "/freelancer-stack/my-gigs" },
     { key: "create", icon: "add", label: "Post", route: "/freelancer-stack/post-gig" },
     { key: "chat", icon: "chatbubble", label: "Chat", route: "/freelancer-stack/contract-chat" },
-    { key: "profile", icon: "person-circle", label: "Profile", route: "/freelancer-stack/freelancer-profile" },
+    { key: "profile", icon: "person-circle", label: "Profile", route: "/freelancer-stack/founder-profile" },
   ];
 
   return (
-    <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.border }]}> 
+    <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}> 
       {navItems.map((item) => {
         const active = item.key === activeLabel;
         return (
@@ -387,6 +409,7 @@ export function useFlowNav() {
 
   return {
     push: (path: string) => router.push(path as never),
+    replace: (path: string) => router.replace(path as never),
     back: () => router.back(),
   };
 }
@@ -405,22 +428,23 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   scrollContent: { paddingBottom: 110 },
   topBar: {
-    paddingTop: 52,
+    paddingTop: Platform.OS === "ios" ? 58 : 36,
     paddingBottom: 12,
     paddingHorizontal: Spacing.lg,
     flexDirection: "row",
     alignItems: "center",
   },
   iconBtn: {
-    width: 30,
-    height: 30,
+    width: 36,
+    height: 36,
     justifyContent: "center",
     alignItems: "center",
+    borderRadius: 18,
   },
   topBarTitle: {
     flex: 1,
     textAlign: "center",
-    fontSize: 20,
+    fontSize: 18,
   },
   bottomNav: {
     position: "absolute",
@@ -428,9 +452,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     borderTopWidth: 1,
-    paddingHorizontal: Spacing.md,
-    paddingTop: 6,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.sm,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === "ios" ? 24 : 14,
     flexDirection: "row",
     justifyContent: "space-between",
   },
@@ -440,9 +464,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   createPill: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
     marginTop: -18,
