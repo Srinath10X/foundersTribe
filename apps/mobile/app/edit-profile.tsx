@@ -1,5 +1,6 @@
 import { Typography } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
+import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
@@ -30,6 +31,7 @@ const STORAGE_BUCKET = "tribe-media";
 export default function EditProfileScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const { switchRole } = useRole();
   const { theme, isDark } = useTheme();
   const token = session?.access_token || "";
   const userId = session?.user?.id || "";
@@ -308,6 +310,10 @@ export default function EditProfileScreen() {
         role: role.trim() || null,
         completed_gigs: completedGigs,
       });
+      // Sync the local role context with the saved user type
+      if (userType) {
+        switchRole(userType);
+      }
       Alert.alert("Success", "Profile updated!", [
         { text: "OK", onPress: () => router.back() },
       ]);

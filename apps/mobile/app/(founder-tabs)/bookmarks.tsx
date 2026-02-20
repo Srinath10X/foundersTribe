@@ -139,7 +139,7 @@ export default function BookmarksScreen() {
         </Text>
         <TouchableOpacity
           style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]}
-          onPress={() => router.push("/(tabs)/home")}
+          onPress={() => router.push("/(founder-tabs)/home")}
         >
           <Text style={[styles.exploreBtnText, { color: theme.text.inverse }]}>
             Discover More
@@ -169,7 +169,7 @@ export default function BookmarksScreen() {
       </Text>
       <TouchableOpacity
         style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}
-        onPress={() => router.push("/(tabs)/home")}
+        onPress={() => router.push("/(founder-tabs)/home")}
         activeOpacity={0.7}
       >
         <Text style={[styles.emptyButtonText, { color: theme.text.inverse }]}>

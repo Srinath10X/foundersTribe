@@ -139,7 +139,7 @@ export default function LibraryTab() {
             styles.exploreBtn,
             { backgroundColor: theme.brand.primary },
           ]}
-          onPress={() => router.push("/(tabs)/home")}
+          onPress={() => router.push("/(founder-tabs)/home")}
         >
           <Text
             style={[

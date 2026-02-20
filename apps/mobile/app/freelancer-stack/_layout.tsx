@@ -38,7 +38,7 @@ export default function FreelancerFlowLayout() {
       {!hideTabBar && (
         <TouchableOpacity
           style={[styles.exitFab, { backgroundColor: palette.accent }]}
-          onPress={() => router.replace("/(tabs)/community")}
+          onPress={() => router.replace("/(founder-tabs)/community")}
           activeOpacity={0.9}
         >
           <Ionicons name="exit-outline" size={24} color="#fff" />

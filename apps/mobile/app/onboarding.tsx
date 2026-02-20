@@ -1,5 +1,6 @@
 import { Spacing, Type } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
+import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
@@ -30,6 +31,7 @@ const EMPTY_LINK: SocialLink = { platform: "", url: "", label: "" };
 export default function Onboarding() {
   const router = useRouter();
   const { user, session, refreshOnboardingStatus } = useAuth();
+  const { switchRole } = useRole();
   const { theme, isDark } = useTheme();
 
   const token = session?.access_token || "";
@@ -224,6 +226,8 @@ export default function Onboarding() {
       await tribeApi.updateMyProfile(token, {
         user_type: userType,
       });
+      // Persist the selected role locally for navigation
+      switchRole(userType);
       setStep(2);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save your role");
@@ -263,7 +267,11 @@ export default function Onboarding() {
       if (ins.error) throw ins.error;
 
       await refreshOnboardingStatus();
-      setTimeout(() => router.replace("/(tabs)/home"), 300);
+      const target =
+        userType === "freelancer"
+          ? "/(freelancer-tabs)/dashboard"
+          : "/(founder-tabs)/home";
+      setTimeout(() => router.replace(target), 300);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to complete onboarding");
     } finally {

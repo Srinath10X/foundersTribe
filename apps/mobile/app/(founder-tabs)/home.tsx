@@ -1,6 +1,7 @@
 import DiscoverTab from "@/components/home/DiscoverTab";
 import FeedTab from "@/components/home/FeedTab";
 import LibraryTab from "@/components/home/LibraryTab";
+import RoleSwitcher from "@/components/RoleSwitcher";
 import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,9 +35,24 @@ const SUB_TABS: {
   icon: string;
   iconFocused?: string;
 }[] = [
-  { key: "feed", label: "Feed", icon: "newspaper-outline", iconFocused: "newspaper" },
-  { key: "discover", label: "Discover", icon: "compass-outline", iconFocused: "compass" },
-  { key: "library", label: "Library", icon: "bookmarks-outline", iconFocused: "bookmarks" },
+  {
+    key: "feed",
+    label: "Feed",
+    icon: "newspaper-outline",
+    iconFocused: "newspaper",
+  },
+  {
+    key: "discover",
+    label: "Discover",
+    icon: "compass-outline",
+    iconFocused: "compass",
+  },
+  {
+    key: "library",
+    label: "Library",
+    icon: "bookmarks-outline",
+    iconFocused: "bookmarks",
+  },
 ];
 
 export default function HomeScreen() {
@@ -74,7 +90,7 @@ export default function HomeScreen() {
     useCallback(() => {
       showSubTabsTemporarily();
       return () => clearHideTimer();
-    }, [clearHideTimer, showSubTabsTemporarily])
+    }, [clearHideTimer, showSubTabsTemporarily]),
   );
 
   useEffect(() => {
@@ -89,7 +105,7 @@ export default function HomeScreen() {
       setActiveTab(tab);
       showSubTabsTemporarily();
     },
-    [showSubTabsTemporarily]
+    [showSubTabsTemporarily],
   );
 
   const subTabVisibilityStyle = useAnimatedStyle(() => ({
@@ -121,7 +137,11 @@ export default function HomeScreen() {
           colors={
             isDark
               ? ["rgba(0,0,0,0.85)", "rgba(0,0,0,0.6)", "transparent"]
-              : ["rgba(255,255,255,0.92)", "rgba(255,255,255,0.6)", "transparent"]
+              : [
+                  "rgba(255,255,255,0.92)",
+                  "rgba(255,255,255,0.6)",
+                  "transparent",
+                ]
           }
           style={styles.headerGradient}
         >
@@ -135,23 +155,26 @@ export default function HomeScreen() {
               style={styles.brandLogo}
               contentFit="contain"
             />
-            <TouchableOpacity
-              style={[
-                styles.iconButton,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.1)"
-                    : "rgba(0,0,0,0.06)",
-                },
-              ]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={20}
-                color={isDark ? "#FFFFFF" : "#000000"}
-              />
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <RoleSwitcher />
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(0,0,0,0.06)",
+                  },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name="notifications-outline"
+                  size={20}
+                  color={isDark ? "#FFFFFF" : "#000000"}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </LinearGradient>
       </View>
@@ -197,6 +220,11 @@ const styles = StyleSheet.create({
     height: 24,
     width: 140,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   iconButton: {
     width: 36,
     height: 36,
@@ -208,7 +236,7 @@ const styles = StyleSheet.create({
   // Bottom Sub-Tabs
   bottomTabContainer: {
     position: "absolute",
-    bottom: TAB_BAR_HEIGHT,
+    bottom: TAB_BAR_HEIGHT + 4,
     left: 0,
     right: 0,
     zIndex: 100,

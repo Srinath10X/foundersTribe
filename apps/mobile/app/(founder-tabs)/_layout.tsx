@@ -5,7 +5,7 @@ import { Platform } from "react-native";
 
 import { useTheme } from "@/context/ThemeContext";
 
-export default function TabLayout() {
+export default function FounderTabLayout() {
   const { theme } = useTheme();
 
   return (
@@ -14,7 +14,6 @@ export default function TabLayout() {
         headerShown: false,
 
         tabBarActiveTintColor: theme.brand.primary,
-        tabBarInactiveTintColor: theme.text.muted,
 
         tabBarStyle: {
           position: "absolute",
@@ -26,7 +25,7 @@ export default function TabLayout() {
 
           bottom: Platform.OS === "ios" ? 20 : 14,
 
-          height: 60, // 🔥 tighter
+          height: 60,
           paddingTop: 3,
           paddingBottom: Platform.OS === "ios" ? 10 : 6,
 
