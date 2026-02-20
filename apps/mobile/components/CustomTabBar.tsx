@@ -139,11 +139,13 @@ export default function CustomTabBar({
         accessibilityLabel={options.tabBarAccessibilityLabel}
         android_ripple={{ color: "transparent" }}
       >
-        {options.tabBarIcon?.({
-          focused: isFocused,
-          color: tintColor,
-          size: 21,
-        })}
+        <View style={barStyles.iconWrap}>
+          {options.tabBarIcon?.({
+            focused: isFocused,
+            color: tintColor,
+            size: 22,
+          })}
+        </View>
         <Text
           numberOfLines={1}
           style={[barStyles.tabLabel, { color: tintColor }]}
@@ -220,13 +222,28 @@ const barStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    gap: 2,
+    paddingTop: 0,
+    // Nudge the whole content block up by 1px to compensate for
+    // icon font bottom-heaviness + label descender space
+    marginTop: -1,
+  },
+  iconWrap: {
+    // Fixed-size box around the icon so its intrinsic padding
+    // doesn't affect vertical centering
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
   tabLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontFamily: "Poppins_600SemiBold",
     fontWeight: "600",
     textAlign: "center",
+    marginTop: 1,
+    // Kill any extra line-height that Poppins adds
+    lineHeight: 13,
+    includeFontPadding: false, // Android: remove extra top/bottom padding
   },
   divider: {
     width: 1,
