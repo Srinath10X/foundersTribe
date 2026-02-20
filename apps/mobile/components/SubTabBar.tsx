@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: "hidden",
     opacity: 0.9,
-    marginHorizontal: "8%", // 🔥 makes the horizontal width a bit smaller
+    marginHorizontal: "18%", // 🔥 makes the horizontal width smaller
   },
   container: {
     width: "100%",
