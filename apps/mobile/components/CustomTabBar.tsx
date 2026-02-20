@@ -3,7 +3,11 @@ import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, LayoutAnimation, UIManager } from "react-native";
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import Animated, {
   LinearTransition,
   useAnimatedStyle,
@@ -34,13 +38,20 @@ function ModeSwitchPill({ isLeft }: { isLeft: boolean }) {
   const handleSwitch = () => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      // Smooth native crossfade between the two navigation stacks
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
-    switchRole(targetRole);
-    if (targetRole === "founder") {
-      router.replace("/(founder-tabs)/home");
-    } else {
-      router.replace("/(freelancer-tabs)/dashboard");
-    }
+
+    // We defer the role switch and route change slightly to guarantee
+    // the layout animation captures the full screen component swap.
+    requestAnimationFrame(() => {
+      switchRole(targetRole);
+      if (targetRole === "founder") {
+        router.replace("/(founder-tabs)/home");
+      } else {
+        router.replace("/(freelancer-tabs)/dashboard");
+      }
+    });
   };
 
   const scale = useSharedValue(1);
