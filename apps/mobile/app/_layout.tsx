@@ -136,6 +136,7 @@ function RootLayoutNav() {
         // whitelist allowed paths
         const isAllowedPath =
           segment === "(tabs)" ||
+          segment === "freelancer-stack" ||
           segment === "room" ||
           segment === "tribe" ||
           segment === "article" ||

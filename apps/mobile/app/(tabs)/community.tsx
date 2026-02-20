@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Stack, useFocusEffect, useNavigation } from "expo-router";
+import { Stack, useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import Animated, {
@@ -72,6 +72,7 @@ const SUB_TABS: {
 export default function CommunityScreen() {
   const { theme, isDark } = useTheme();
   const navigation = useNavigation();
+  const router = useRouter();
   const { session } = useAuth();
   const authToken = session?.access_token || "";
 
@@ -324,6 +325,10 @@ export default function CommunityScreen() {
           activeKey={activeView as SubTab}
           isDark={isDark}
           onTabPress={(tab) => {
+            if (tab === "find-freelancer") {
+              router.push("/freelancer-stack");
+              return;
+            }
             setActiveView(tab);
             showSubTabsTemporarily();
           }}
