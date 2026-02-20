@@ -1,7 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import React from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useTheme } from "@/context/ThemeContext";
 
 export type SubTabItem<T extends string> = {
   key: T;
@@ -23,55 +30,52 @@ export default function SubTabBar<T extends string>({
   onTabPress,
   isDark,
 }: SubTabBarProps<T>) {
+  const { theme } = useTheme();
+
   return (
     <BlurView
-      intensity={Platform.OS === "ios" ? 90 : 120}
+      intensity={Platform.OS === "ios" ? 90 : 125}
       tint={isDark ? "dark" : "light"}
-      style={styles.bottomBlur}
+      style={[
+        styles.bottomBlur,
+        {
+          backgroundColor: theme.surface,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 10 },
+          opacity: 0.7,
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 8,
+        },
+      ]}
     >
       <View
         style={[
           styles.container,
           {
-            backgroundColor: isDark ? "#1C1C1E" : "#F2F2F7",
-            borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)",
+            backgroundColor: "transparent", // relying on BlurView backgroundColor
           },
         ]}
       >
         {tabs.map((tab) => {
           const isActive = activeKey === tab.key;
+          const tintColor = isActive
+            ? theme.brand.primary
+            : (theme.text.secondary ?? theme.text.muted);
+
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[
-                styles.tabButton,
-                isActive
-                  ? styles.activeTab
-                  : [
-                      styles.inactiveTab,
-                      {
-                        backgroundColor: isDark
-                          ? "rgba(255,255,255,0.06)"
-                          : "rgba(255,255,255,0.7)",
-                        borderColor: isDark
-                          ? "rgba(255,255,255,0.07)"
-                          : "rgba(0,0,0,0.06)",
-                      },
-                    ],
-              ]}
+              style={[styles.tabButton]}
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.88}
             >
               <Ionicons
-                name={(isActive ? tab.iconFocused || tab.icon : tab.icon) as any}
-                size={19}
-                color={
-                  isActive
-                    ? "#FFFFFF"
-                    : isDark
-                    ? "rgba(255,255,255,0.68)"
-                    : "rgba(0,0,0,0.58)"
+                name={
+                  (isActive ? tab.iconFocused || tab.icon : tab.icon) as any
                 }
+                size={18}
+                color={tintColor}
               />
               <Text
                 numberOfLines={1}
@@ -79,12 +83,8 @@ export default function SubTabBar<T extends string>({
                 style={[
                   styles.tabLabel,
                   {
-                    color: isActive
-                      ? "#FFFFFF"
-                      : isDark
-                      ? "rgba(255,255,255,0.68)"
-                      : "rgba(0,0,0,0.58)",
-                    fontFamily: isActive ? "Poppins_700Bold" : "Poppins_600SemiBold",
+                    color: tintColor,
+                    fontFamily: "Poppins_600SemiBold",
                   },
                 ]}
               >
@@ -100,46 +100,35 @@ export default function SubTabBar<T extends string>({
 
 const styles = StyleSheet.create({
   bottomBlur: {
-    borderRadius: 44,
+    borderRadius: 999,
     overflow: "hidden",
+    opacity: 0.9,
+    marginHorizontal: "8%", // 🔥 makes the horizontal width a bit smaller
   },
   container: {
     width: "100%",
-    minHeight: 58,
-    borderRadius: 44,
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+    minHeight: 52, // 🔥 smaller height
+    borderRadius: 999,
+    paddingHorizontal: 12, // 🔥 smaller padding
+    paddingVertical: 2,
     flexDirection: "row",
     alignItems: "center",
   },
   tabButton: {
     flex: 1,
-    minWidth: 0,
-    minHeight: 46,
-    borderRadius: 999,
-    flexDirection: "row",
+    minHeight: 40, // 🔥 smaller height
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-  },
-  activeTab: {
-    backgroundColor: "#FF3B30",
-    shadowColor: "#FF3B30",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 7,
-  },
-  inactiveTab: {
-    borderWidth: 1,
+    gap: 0, // 🔥 tighter gap
+    paddingVertical: 0,
   },
   tabLabel: {
     flexShrink: 1,
     minWidth: 0,
     textAlign: "center",
-    fontSize: 11,
+    fontSize: 9, // 🔥 slightly smaller font
+    fontWeight: "600",
     letterSpacing: 0,
   },
 });
