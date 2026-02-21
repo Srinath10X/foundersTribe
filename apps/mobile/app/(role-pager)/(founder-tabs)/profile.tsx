@@ -304,7 +304,8 @@ export default function ProfileScreen() {
     rightElement?: React.ReactNode;
     accentColor?: string;
   }) => {
-    const iconColor = accentColor || theme.brand.primary;
+    const iconColor = accentColor || theme.text.primary;
+    const iconBgColor = accentColor ? accentColor + "15" : theme.surfaceElevated;
 
     return (
       <TouchableOpacity
@@ -317,7 +318,7 @@ export default function ProfileScreen() {
           <View
             style={[
               styles.iconContainer,
-              { backgroundColor: iconColor + "15" },
+              { backgroundColor: iconBgColor },
             ]}
           >
             <Ionicons name={icon as any} size={20} color={iconColor} />
@@ -374,132 +375,56 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        <Text style={[styles.mainScreenTitle, { color: theme.text.primary }]}>
+          My Profile
+        </Text>
+
         {/* Profile Header */}
         <View style={styles.header}>
-          <View style={styles.avatarWrapper}>
-            {profile?.photo_url ? (
-              <Image
-                source={{ uri: profile.photo_url }}
-                style={[
-                  styles.avatar,
-                  {
-                    borderColor: theme.brand.primary,
-                    shadowColor: theme.brand.primary,
-                  },
-                ]}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.avatar,
-                  {
-                    borderColor: theme.brand.primary,
-                    shadowColor: theme.brand.primary,
-                  },
-                ]}
-              >
-                <Text
-                  style={[styles.avatarInitial, { color: theme.brand.primary }]}
-                >
-                  {userName.charAt(0).toUpperCase() || "P"}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text style={[styles.userName, { color: theme.text.primary }]}>
-            {userName}
-          </Text>
-          <Text style={[styles.userEmail, { color: theme.text.secondary }]}>
-            {userEmail}
-          </Text>
-
-          {profile?.user_type && (
-            <View
-              style={[
-                styles.roleBadge,
-                {
-                  backgroundColor:
-                    profile.user_type === "founder"
-                      ? "#3B82F6"
-                      : "#10B981",
-                },
-              ]}
-            >
-              <Ionicons
-                name={
-                  profile.user_type === "founder" ? "rocket" : "code-working"
-                }
-                size={12}
-                color="#fff"
-              />
-              <Text style={styles.roleBadgeText}>
-                {profile.user_type.charAt(0).toUpperCase() +
-                  profile.user_type.slice(1)}
-              </Text>
-            </View>
-          )}
           <TouchableOpacity
-            style={[styles.editProfileBtn, { borderColor: theme.brand.primary }]}
+            style={[styles.card, styles.headerCard, { backgroundColor: theme.surface }]}
             onPress={handleEditProfile}
             activeOpacity={0.7}
           >
-            <Ionicons name="create-outline" size={16} color={theme.brand.primary} />
-            <Text style={[styles.editProfileBtnText, { color: theme.brand.primary }]}>
-              Edit Profile
-            </Text>
+            <View style={styles.avatarWrapper}>
+              {profile?.photo_url ? (
+                <Image
+                  source={{ uri: profile.photo_url }}
+                  style={[
+                    styles.avatar,
+                    {
+                      borderColor: theme.border,
+                    },
+                  ]}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.avatar,
+                    {
+                      borderColor: theme.border,
+                      backgroundColor: theme.surfaceElevated,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.avatarInitial, { color: theme.text.primary }]}
+                  >
+                    {userName.charAt(0).toUpperCase() || "P"}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.headerTextContent}>
+              <Text style={[styles.userName, { color: theme.text.primary }]} numberOfLines={1}>
+                {userName}
+              </Text>
+              <Text style={[styles.userEmail, { color: theme.text.secondary }]} numberOfLines={1}>
+                {userEmail}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
           </TouchableOpacity>
-        </View>
-
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
-          <View
-            style={[
-              styles.statBox,
-              {
-                backgroundColor: theme.surfaceElevated,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <Text style={[styles.statNumber, { color: theme.brand.primary }]}>
-              {stats.articlesRead}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.text.tertiary }]}>
-              ARTICLES
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.statBox,
-              {
-                backgroundColor: theme.surfaceElevated,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <Text style={[styles.statNumber, { color: theme.brand.primary }]}>
-              {stats.bookmarks}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.text.tertiary }]}>
-              BOOKMARKS
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.statBox,
-              {
-                backgroundColor: theme.surfaceElevated,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <Text style={[styles.statNumber, { color: theme.brand.primary }]}>
-              {stats.likes}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.text.tertiary }]}>
-              LIKES
-            </Text>
-          </View>
         </View>
 
         {/* Content Sections */}
@@ -598,7 +523,7 @@ export default function ProfileScreen() {
                         <View
                           style={[
                             styles.experienceDot,
-                            { backgroundColor: theme.brand.primary },
+                            { backgroundColor: theme.text.primary },
                           ]}
                         />
                         <Text style={[styles.bodyText, { color: theme.text.secondary, flex: 1 }]}>
@@ -713,7 +638,7 @@ export default function ProfileScreen() {
                     <View
                       style={[
                         styles.experienceDot,
-                        { backgroundColor: theme.brand.primary },
+                        { backgroundColor: theme.text.primary },
                       ]}
                     />
                     <View style={{ flex: 1 }}>
@@ -762,7 +687,7 @@ export default function ProfileScreen() {
                     <View
                       style={[
                         styles.socialIconWrap,
-                        { backgroundColor: theme.brand.primary + "15" },
+                        { backgroundColor: theme.surfaceElevated },
                       ]}
                     >
                       <Ionicons
@@ -771,7 +696,7 @@ export default function ProfileScreen() {
                             "link-outline") as any
                         }
                         size={18}
-                        color={theme.brand.primary}
+                        color={theme.text.primary}
                       />
                     </View>
                     <Text
@@ -916,79 +841,67 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingBottom: 100,
   },
+  mainScreenTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 24,
+    marginTop: 8,
+  },
   header: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 24,
+    paddingHorizontal: 16,
+  },
+  headerCard: {
+    flexDirection: "row",
+    padding: 16,
+    alignItems: "center",
+    width: "100%",
   },
   avatarWrapper: {
-    marginBottom: 20,
+    marginRight: 16,
     position: "relative",
   },
   avatar: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    borderWidth: 3,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "transparent",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
   },
   avatarInitial: {
-    fontSize: 50,
+    fontSize: 24,
     fontFamily: Typography.fonts.primary,
   },
+  headerTextContent: {
+    flex: 1,
+    justifyContent: "center",
+  },
   userName: {
-    fontSize: 28,
+    fontSize: 18,
     fontFamily: Typography.fonts.primary,
     marginBottom: 4,
-    textAlign: "center",
     fontWeight: "700",
   },
   userEmail: {
-    fontSize: 14,
-    letterSpacing: 0.5,
-    textAlign: "center",
-    marginBottom: 16,
+    fontSize: 13,
   },
   editProfileBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 24,
-    borderWidth: 1.5,
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginTop: 8,
   },
   editProfileBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
-  },
-  statsRow: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    justifyContent: "space-between",
-    marginBottom: 40,
-  },
-  statBox: {
-    width: (width - 60) / 3,
-    height: 100,
-    borderRadius: 16,
-    borderWidth: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statNumber: {
-    fontSize: 24,
-    fontFamily: Typography.fonts.primary,
-    marginBottom: 6,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1,
+    color: "#ffffff",
   },
   sectionsContainer: {
     paddingHorizontal: 20,
@@ -1004,7 +917,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: "hidden",
   },
   cardContent: {
@@ -1104,8 +1017,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",

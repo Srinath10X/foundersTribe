@@ -143,7 +143,7 @@ export default function RoomScreen() {
     activeRoomIdRef.current = null;
     const socket = socketRef.current;
     if (socket?.connected && roomId) {
-      socket.emit("leave_room", { roomId }, () => {});
+      socket.emit("leave_room", { roomId }, () => { });
     }
     socket?.removeAllListeners();
     socket?.disconnect();
@@ -152,7 +152,7 @@ export default function RoomScreen() {
     roomRef.current?.disconnect();
     roomRef.current = null;
     routerRef.current.replace("/(role-pager)/(founder-tabs)/community");
-  // roomId is the only real dep — routerRef is stable
+    // roomId is the only real dep — routerRef is stable
   }, [roomId]);
 
   // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
@@ -245,7 +245,7 @@ export default function RoomScreen() {
       .on(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
 
     updateLKParticipants();
-  // No external deps — uses only refs (stable) and setters (stable)
+    // No external deps — uses only refs (stable) and setters (stable)
   }, []);
 
   // Setup socket and LiveKit
@@ -924,13 +924,13 @@ export default function RoomScreen() {
             styles.messageBubble,
             isMe
               ? [
-                  styles.messageBubbleMe,
-                  { backgroundColor: theme.brand.primary },
-                ]
+                styles.messageBubbleMe,
+                { backgroundColor: theme.brand.primary },
+              ]
               : [
-                  styles.messageBubbleOther,
-                  { backgroundColor: theme.surfaceElevated },
-                ],
+                styles.messageBubbleOther,
+                { backgroundColor: theme.surfaceElevated },
+              ],
           ]}
         >
           <Text
@@ -945,9 +945,9 @@ export default function RoomScreen() {
         <Text style={[styles.messageTime, { color: theme.text.muted }]}>
           {item.created_at
             ? new Date(item.created_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
+              hour: "2-digit",
+              minute: "2-digit",
+            })
             : ""}
         </Text>
       </View>
@@ -1559,7 +1559,7 @@ const styles = StyleSheet.create({
   // Main content
   mainContent: {
     flex: 1,
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
     gap: Spacing.md,
   },
   // Connection status
@@ -1607,7 +1607,9 @@ const styles = StyleSheet.create({
   // Participants Grid
   participantsSection: {
     borderRadius: Layout.radius.lg,
-    padding: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingBottom: Spacing.sm,
+    paddingTop: 8,
     borderWidth: 1,
     maxHeight: 280,
   },

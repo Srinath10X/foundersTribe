@@ -334,7 +334,7 @@ export default function VoiceChannelsTab({
                   backgroundColor:
                     room.type === "public"
                       ? theme.success + "15"
-                      : theme.info + "15",
+                      : theme.surfaceElevated,
                 },
               ]}
             >
@@ -343,18 +343,18 @@ export default function VoiceChannelsTab({
                   room.type === "public" ? "globe-outline" : "shield-outline"
                 }
                 size={10}
-                color={room.type === "public" ? theme.success : theme.info}
+                color={room.type === "public" ? theme.success : theme.text.primary}
               />
               <Text
                 style={[
                   styles.chipBadgeText,
                   {
                     color:
-                      room.type === "public" ? theme.success : theme.info,
+                      room.type === "public" ? theme.success : theme.text.primary,
                   },
                 ]}
               >
-                {room.type === "public" ? "Public" : "Private"}
+                {room.type === "public" ? "PUBLIC" : "PRIVATE"}
               </Text>
             </View>
           </View>
@@ -639,16 +639,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderRadius: 30, // Much more rounded pill shape
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    padding: Spacing.xxs,
+    marginBottom: 20,
+    padding: 4,
   },
   tabBtn: {
     flex: 1,
     flexDirection: "row",
-    paddingVertical: Spacing.sm,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 26, // Rounded inner active button
+    borderRadius: 26,
   },
   tabBtnText: { ...Typography.presets.body },
   tabBadge: {
@@ -670,15 +670,16 @@ const styles = StyleSheet.create({
 
   /* Card */
   card: {
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(150, 150, 150, 0.15)",
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   cardTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: Spacing.sm,
+    alignItems: "center",
+    marginBottom: 16,
   },
   roomIcon: {
     width: 44,
@@ -697,8 +698,9 @@ const styles = StyleSheet.create({
   cardTitleWrap: { flex: 1, marginRight: Spacing.xs },
   roomTitle: {
     ...Typography.presets.h3,
-    fontSize: Typography.sizes.md,
+    fontSize: 16,
     lineHeight: 22,
+    fontWeight: "600",
   },
   timeAgo: { ...Typography.presets.caption, marginTop: 2 },
   cardBottomRow: {

@@ -205,7 +205,7 @@ export default function CommunityScreen() {
                 color={
                   activeView === "tribes" && tribesMode === "explore"
                     ? theme.text.inverse
-                    : theme.brand.primary
+                    : theme.text.primary
                 }
               />
               <Text
@@ -247,7 +247,7 @@ export default function CommunityScreen() {
                 color={
                   activeView === "tribes" && tribesMode === "my"
                     ? theme.text.inverse
-                    : theme.brand.primary
+                    : theme.text.primary
                 }
               />
               <Text
@@ -282,7 +282,7 @@ export default function CommunityScreen() {
                 color={
                   activeView === "voice-channels"
                     ? theme.text.inverse
-                    : theme.brand.primary
+                    : theme.text.primary
                 }
               />
               <Text
@@ -381,7 +381,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    borderRadius: 30, // Extremely round pill shape
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   headerBtnText: {
     ...Typography.presets.bodySmall,
