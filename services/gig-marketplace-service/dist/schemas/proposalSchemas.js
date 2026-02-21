@@ -14,6 +14,11 @@ export const listProposalsSchema = z.object({
     body: z.object({}).optional(),
     query: cursorLimitQuery,
 });
+export const listOwnProposalsSchema = z.object({
+    params: z.object({}).optional(),
+    body: z.object({}).optional(),
+    query: cursorLimitQuery,
+});
 export const acceptProposalSchema = z.object({
     params: z.object({ id: uuidSchema }),
     body: z.object({}).optional(),

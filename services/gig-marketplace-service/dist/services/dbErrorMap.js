@@ -2,6 +2,8 @@ import { AppError } from "../utils/AppError.js";
 export function mapSupabaseError(error, fallback = "Database error") {
     if (!error)
         return new AppError(fallback, 500, "internal_error");
+    if (error instanceof AppError)
+        return error;
     const code = error.code || error.status || "";
     const message = error.message || fallback;
     if (code === "23505")

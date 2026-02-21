@@ -2,9 +2,18 @@
 
 Base path: `/api`
 
+## Health
+- `GET /health`
+
+## Users
+- `GET /users/me`
+- `PUT /users/me`
+
 ## Gigs
 - `POST /gigs`
 - `GET /gigs?filters`
+- `GET /gigs/me`
+- `GET /gigs/stats`
 - `GET /gigs/:id`
 - `PATCH /gigs/:id`
 - `DELETE /gigs/:id`
@@ -12,7 +21,9 @@ Base path: `/api`
 ## Proposals
 - `POST /gigs/:id/proposals`
 - `GET /gigs/:id/proposals`
+- `GET /proposals/me`
 - `POST /proposals/:id/accept`
+- `POST /proposals/:id/reject`
 
 ## Contracts
 - `GET /contracts`

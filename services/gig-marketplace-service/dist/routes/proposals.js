@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate.js";
-import { acceptProposalSchema, rejectProposalSchema, listProposalsSchema } from "../schemas/proposalSchemas.js";
+import { acceptProposalSchema, rejectProposalSchema, listOwnProposalsSchema } from "../schemas/proposalSchemas.js";
 import * as proposalService from "../services/proposalService.js";
 const router = Router();
-router.get("/me", validate(listProposalsSchema), async (req, res, next) => {
+router.get("/me", validate(listOwnProposalsSchema), async (req, res, next) => {
     try {
         const data = await proposalService.listProposalsByFreelancer(req.db, req.user.id, req.query);
         res.json(data);
