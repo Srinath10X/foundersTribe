@@ -34,6 +34,40 @@ export class GigRepository {
     if (error) throw error;
   }
 
+  async getFreelancerStats(userId: string) {
+    // Count active projects (gigs where this user is the freelancer and status is in_progress)
+    const { count: activeProjects, error: activeErr } = await this.db
+      .from("contracts")
+      .select("*", { count: "exact", head: true })
+      .eq("freelancer_id", userId)
+      .eq("status", "active");
+    if (activeErr) throw activeErr;
+
+    // Sum earnings from completed contracts this month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { data: earningsData, error: earningsErr } = await this.db
+      .from("contracts")
+      .select("agreed_amount")
+      .eq("freelancer_id", userId)
+      .eq("status", "completed")
+      .gte("updated_at", startOfMonth.toISOString());
+    if (earningsErr) throw earningsErr;
+
+    const earningsMtd = (earningsData || []).reduce(
+      (sum: number, c: any) => sum + (Number(c.agreed_amount) || 0),
+      0,
+    );
+
+    return {
+      earnings_mtd: earningsMtd,
+      active_projects: activeProjects || 0,
+      earnings_growth_pct: 0,
+    };
+  }
+
   async listGigs(filters: Record<string, any>, limit: number, cursorParts: { createdAt: string, id: string } | null) {
     if (filters.tag) {
       const tagSlugs = String(filters.tag)

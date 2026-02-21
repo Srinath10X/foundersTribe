@@ -71,8 +71,8 @@ export default function SearchScreen() {
           new Set(
             data
               .map((item) => item.Category)
-              .filter((cat): cat is string => !!cat && cat.trim().length > 0),
-          ),
+              .filter((cat): cat is string => !!cat && cat.trim().length > 0)
+          )
         )
           .sort()
           .slice(0, 10); // Limit to top 10 alphabetically
@@ -125,7 +125,7 @@ export default function SearchScreen() {
       let dbQuery = supabase
         .from("Articles")
         .select(
-          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"',
+          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"'
         )
         .order("id", { ascending: false }) // Latest first for trending
         .limit(20);
@@ -135,7 +135,7 @@ export default function SearchScreen() {
       // If search query exists, filter by it
       if (trimmedQuery) {
         dbQuery = dbQuery.or(
-          `Title.ilike.%${trimmedQuery}%,Summary.ilike.%${trimmedQuery}%,Content.ilike.%${trimmedQuery}%`,
+          `Title.ilike.%${trimmedQuery}%,Summary.ilike.%${trimmedQuery}%,Content.ilike.%${trimmedQuery}%`
         );
       }
 
@@ -177,7 +177,7 @@ export default function SearchScreen() {
 
   const renderArticle = ({ item }: { item: Article }) => {
     const minutes = Math.ceil(
-      (item.Content || item.Summary || "").split(/\s+/).length / 200,
+      (item.Content || item.Summary || "").split(/\s+/).length / 200
     );
 
     return (

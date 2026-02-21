@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { StyleSheet, TouchableOpacity, View, FlatList, ActivityIndicator, Alert, RefreshControl } from "react-native";
+import { useRouter } from "expo-router";
 
 import {
   Avatar,
@@ -8,51 +9,160 @@ import {
   FlowScreen,
   SurfaceCard,
   T,
-  people,
   useFlowNav,
   useFlowPalette,
+  PrimaryButton
 } from "@/components/community/freelancerFlow/shared";
-
-const gigs = [
-  {
-    title: "Senior UI Designer",
-    status: "Hiring",
-    tone: "success" as const,
-    metaLeft: "12 Applications",
-    metaRight: "Posted 2d ago",
-    cta: "View Proposals",
-    route: "/freelancer-stack/gig-proposals",
-    kind: "avatars",
-  },
-  {
-    title: "React Developer",
-    status: "In Progress",
-    tone: "progress" as const,
-    metaLeft: "Working with Sarah C.",
-    metaRight: "Started Oct 12",
-    cta: "Manage Contract",
-    route: "/freelancer-stack/contract-details",
-    kind: "milestone",
-  },
-  {
-    title: "Logo Design Project",
-    status: "Completed",
-    tone: "neutral" as const,
-    metaLeft: "48 Applications",
-    metaRight: "Ended Oct 05",
-    cta: "Review Details",
-    route: "/freelancer-stack/gig-details",
-    kind: "completed",
-  },
-];
+import { gigService, Gig } from "@/lib/gigService";
 
 export default function MyGigsScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
+  const router = useRouter();
+
+  const [gigs, setGigs] = useState<Gig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const fetchMyGigs = async () => {
+    try {
+      const data = await gigService.getGigs();
+      // Assuming backend handles client context via token or we filter client_id here.
+      // E.g. const data = await gigService.getGigs({ client_id: myUserId })
+      setGigs(data || []);
+    } catch (err: any) {
+      console.error("Failed to load my gigs:", err);
+      Alert.alert("Error", err.message || "Could not load gigs.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyGigs();
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchMyGigs();
+  }, []);
+
+  const handleDelete = (gigId: string, gigTitle: string) => {
+    Alert.alert(
+      "Delete Gig",
+      `Are you sure you want to delete '${gigTitle}'? This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeletingId(gigId);
+              await gigService.deleteGig(gigId);
+              // Refresh list
+              setGigs(prev => prev.filter(g => g.id !== gigId));
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to delete gig.");
+            } finally {
+              setDeletingId(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const activeCount = gigs.filter(g => g.status === "in_progress" || g.status === "open").length;
+  const completedCount = gigs.filter(g => g.status === "completed").length;
+  const draftCount = gigs.filter(g => g.status === "draft").length;
+
+  const renderHeader = () => (
+    <>
+      <View style={styles.summaryRow}>
+        <SurfaceCard style={styles.summaryCard}>
+          <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>ACTIVE</T>
+          <T weight="bold" color={palette.text} style={styles.summaryValue}>{activeCount}</T>
+        </SurfaceCard>
+        <SurfaceCard style={styles.summaryCard}>
+          <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>COMPLETED</T>
+          <T weight="bold" color={palette.text} style={styles.summaryValue}>{completedCount}</T>
+        </SurfaceCard>
+        <SurfaceCard style={styles.summaryCard}>
+          <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>DRAFT / PEND</T>
+          <T weight="bold" color={palette.text} style={styles.summaryValue}>{draftCount}</T>
+        </SurfaceCard>
+      </View>
+    </>
+  );
+
+  const renderItem = ({ item: gig }: { item: Gig }) => {
+    const isDeleting = deletingId === gig.id;
+    return (
+      <SurfaceCard style={[styles.card, isDeleting && { opacity: 0.5 }]}>
+        <View style={styles.cardHead}>
+          <T weight="bold" color={palette.text} style={styles.cardTitle} numberOfLines={2}>
+            {gig.title}
+          </T>
+          <Badge label={gig.status.toUpperCase()} tone={gig.status === "open" ? "progress" : gig.status === "completed" ? "success" : "neutral"} />
+        </View>
+
+        <View style={styles.metaRow}>
+          <View style={styles.metaItem}>
+            <Ionicons name="wallet-outline" size={15} color={palette.subText} />
+            <T weight="medium" color={palette.subText} style={styles.metaText}>
+              ₹{gig.budget?.toLocaleString() || "..."}
+            </T>
+          </View>
+
+          <View style={styles.metaItem}>
+            <Ionicons name="time-outline" size={15} color={palette.subText} />
+            <T weight="medium" color={palette.subText} style={styles.metaText}>
+              Posted: {new Date(gig.created_at).toLocaleDateString()}
+            </T>
+          </View>
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+        <View style={styles.cardBottom}>
+          <View style={styles.actionGroup}>
+            <TouchableOpacity
+              onPress={() => router.push(`/freelancer-stack/post-gig?id=${gig.id}`)}
+              style={styles.iconBtn}
+            >
+              <Ionicons name="pencil" size={18} color={palette.accent} />
+              <T weight="semiBold" color={palette.accent} style={styles.btnLabel}>Edit</T>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => handleDelete(gig.id, gig.title)}
+              style={styles.iconBtn}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <ActivityIndicator size="small" color="#FF3B30" />
+              ) : (
+                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+              )}
+              <T weight="semiBold" color="#FF3B30" style={styles.btnLabel}>Delete</T>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={() => nav.push("/freelancer-stack/gig-proposals")} activeOpacity={0.8} style={styles.viewProposalsBtn}>
+            <T weight="bold" color={palette.accent} style={styles.actionText}>Proposals</T>
+            <Ionicons name="chevron-forward" size={16} color={palette.accent} />
+          </TouchableOpacity>
+        </View>
+      </SurfaceCard>
+    );
+  };
 
   return (
     <FlowScreen>
-      <View style={[styles.header, { borderBottomColor: palette.border }]}> 
+      <View style={[styles.header, { borderBottomColor: palette.border }]}>
         <View>
           <T weight="semiBold" color={palette.subText} style={styles.smallLabel}>Your Workspace</T>
           <T weight="bold" color={palette.text} style={styles.title}>My Gigs</T>
@@ -67,121 +177,30 @@ export default function MyGigsScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.summaryRow}>
-          <SurfaceCard style={styles.summaryCard}>
-            <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>ACTIVE</T>
-            <T weight="bold" color={palette.text} style={styles.summaryValue}>2</T>
-          </SurfaceCard>
-          <SurfaceCard style={styles.summaryCard}>
-            <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>COMPLETED</T>
-            <T weight="bold" color={palette.text} style={styles.summaryValue}>18</T>
-          </SurfaceCard>
-          <SurfaceCard style={styles.summaryCard}>
-            <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>PENDING</T>
-            <T weight="bold" color={palette.text} style={styles.summaryValue}>1</T>
-          </SurfaceCard>
+      {loading && !refreshing ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={palette.accent} />
+          <T color={palette.subText} style={{ marginTop: 16 }}>Loading your gigs...</T>
         </View>
-
-        {gigs.map((gig) => (
-          <SurfaceCard key={gig.title} style={styles.card}>
-            <View style={styles.cardHead}>
-              <T
-                weight="bold"
-                color={palette.text}
-                style={styles.cardTitle}
-                numberOfLines={2}
-                ellipsizeMode="tail"
-              >
-                {gig.title}
-              </T>
-              <Badge label={gig.status} tone={gig.tone} />
-            </View>
-
-            <View style={styles.metaRow}>
-              <View style={styles.metaItem}>
-                <Ionicons
-                  name={gig.kind === "milestone" ? "person" : gig.kind === "completed" ? "checkmark-circle" : "people"}
-                  size={15}
-                  color={palette.subText}
-                />
-                <T
-                  weight="medium"
-                  color={palette.subText}
-                  style={styles.metaText}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {gig.metaLeft}
-                </T>
-              </View>
-
-              <View style={styles.metaItem}>
-                <Ionicons name="calendar" size={15} color={palette.subText} />
-                <T
-                  weight="medium"
-                  color={palette.subText}
-                  style={styles.metaText}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {gig.metaRight}
-                </T>
-              </View>
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-            <View style={styles.cardBottom}>
-              {gig.kind === "avatars" ? (
-                <View style={styles.avatars}>
-                  {[people.alex, people.jordan, people.sarah].map((p, idx) => (
-                    <View key={`${p}-${idx}`} style={{ marginLeft: idx === 0 ? 0 : -8 }}>
-                      <Avatar source={p} size={26} />
-                    </View>
-                  ))}
-                  <View style={[styles.more, { backgroundColor: palette.border }]}> 
-                    <T weight="semiBold" color={palette.subText} style={{ fontSize: 11 }}>+9</T>
-                  </View>
-                </View>
-              ) : gig.kind === "milestone" ? (
-                <View style={styles.milestone}> 
-                  <View style={[styles.dot, { backgroundColor: "#77A6FF" }]} />
-                  <T weight="medium" color={palette.subText} style={styles.metaText}>Milestone 2 of 4</T>
-                </View>
-              ) : (
-                <View style={styles.milestone}> 
-                  <Ionicons name="archive-outline" size={14} color={palette.subText} />
-                  <T
-                    weight="medium"
-                    color={palette.subText}
-                    style={styles.metaText}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    Archived Candidate List
-                  </T>
-                </View>
-              )}
-
-              <TouchableOpacity onPress={() => nav.push(gig.route)} activeOpacity={0.8}>
-                <View style={styles.ctaRow}>
-                  <T
-                    weight="bold"
-                    color={palette.accent}
-                    style={styles.actionText}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {gig.cta}
-                  </T>
-                  <Ionicons name="chevron-forward" size={16} color={palette.accent} />
-                </View>
-              </TouchableOpacity>
-            </View>
-          </SurfaceCard>
-        ))}
-      </View>
+      ) : (
+        <FlatList
+          data={gigs}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          ListHeaderComponent={renderHeader}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
+          ListEmptyComponent={
+            <SurfaceCard style={styles.emptyCard}>
+              <Ionicons name="briefcase-outline" size={48} color={palette.border} />
+              <T weight="bold" color={palette.text} style={styles.emptyTitle}>No Gigs Yet</T>
+              <T color={palette.subText} style={styles.emptySubtitle}>Post a gig to start finding top talent.</T>
+              <PrimaryButton label="Post a Gig" onPress={() => nav.push("/freelancer-stack/post-gig")} style={styles.emptyBtn} />
+            </SurfaceCard>
+          }
+        />
+      )}
     </FlowScreen>
   );
 }
@@ -206,23 +225,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  content: { paddingHorizontal: 18, paddingTop: 14, gap: 12 },
-  summaryRow: { flexDirection: "row", gap: 8 },
+  content: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 24, gap: 12 },
+  summaryRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
   summaryCard: { flex: 1, paddingVertical: 10, alignItems: "center" },
   summaryLabel: { fontSize: 10, letterSpacing: 0.8 },
   summaryValue: { fontSize: 18, marginTop: 4 },
-  card: { padding: 12 },
+  card: { padding: 16, marginBottom: 4 },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 },
   cardTitle: { fontSize: 18, flex: 1, flexShrink: 1, paddingRight: 2 },
   metaRow: { gap: 8 },
   metaItem: { flexDirection: "row", alignItems: "center", gap: 7, minWidth: 0 },
   metaText: { fontSize: 13, flexShrink: 1 },
-  divider: { height: 1, marginVertical: 10 },
+  divider: { height: 1, marginVertical: 14 },
   cardBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  avatars: { flexDirection: "row", alignItems: "center" },
-  more: { width: 26, height: 26, borderRadius: 13, marginLeft: -8, justifyContent: "center", alignItems: "center" },
-  milestone: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, minWidth: 0 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  ctaRow: { flexDirection: "row", alignItems: "center", gap: 2, maxWidth: 150 },
+  actionGroup: { flexDirection: "row", alignItems: "center", gap: 16 },
+  iconBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  btnLabel: { fontSize: 13 },
+  viewProposalsBtn: { flexDirection: "row", alignItems: "center", gap: 2, padding: 6, opacity: 0.9 },
   actionText: { fontSize: 13, flexShrink: 1 },
+  centerContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  emptyCard: { padding: 40, alignItems: "center", borderRadius: 16, marginTop: 24 },
+  emptyTitle: { fontSize: 18, marginTop: 16 },
+  emptySubtitle: { fontSize: 14, marginTop: 8, textAlign: "center", marginBottom: 24 },
+  emptyBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
 });

@@ -3,8 +3,11 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import Svg, { Circle } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
@@ -73,6 +76,7 @@ export default function ProfileScreen() {
     bookmarks: 0,
     likes: 0,
   });
+  const [uploading, setUploading] = useState(false);
 
   const token = session?.access_token || "";
   const userId = session?.user?.id || "";
@@ -225,6 +229,113 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  // ── Photo Picker & Upload ──────────────────────────────
+  const pickPhoto = () => {
+    Alert.alert("Profile Photo", "Choose a source", [
+      {
+        text: "Camera",
+        onPress: () => launchPicker("camera"),
+      },
+      {
+        text: "Photo Library",
+        onPress: () => launchPicker("library"),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  const launchPicker = async (source: "camera" | "library") => {
+    // Request permissions
+    if (source === "camera") {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission needed",
+          "Camera access is required to take a photo.",
+        );
+        return;
+      }
+    } else {
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "Photo library access is required.");
+        return;
+      }
+    }
+
+    const options: ImagePicker.ImagePickerOptions = {
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    };
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    await uploadPhoto(asset.uri);
+  };
+
+  const uploadPhoto = async (localUri: string) => {
+    if (!userId) return;
+    setUploading(true);
+    try {
+      const ext = localUri.split(".").pop()?.toLowerCase() || "jpg";
+      const filePath = `profiles/${userId}/avatar.${ext}`;
+      const contentType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+
+      // Use arraybuffer approach for reliable RN upload
+      const response = await fetch(localUri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
+
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, arrayBuffer, {
+          contentType,
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: signedData, error: signError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(filePath, 60 * 60 * 24 * 30);
+
+      let newPhotoUrl = "";
+      if (!signError && signedData?.signedUrl) {
+        newPhotoUrl = `${signedData.signedUrl}&t=${Date.now()}`;
+      }
+
+      if (token) {
+        // Update database with new profile photo path
+        await tribeApi.updateMyProfile(token, {
+          photo_url: filePath,
+        });
+      }
+
+      // Update local state to reflect UI change immediately
+      setProfile((prev) =>
+        prev ? { ...prev, photo_url: newPhotoUrl || filePath } : null
+      );
+
+      Alert.alert("Success", "Profile photo updated successfully!");
+
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      Alert.alert("Upload failed", error?.message || "Could not upload photo");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleEditInterests = async () => {
@@ -380,51 +491,115 @@ export default function ProfileScreen() {
         </Text>
 
         {/* Profile Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={[styles.card, styles.headerCard, { backgroundColor: theme.surface }]}
-            onPress={handleEditProfile}
-            activeOpacity={0.7}
-          >
-            <View style={styles.avatarWrapper}>
-              {profile?.photo_url ? (
-                <Image
-                  source={{ uri: profile.photo_url }}
-                  style={[
-                    styles.avatar,
-                    {
-                      borderColor: theme.border,
-                    },
-                  ]}
+        <View style={styles.profileHeaderNew}>
+          <View style={styles.avatarContainerNew}>
+            <View style={styles.svgWrapperNew}>
+              <Svg width={140} height={140} viewBox="0 0 140 140">
+                <Circle
+                  cx="70"
+                  cy="70"
+                  r="64"
+                  stroke={theme.text.primary}
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  fill="none"
+                  strokeDasharray="95 38"
+                  strokeDashoffset="15"
                 />
-              ) : (
-                <View
-                  style={[
-                    styles.avatar,
-                    {
-                      borderColor: theme.border,
-                      backgroundColor: theme.surfaceElevated,
-                    },
-                  ]}
+              </Svg>
+            </View>
+
+            {profile?.photo_url ? (
+              <Image
+                source={{ uri: profile.photo_url }}
+                style={styles.avatarNew}
+              />
+            ) : (
+              <View style={[styles.avatarNew, { backgroundColor: theme.surfaceElevated }]}>
+                <Text style={[styles.avatarInitialNew, { color: theme.text.primary }]}>
+                  {userName.charAt(0).toUpperCase() || "P"}
+                </Text>
+              </View>
+            )}
+
+            <LinearGradient
+              colors={['#FF4D6D', '#FF7E67']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.completionPillNew}
+            >
+              <Text style={styles.completionTextNew}>
+                20% complete
+              </Text>
+            </LinearGradient>
+          </View>
+
+          <View style={styles.nameRowNew}>
+            <Text style={[styles.userNameNew, { color: theme.text.primary }]}>
+              {userName}{profile?.user_type === "founder" ? ", 23" : ""}
+            </Text>
+            <MaterialIcons name="verified" size={20} color={theme.text.primary} style={{ marginLeft: 6 }} />
+          </View>
+
+          <View style={styles.actionButtonsRowNew}>
+            {/* Settings Button */}
+            <View style={styles.actionButtonContainerNew}>
+              <TouchableOpacity
+                style={[styles.actionButtonSmNew, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, borderWidth: 1 }]}
+                onPress={() => triggerHaptic()}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="settings-sharp" size={22} color={theme.text.muted} />
+              </TouchableOpacity>
+              <Text style={[styles.actionButtonTextNew, { color: theme.text.muted }]}>Settings</Text>
+            </View>
+
+            {/* Edit Profile Button */}
+            <View style={styles.actionButtonContainerNew}>
+              <TouchableOpacity
+                style={[styles.actionButtonLgNew, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, borderWidth: 1 }]}
+                onPress={handleEditProfile}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="pencil" size={26} color={theme.text.muted} />
+                <View style={[styles.notificationDotNew, { borderColor: theme.surfaceElevated }]} />
+              </TouchableOpacity>
+              <Text style={[styles.actionButtonTextNew, { color: theme.text.muted }]}>Edit profile</Text>
+            </View>
+
+            {/* Add Media Button */}
+            <View style={styles.actionButtonContainerNew}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  triggerHaptic();
+                  pickPhoto();
+                }}
+                disabled={uploading}
+              >
+                <LinearGradient
+                  colors={['#FF4D6D', '#FF7E67']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.actionButtonSmNew]}
                 >
-                  <Text
-                    style={[styles.avatarInitial, { color: theme.text.primary }]}
-                  >
-                    {userName.charAt(0).toUpperCase() || "P"}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.headerTextContent}>
-              <Text style={[styles.userName, { color: theme.text.primary }]} numberOfLines={1}>
-                {userName}
+                  {uploading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="camera" size={22} color="#FFF" />
+                      <View style={styles.plusBadgeBgNew}>
+                        <Ionicons name="add" size={14} color="#FF7E67" />
+                      </View>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+              <Text style={[styles.actionButtonTextNew, { color: theme.text.muted }]}>
+                {uploading ? "Uploading..." : "Add media"}
               </Text>
-              <Text style={[styles.userEmail, { color: theme.text.secondary }]} numberOfLines={1}>
-                {userEmail}
-              </Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Content Sections */}
@@ -1088,5 +1263,120 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 15,
     fontWeight: "500",
+  },
+  profileHeaderNew: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 24,
+  },
+  avatarContainerNew: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    width: 140,
+    height: 140,
+    marginBottom: 24,
+  },
+  svgWrapperNew: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarNew: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarInitialNew: {
+    fontSize: 40,
+    fontFamily: Typography.fonts.primary,
+  },
+  completionPillNew: {
+    position: 'absolute',
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#FF4D6D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  completionTextNew: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  nameRowNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  userNameNew: {
+    fontSize: 26,
+    fontFamily: Typography.fonts.primary,
+    fontWeight: '600',
+  },
+  actionButtonsRowNew: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 28,
+    marginBottom: 16,
+    width: '100%',
+  },
+  actionButtonContainerNew: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    width: 80,
+  },
+  actionButtonSmNew: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionButtonLgNew: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionButtonTextNew: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  notificationDotNew: {
+    position: 'absolute',
+    top: 2,
+    right: 14,
+    width: 14,
+    height: 14,
+    backgroundColor: '#FF4D6D',
+    borderRadius: 7,
+    borderWidth: 2,
+  },
+  plusBadgeBgNew: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    backgroundColor: '#FFF',
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

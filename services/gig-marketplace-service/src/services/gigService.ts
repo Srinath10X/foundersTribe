@@ -48,6 +48,11 @@ export async function updateGig(db: SupabaseClient, id: string, founderId: strin
   }
 }
 
+export async function getFreelancerStats(db: SupabaseClient, userId: string) {
+  const repo = new GigRepository(db);
+  return await repo.getFreelancerStats(userId);
+}
+
 export async function deleteGig(db: SupabaseClient, id: string, founderId: string) {
   try {
     const repo = new GigRepository(db);

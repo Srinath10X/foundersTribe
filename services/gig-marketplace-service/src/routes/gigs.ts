@@ -32,6 +32,15 @@ router.get("/me", validate(listGigsSchema), async (req, res, next) => {
   }
 });
 
+router.get("/stats", async (req, res, next) => {
+  try {
+    const data = await gigService.getFreelancerStats(req.db, req.user.id);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:id", validate(getGigSchema), async (req, res, next) => {
   try {
     const data = await gigService.getGigById(req.db, req.params.id as string);
