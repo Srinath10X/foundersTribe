@@ -2,6 +2,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useArticleInteractions } from "@/hooks/useArticleInteractions";
 import { supabase } from "@/lib/supabase";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { BsStarsIcon } from "@/components/icons/BsStarsIcon";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
@@ -197,7 +198,7 @@ export default function ArticleDetailScreen() {
   const handleRelatedArticlePress = (relatedArticle: Article) => {
     const nextHistoryIds = [...historyIds, article.id].join(",");
     router.push({
-      pathname: "/article/[id]",
+      pathname: "/article_copy/[id]",
       params: {
         id: relatedArticle.id.toString(),
         title: relatedArticle.Title,
@@ -310,7 +311,7 @@ export default function ArticleDetailScreen() {
             </View>
           </View>
 
-          {/* Action Bar (Like, Bookmark, Font) */}
+          {/* Action Bar (Like, Bookmark, Explore, Font) */}
           <View
             style={[
               styles.actionBar,
@@ -340,6 +341,25 @@ export default function ArticleDetailScreen() {
                   />
                 </Animated.View>
               </TouchableOpacity>
+
+              {/* Explore Button inside Action Bar */}
+              {article["Article Link"] ? (
+                <TouchableOpacity
+                  style={[styles.smallExploreBtn, { backgroundColor: isDark ? "#FFFFFF" : "#000000" }]}
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    Linking.openURL(article["Article Link"] as string).catch((err) =>
+                      console.error("Couldn't load page", err)
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.smallExploreBtnText, { color: isDark ? "#000000" : "#FFFFFF" }]}>
+                    Explore
+                  </Text>
+                  <BsStarsIcon size={18} color={isDark ? "#000000" : "#FFFFFF"} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           </View>
 
@@ -373,7 +393,7 @@ export default function ArticleDetailScreen() {
               <Text style={[styles.exploreBtnText, { color: theme.text.inverse || "#FFFFFF" }]}>
                 Explore Original Article
               </Text>
-              <Ionicons name="open-outline" size={18} color={theme.text.inverse || "#FFFFFF"} />
+              <BsStarsIcon size={18} color={theme.text.inverse || "#FFFFFF"} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -536,6 +556,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Poppins_600SemiBold",
     fontWeight: "600",
+  },
+  smallExploreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    gap: 6,
+    marginLeft: 12,
+  },
+  smallExploreBtnText: {
+    fontSize: 14,
+    fontFamily: "Poppins_600SemiBold",
+    fontWeight: "700",
   },
 
   // RELATED SECTION

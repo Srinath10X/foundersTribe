@@ -1,6 +1,6 @@
 import DiscoverTab from "@/components/home/DiscoverTab";
 import FeedTab from "@/components/home/FeedTab";
-import LibraryTab from "@/components/home/LibraryTab";
+import ForYouTab from "@/components/home/ForYouTab";
 import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,7 +26,7 @@ import Animated, {
 const { width: windowWidth } = Dimensions.get("window");
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 
-type SubTab = "feed" | "discover" | "library";
+type SubTab = "feed" | "discover" | "foryou";
 
 const SUB_TABS: {
   key: SubTab;
@@ -34,25 +34,25 @@ const SUB_TABS: {
   icon: string;
   iconFocused?: string;
 }[] = [
-  {
-    key: "feed",
-    label: "Feed",
-    icon: "newspaper-outline",
-    iconFocused: "newspaper",
-  },
-  {
-    key: "discover",
-    label: "Discover",
-    icon: "compass-outline",
-    iconFocused: "compass",
-  },
-  {
-    key: "library",
-    label: "Library",
-    icon: "bookmarks-outline",
-    iconFocused: "bookmarks",
-  },
-];
+    {
+      key: "feed",
+      label: "Feed",
+      icon: "newspaper-outline",
+      iconFocused: "newspaper",
+    },
+    {
+      key: "discover",
+      label: "Discover",
+      icon: "compass-outline",
+      iconFocused: "compass",
+    },
+    {
+      key: "foryou",
+      label: "For you",
+      icon: "bs-stars",
+      iconFocused: "bs-stars",
+    },
+  ];
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
@@ -118,8 +118,8 @@ export default function HomeScreen() {
         return <FeedTab isSubTabVisible={isSubTabVisible} />;
       case "discover":
         return <DiscoverTab />;
-      case "library":
-        return <LibraryTab />;
+      case "foryou":
+        return <ForYouTab />;
     }
   };
 
@@ -137,10 +137,10 @@ export default function HomeScreen() {
             isDark
               ? ["rgba(0,0,0,0.85)", "rgba(0,0,0,0.6)", "transparent"]
               : [
-                  "rgba(255,255,255,0.92)",
-                  "rgba(255,255,255,0.6)",
-                  "transparent",
-                ]
+                "rgba(255,255,255,0.92)",
+                "rgba(255,255,255,0.6)",
+                "transparent",
+              ]
           }
           style={styles.headerGradient}
         >
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   headerGradient: {
-    paddingBottom: 20,
+    paddingBottom: 40,
   },
   headerInner: {
     flexDirection: "row",

@@ -5,8 +5,8 @@ import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Avatar, FlowScreen, PrimaryButton, SurfaceCard, T, people, useFlowNav, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 
 const activeJobs = [
-  { title: "SaaS Platform Redesign", company: "Velocity Tech Inc.", progress: 75, due: "Due in 2d" },
-  { title: "Mobile App Prototyping", company: "Lumina Wellness", progress: 30, due: "Due in 8d" },
+  { title: "SaaS Platform Redesign", company: "Veda Tech Pvt Ltd", progress: 75, due: "Due in 2d" },
+  { title: "Mobile App Prototyping", company: "Aarogya Wellness", progress: 30, due: "Due in 8d" },
 ];
 
 export default function TalentDashboardScreen() {
@@ -19,7 +19,7 @@ export default function TalentDashboardScreen() {
         <View style={styles.userRow}>
           <Avatar source={people.alex} size={54} />
           <View style={{ flex: 1 }}>
-            <T weight="bold" color={palette.text} style={styles.name}>Alex Rivera</T>
+            <T weight="bold" color={palette.text} style={styles.name}>Arjun Patel</T>
             <T weight="medium" color={palette.subText} style={styles.role}>Senior UI Designer</T>
           </View>
         </View>
@@ -32,7 +32,7 @@ export default function TalentDashboardScreen() {
         <View style={styles.kpiRow}>
           <SurfaceCard style={styles.kpiCard}>
             <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>EARNINGS (MTD)</T>
-            <T weight="bold" color={palette.text} style={styles.kpiValue}>$8,450</T>
+            <T weight="bold" color={palette.text} style={styles.kpiValue}>₹8,450</T>
             <T weight="semiBold" color={palette.success} style={styles.kpiMeta}>+12%</T>
           </SurfaceCard>
           <SurfaceCard style={styles.kpiCard}>
@@ -41,8 +41,6 @@ export default function TalentDashboardScreen() {
             <T weight="medium" color={palette.subText} style={styles.kpiMeta}>In progress</T>
           </SurfaceCard>
         </View>
-
-        <PrimaryButton label="Browse New Gigs" icon="search" onPress={() => nav.push("/talent-stack/browse-gigs")} />
 
         <View style={styles.sectionHead}>
           <T weight="bold" color={palette.text} style={styles.sectionTitle}>My Active Jobs</T>

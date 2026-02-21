@@ -17,7 +17,7 @@ export default function TalentLeaveReviewScreen() {
             <Ionicons name="ribbon" size={28} color={palette.accent} />
           </View>
           <T weight="bold" color={palette.text} style={styles.title}>SaaS Platform Redesign</T>
-          <T weight="medium" color={palette.subText} style={styles.sub}>Gig for Velocity Tech Inc.</T>
+          <T weight="medium" color={palette.subText} style={styles.sub}>Gig for Veda Tech Pvt Ltd</T>
           <View style={[styles.status, { backgroundColor: "rgba(95,168,118,0.14)" }]}>
             <T weight="semiBold" color={palette.success} style={styles.sText}>CONTRACT COMPLETED</T>
           </View>

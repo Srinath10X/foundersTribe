@@ -1,3 +1,4 @@
+import { BsStarsIcon } from "@/components/icons/BsStarsIcon";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import React from "react";
@@ -71,13 +72,17 @@ export default function SubTabBar<T extends string>({
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.88}
             >
-              <Ionicons
-                name={
-                  (isActive ? tab.iconFocused || tab.icon : tab.icon) as any
-                }
-                size={18}
-                color={tintColor}
-              />
+              {tab.icon === "bs-stars" ? (
+                <BsStarsIcon size={18} color={tintColor} />
+              ) : (
+                <Ionicons
+                  name={
+                    (isActive ? tab.iconFocused || tab.icon : tab.icon) as any
+                  }
+                  size={18}
+                  color={tintColor}
+                />
+              )}
               <Text
                 numberOfLines={1}
                 ellipsizeMode="tail"

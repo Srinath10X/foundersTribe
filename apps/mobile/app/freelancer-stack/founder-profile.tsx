@@ -36,7 +36,7 @@ const metricRows = [
 const postings = [
   {
     title: "Senior UI Designer",
-    meta: "Posted 2 days ago • $80-120/hr",
+    meta: "Posted 2 days ago • ₹80-120/hr",
     tags: ["Mobile", "Figma", "Fintech"],
   },
   {
@@ -110,7 +110,7 @@ export default function FounderProfileScreen() {
 
       <SurfaceCard style={styles.card}>
         <T weight="bold" color={palette.text} style={styles.cardTitle}>Funding & Traction</T>
-        <View style={styles.row}><Ionicons name="cash-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>Raised: $1.2M (Seed)</T></View>
+        <View style={styles.row}><Ionicons name="cash-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>Raised: ₹1.2M (Seed)</T></View>
         <View style={styles.row}><Ionicons name="people-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>12,000+ active users across client products</T></View>
         <View style={styles.row}><Ionicons name="rocket-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>Launching v2 onboarding automation this quarter</T></View>
       </SurfaceCard>

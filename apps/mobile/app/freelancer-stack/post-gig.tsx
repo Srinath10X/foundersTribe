@@ -176,7 +176,7 @@ export default function PostGigScreen() {
             value={location}
             onChangeText={setLocation}
             editable={!isRemote}
-            placeholder={isRemote ? "Disabled for remote gigs" : "e.g. San Francisco, CA"}
+            placeholder={isRemote ? "Disabled for remote gigs" : "e.g. Bengaluru, KA"}
             placeholderTextColor={palette.subText}
             style={[styles.input, { backgroundColor: palette.border, color: palette.text, opacity: isRemote ? 0.6 : 1 }]}
           />

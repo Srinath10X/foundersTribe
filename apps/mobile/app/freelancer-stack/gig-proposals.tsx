@@ -14,9 +14,9 @@ import {
 } from "@/components/community/freelancerFlow/shared";
 
 const proposals = [
-  { name: "Alex Rivera", rating: "4.9", price: "$1,200", timeline: "14 days", image: people.alex, blurb: "Built fintech dashboards for 6+ startups." },
-  { name: "Sarah Chen", rating: "5.0", price: "$1,550", timeline: "10 days", image: people.sarah, blurb: "Senior product designer focused on conversion UX." },
-  { name: "Jordan Smith", rating: "4.7", price: "$950", timeline: "21 days", image: people.jordan, blurb: "Affordable, fast design delivery with clean visuals." },
+  { name: "Arjun Patel", rating: "4.9", price: "₹1,200", timeline: "14 days", image: people.alex, blurb: "Built fintech dashboards for 6+ startups." },
+  { name: "Priya Sharma", rating: "5.0", price: "₹1,550", timeline: "10 days", image: people.sarah, blurb: "Senior product designer focused on conversion UX." },
+  { name: "Rahul Kumar", rating: "4.7", price: "₹950", timeline: "21 days", image: people.jordan, blurb: "Affordable, fast design delivery with clean visuals." },
 ];
 
 export default function GigProposalsScreen() {

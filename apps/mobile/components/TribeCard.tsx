@@ -35,7 +35,7 @@ export default function TribeCard({
   variant = "default",
   onJoin,
 }: TribeCardProps) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
 
   return (
     <TouchableOpacity
@@ -51,13 +51,11 @@ export default function TribeCard({
         <View
           style={[
             styles.avatar,
-            { backgroundColor: theme.brand.primary + "15" },
+            { backgroundColor: "#EAEAEA" },
           ]}
         >
           <Image
-            source={{
-              uri: tribe.avatar_url || getDemoAvatarUri(tribe.id, tribe.name),
-            }}
+            source={{ uri: tribe.avatar_url || `https://picsum.photos/seed/${tribe.id}/200/200` }}
             style={styles.avatarImg}
           />
         </View>
@@ -70,57 +68,41 @@ export default function TribeCard({
           >
             {tribe.name}
           </Text>
-          {tribe.description ? (
-            <Text
-              style={[styles.desc, { color: theme.text.tertiary }]}
-              numberOfLines={1}
-            >
-              {tribe.description}
-            </Text>
-          ) : null}
-          <View style={styles.metaRow}>
-            <Ionicons
-              name="people-outline"
-              size={13}
-              color={theme.text.tertiary}
-            />
-            <Text style={[styles.metaText, { color: theme.text.tertiary }]}>
-              {tribe.member_count ?? 0} members
-            </Text>
-            {tribe.is_public === false && (
-              <>
-                <Ionicons
-                  name="lock-closed-outline"
-                  size={11}
-                  color={theme.text.muted}
-                  style={{ marginLeft: 6 }}
-                />
-                <Text style={[styles.metaText, { color: theme.text.muted }]}>
-                  Private
-                </Text>
-              </>
-            )}
-          </View>
+          <Text
+            style={[styles.desc, { color: theme.text.tertiary }]}
+            numberOfLines={1}
+          >
+            {tribe.description || `${tribe.member_count ?? 0} members`}
+          </Text>
         </View>
       </View>
 
-      {/* Action */}
-      {variant === "explore" && onJoin ? (
-        <TouchableOpacity
-          style={[styles.joinBtn, { backgroundColor: theme.brand.primary }]}
-          onPress={(e: any) => {
-            e.stopPropagation?.();
-            onJoin();
-          }}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.joinText, { color: theme.text.inverse }]}>
-            Join
-          </Text>
-        </TouchableOpacity>
-      ) : (
-        <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
-      )}
+      {/* Action / Meta */}
+      <View style={styles.actionContainer}>
+        {tribe.member_count !== undefined && tribe.member_count > 0 && (
+          <View style={[styles.badge, { backgroundColor: theme.brand.primary }]}>
+            <Text style={styles.badgeText}>{tribe.member_count}</Text>
+          </View>
+        )}
+
+        {/* Action */}
+        {variant === "explore" && onJoin ? (
+          <TouchableOpacity
+            style={[styles.joinBtn, { backgroundColor: theme.brand.primary }]}
+            onPress={(e: any) => {
+              e.stopPropagation?.();
+              onJoin();
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.joinText, { color: theme.text.inverse }]}>
+              Join
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
+        )}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -130,51 +112,63 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: Layout.radius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(150, 150, 150, 0.15)",
   },
   cardLeft: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
-    marginRight: Spacing.sm,
   },
   avatar: {
     width: 48,
     height: 48,
-    borderRadius: Layout.radius.md,
+    borderRadius: 24, // Perfect circle
     justifyContent: "center",
     alignItems: "center",
     marginRight: Spacing.sm,
     overflow: "hidden",
   },
   avatarImg: {
-    width: 48,
-    height: 48,
-    borderRadius: Layout.radius.md,
+    width: "100%",
+    height: "100%",
+    borderRadius: 24, // Perfect circle
   },
-  info: { flex: 1 },
+  info: {
+    flex: 1,
+    justifyContent: "center"
+  },
   name: {
-    ...Typography.presets.h3,
-    fontSize: Typography.sizes.md,
-    marginBottom: 2,
+    fontSize: 16,
+    fontFamily: "Poppins_600SemiBold",
+    marginBottom: 4,
   },
   desc: {
-    ...Typography.presets.bodySmall,
-    marginBottom: 2,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
   },
-  metaRow: {
-    flexDirection: "row",
+  actionContainer: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 8,
+  },
+  badge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
     alignItems: "center",
-    gap: 4,
   },
-  metaText: { ...Typography.presets.caption },
+  badgeText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
   joinBtn: {
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    borderRadius: Layout.radius.sm,
+    borderRadius: 16, // More roundy
   },
   joinText: {
     ...Typography.presets.bodySmall,

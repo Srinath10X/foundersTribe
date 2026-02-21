@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   segmentedControl: {
     flexDirection: "row",
-    borderRadius: Layout.radius.md,
+    borderRadius: 30, // Much more rounded pill shape
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
     padding: Spacing.xxs,
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Layout.radius.sm,
+    borderRadius: 26, // Rounded inner active button
   },
   tabText: { ...Typography.presets.body },
   listContent: {

@@ -36,7 +36,7 @@ export default function GigDetailsScreen() {
       <View style={[styles.rowStats, { borderColor: palette.border }]}> 
         <View style={[styles.statCol, { borderRightColor: palette.border }]}> 
           <T weight="semiBold" color={palette.subText} style={styles.label}>Budget Range</T>
-          <T weight="bold" color={palette.accent} style={styles.value}>$1,200 - $2,500</T>
+          <T weight="bold" color={palette.accent} style={styles.value}>₹1,200 - ₹2,500</T>
         </View>
         <View style={styles.statCol}> 
           <T weight="semiBold" color={palette.subText} style={styles.label}>Timeline</T>
@@ -70,7 +70,7 @@ export default function GigDetailsScreen() {
           <T weight="bold" color={palette.text} style={styles.head}>Top Applicants (12)</T>
           <T weight="bold" color={palette.accent} style={{ fontSize: 12 }}>BEST MATCH</T>
         </View>
-        {[{ n: "Alex Rivera", p: people.alex, v: "$1,200 • 14 days", r: "4.9" }, { n: "Sarah Chen", p: people.sarah, v: "$1,550 • 10 days", r: "5.0" }, { n: "Jordan Smith", p: people.jordan, v: "$950 • 21 days", r: "4.7" }].map((u) => (
+        {[{ n: "Arjun Patel", p: people.alex, v: "₹1,200 • 14 days", r: "4.9" }, { n: "Priya Sharma", p: people.sarah, v: "₹1,550 • 10 days", r: "5.0" }, { n: "Rahul Kumar", p: people.jordan, v: "₹950 • 21 days", r: "4.7" }].map((u) => (
           <View key={u.n} style={styles.appRow}>
             <Avatar source={u.p} size={50} />
             <View style={{ flex: 1, minWidth: 0 }}>

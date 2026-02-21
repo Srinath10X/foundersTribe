@@ -25,12 +25,12 @@ export default function TalentGigDetailsScreen() {
               <T weight="semiBold" color={palette.subText} style={styles.meta}>4.9 (12 reviews)</T>
             </View>
           </View>
-          <T weight="medium" color={palette.subText} style={styles.meta}>London, UK</T>
+          <T weight="medium" color={palette.subText} style={styles.meta}>Mumbai, MH</T>
         </SurfaceCard>
 
         <View style={styles.kpiRow}>
           {[
-            { l: "Budget", v: "$5,000", i: "wallet-outline" as const },
+            { l: "Budget", v: "₹5,000", i: "wallet-outline" as const },
             { l: "Timeline", v: "3 Mos", i: "time-outline" as const },
             { l: "Level", v: "Expert", i: "ribbon-outline" as const },
           ].map((x) => (

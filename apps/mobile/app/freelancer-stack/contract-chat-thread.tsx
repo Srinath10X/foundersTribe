@@ -24,14 +24,14 @@ export default function ContractChatThreadScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
       >
-        <FlowTopBar title="Sarah Chen • Contract Chat" onLeftPress={nav.back} right="ellipsis-horizontal" onRightPress={() => {}} />
+        <FlowTopBar title="Priya Sharma • Contract Chat" onLeftPress={nav.back} right="ellipsis-horizontal" onRightPress={() => {}} />
 
         <View style={[styles.body, { backgroundColor: palette.bg }]}> 
           <SurfaceCard style={styles.contractCard}>
             <View style={styles.kpiHead}>
               <View>
                 <T weight="semiBold" color={palette.subText} style={styles.mini}>AGREED PRICE</T>
-                <T weight="bold" color={palette.text} style={styles.price}>$2,500.00</T>
+                <T weight="bold" color={palette.text} style={styles.price}>₹2,500.00</T>
               </View>
               <View>
                 <T weight="semiBold" color={palette.subText} style={styles.mini}>DEADLINE</T>

@@ -15,9 +15,9 @@ export default function TalentProfileScreen() {
           <View style={styles.head}>
             <Avatar source={people.alex} size={84} />
             <View style={{ flex: 1 }}>
-              <T weight="bold" color={palette.text} style={styles.name}>Alex Rivera</T>
+              <T weight="bold" color={palette.text} style={styles.name}>Arjun Patel</T>
               <T weight="semiBold" color={palette.text} style={styles.role}>Senior UI Designer</T>
-              <View style={styles.row}><Ionicons name="location-outline" size={14} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.meta}>San Francisco, CA</T></View>
+              <View style={styles.row}><Ionicons name="location-outline" size={14} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.meta}>Bengaluru, KA</T></View>
             </View>
           </View>
         </SurfaceCard>

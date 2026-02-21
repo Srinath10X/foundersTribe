@@ -145,6 +145,7 @@ function RootLayoutNav() {
           segment === "room" ||
           segment === "tribe" ||
           segment === "article" ||
+          segment === "article_copy" ||
           segment === "edit-interests" ||
           segment === "edit-profile" ||
           pathname.includes("edit-interests") ||
@@ -216,6 +217,7 @@ function RootLayoutNav() {
 
         {/* Other screens */}
         <Stack.Screen name="article" />
+        <Stack.Screen name="article_copy" />
         <Stack.Screen name="room" />
         <Stack.Screen name="tribe" />
         <Stack.Screen name="edit-profile" />

@@ -23,7 +23,7 @@ export default function TalentContractDetails() {
         </SurfaceCard>
 
         <View style={styles.kpiRow}>
-          <SurfaceCard style={styles.kpi}><T weight="semiBold" color={palette.subText} style={styles.kLabel}>VALUE</T><T weight="bold" color={palette.text} style={styles.kValue}>$2,500</T></SurfaceCard>
+          <SurfaceCard style={styles.kpi}><T weight="semiBold" color={palette.subText} style={styles.kLabel}>VALUE</T><T weight="bold" color={palette.text} style={styles.kValue}>₹2,500</T></SurfaceCard>
           <SurfaceCard style={styles.kpi}><T weight="semiBold" color={palette.subText} style={styles.kLabel}>DEADLINE</T><T weight="bold" color={palette.text} style={styles.kValue}>Oct 30</T></SurfaceCard>
         </View>
 

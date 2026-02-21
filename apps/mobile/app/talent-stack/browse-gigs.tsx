@@ -5,9 +5,9 @@ import { StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 import { Badge, FlowScreen, FlowTopBar, SurfaceCard, T, useFlowNav, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 
 const gigs = [
-  { title: "Senior Mobile Developer", loc: "San Francisco / Remote", time: "2h ago", tags: ["Swift", "Firebase", "CI/CD"], budget: "$5,000 - $8,000", urgent: true },
-  { title: "Logo Design for Fintech", loc: "Worldwide", time: "5h ago", tags: ["Illustrator", "Branding"], budget: "$500", urgent: false },
-  { title: "React Frontend Architect", loc: "London / Remote", time: "12h ago", tags: ["Next.js", "Tailwind", "TypeScript"], budget: "$80 - $120/hr", urgent: true },
+  { title: "Senior Mobile Developer", loc: "Bengaluru / Remote", time: "2h ago", tags: ["Swift", "Firebase", "CI/CD"], budget: "₹5,000 - ₹8,000", urgent: true },
+  { title: "Logo Design for Fintech", loc: "Worldwide", time: "5h ago", tags: ["Illustrator", "Branding"], budget: "₹500", urgent: false },
+  { title: "React Frontend Architect", loc: "Mumbai / Remote", time: "12h ago", tags: ["Next.js", "Tailwind", "TypeScript"], budget: "₹80 - ₹120/hr", urgent: true },
 ];
 
 export default function BrowseGigsScreen() {

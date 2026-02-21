@@ -9,6 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -116,7 +117,7 @@ export default function VoiceChannelsTab({
   subTabVisible = true,
 }: VoiceChannelsTabProps) {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { session } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabMode>("public");
@@ -262,23 +263,16 @@ export default function VoiceChannelsTab({
           styles.card,
           {
             backgroundColor: theme.surface,
-            borderColor:
-              room.participant_count > 0 ? accentBorder : theme.border,
           },
         ]}
         onPress={() => handleJoinRoom(room.id)}
         activeOpacity={0.7}
       >
         <View style={styles.cardTopRow}>
-          <View style={[styles.roomIcon, { backgroundColor: accentGlow }]}>
-            <Ionicons
-              name={
-                room.type === "public"
-                  ? "radio-outline"
-                  : "lock-closed-outline"
-              }
-              size={20}
-              color={theme.brand.primary}
+          <View style={[styles.roomIcon, { backgroundColor: "#EAEAEA" }]}>
+            <Image
+              source={{ uri: `https://picsum.photos/seed/${room.id}/200/200` }}
+              style={styles.roomIconImg}
             />
           </View>
 
@@ -643,7 +637,7 @@ const styles = StyleSheet.create({
   /* Tabs */
   segmentedControl: {
     flexDirection: "row",
-    borderRadius: Layout.radius.md,
+    borderRadius: 30, // Much more rounded pill shape
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
     padding: Spacing.xxs,
@@ -654,7 +648,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Layout.radius.sm,
+    borderRadius: 26, // Rounded inner active button
   },
   tabBtnText: { ...Typography.presets.body },
   tabBadge: {
@@ -676,10 +670,10 @@ const styles = StyleSheet.create({
 
   /* Card */
   card: {
-    borderRadius: Layout.radius.lg,
-    padding: Spacing.md,
+    paddingVertical: Spacing.md,
     marginBottom: Spacing.sm,
-    borderWidth: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(150, 150, 150, 0.15)",
   },
   cardTopRow: {
     flexDirection: "row",
@@ -689,10 +683,16 @@ const styles = StyleSheet.create({
   roomIcon: {
     width: 44,
     height: 44,
-    borderRadius: Layout.radius.md,
+    borderRadius: 22, // Perfectly circular
     justifyContent: "center",
     alignItems: "center",
     marginRight: Spacing.sm,
+    overflow: "hidden",
+  },
+  roomIconImg: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 22,
   },
   cardTitleWrap: { flex: 1, marginRight: Spacing.xs },
   roomTitle: {
@@ -734,7 +734,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    borderRadius: Layout.radius.sm,
+    borderRadius: 16, // Smoother rounded shape
   },
   joinBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
 
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    borderRadius: Layout.radius.sm,
+    borderRadius: 24, // Highly rounded
   },
   ctaBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
 

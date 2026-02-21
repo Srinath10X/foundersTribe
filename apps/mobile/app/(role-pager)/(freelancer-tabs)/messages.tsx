@@ -5,8 +5,8 @@ import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Avatar, FlowScreen, FlowTopBar, SurfaceCard, T, people, useFlowNav, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 
 const threads = [
-  { name: "Alex Rivers", msg: "Please share updated prototypes today.", time: "10:42 AM", unread: 2, avatar: people.alex },
-  { name: "Sarah Chen", msg: "Looks good. Let us finalize tomorrow.", time: "Yesterday", unread: 0, avatar: people.sarah },
+  { name: "Arjun Patel", msg: "Please share updated prototypes today.", time: "10:42 AM", unread: 2, avatar: people.alex },
+  { name: "Priya Sharma", msg: "Looks good. Let us finalize tomorrow.", time: "Yesterday", unread: 0, avatar: people.sarah },
 ];
 
 export default function TalentMessagesScreen() {
@@ -15,7 +15,7 @@ export default function TalentMessagesScreen() {
 
   return (
     <FlowScreen>
-      <FlowTopBar title="Messages" showLeft={false} right="search" onRightPress={() => {}} />
+      <FlowTopBar title="Messages" showLeft={false} right="search" onRightPress={() => { }} />
       <View style={styles.content}>
         {threads.map((t) => (
           <TouchableOpacity key={t.name} onPress={() => nav.push("/talent-stack/chat-thread")} activeOpacity={0.9}>

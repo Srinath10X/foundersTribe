@@ -59,12 +59,14 @@ interface ArticleReelCardProps {
   article: Article;
   height?: number;
   bottomInset?: number;
+  isForYou?: boolean;
 }
 
 export function ArticleReelCard({
   article,
   height,
   bottomInset = 48,
+  isForYou = false,
 }: ArticleReelCardProps) {
   const router = useRouter();
   const { theme } = useTheme();
@@ -93,7 +95,7 @@ export function ArticleReelCard({
   const handleOpenArticle = () => {
     triggerHaptic();
     router.push({
-      pathname: "/article/[id]",
+      pathname: isForYou ? "/article_copy/[id]" : "/article/[id]",
       params: {
         id: article.id.toString(),
         title: article.Title,

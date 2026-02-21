@@ -26,7 +26,7 @@ export default function ContractDetailsScreen() {
         <View style={styles.freelancerRow}>
           <Avatar source={people.sarah} size={54} />
           <View style={{ flex: 1 }}>
-            <T weight="bold" color={palette.text} style={styles.name}>Sarah Chen</T>
+            <T weight="bold" color={palette.text} style={styles.name}>Priya Sharma</T>
             <T weight="medium" color={palette.subText} style={styles.role}>Senior React Developer</T>
             <View style={styles.stars}><Ionicons name="star" size={14} color="#F4C430" /><T weight="semiBold" color={palette.text} style={styles.rating}>5.0 • 84 reviews</T></View>
           </View>
@@ -37,7 +37,7 @@ export default function ContractDetailsScreen() {
       </SurfaceCard>
 
       <View style={styles.grid}>
-        <SurfaceCard style={styles.kpi}><T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>CONTRACT VALUE</T><T weight="bold" color={palette.text} style={styles.kpiValue}>$2,500</T></SurfaceCard>
+        <SurfaceCard style={styles.kpi}><T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>CONTRACT VALUE</T><T weight="bold" color={palette.text} style={styles.kpiValue}>₹2,500</T></SurfaceCard>
         <SurfaceCard style={styles.kpi}><T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>DEADLINE</T><T weight="bold" color={palette.text} style={styles.kpiValue}>Oct 30</T></SurfaceCard>
       </View>
 

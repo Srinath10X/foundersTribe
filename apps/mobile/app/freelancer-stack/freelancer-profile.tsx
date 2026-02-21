@@ -38,7 +38,7 @@ export default function FreelancerProfileScreen() {
             <View style={styles.headText}>
               <T weight="bold" color={palette.text} style={styles.name}>Alex Rivers</T>
               <T weight="semiBold" color={palette.accent} style={styles.role}>Senior Full Stack Developer</T>
-              <View style={styles.location}><Ionicons name="location" size={14} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.locationText}>San Francisco, CA</T></View>
+              <View style={styles.location}><Ionicons name="location" size={14} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.locationText}>Bengaluru, KA</T></View>
             </View>
           </View>
 
@@ -52,7 +52,7 @@ export default function FreelancerProfileScreen() {
           </SurfaceCard>
           <SurfaceCard style={styles.statCard}>
             <T weight="semiBold" color={palette.subText} style={styles.statLabel}>HOURLY RATE</T>
-            <T weight="bold" color={palette.text} style={styles.statValue}>$85/hr</T>
+            <T weight="bold" color={palette.text} style={styles.statValue}>₹85/hr</T>
             <T weight="medium" color={palette.subText} style={styles.statSub}>Available this week</T>
           </SurfaceCard>
         </View>

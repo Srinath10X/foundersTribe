@@ -45,25 +45,25 @@ const SUB_TABS: {
   icon: string;
   iconFocused?: string;
 }[] = [
-  {
-    key: "tribes",
-    label: "Tribes",
-    icon: "shield-outline",
-    iconFocused: "shield",
-  },
-  {
-    key: "find-cofounder",
-    label: "Co-Founder",
-    icon: "people-outline",
-    iconFocused: "people",
-  },
-  {
-    key: "find-freelancer",
-    label: "Freelancer",
-    icon: "briefcase-outline",
-    iconFocused: "briefcase",
-  },
-];
+    {
+      key: "tribes",
+      label: "Tribes",
+      icon: "shield-outline",
+      iconFocused: "shield",
+    },
+    {
+      key: "find-cofounder",
+      label: "Co-Founder",
+      icon: "people-outline",
+      iconFocused: "people",
+    },
+    {
+      key: "find-freelancer",
+      label: "Freelancer",
+      icon: "briefcase-outline",
+      iconFocused: "briefcase",
+    },
+  ];
 
 /* ================================================================ */
 /*  Community Screen                                                 */
@@ -170,15 +170,9 @@ export default function CommunityScreen() {
 
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Image
-          source={
-            isDark
-              ? require("@/assets/images/logo-dark.png")
-              : require("@/assets/images/logo-light.png")
-          }
-          style={styles.brandLogo}
-          contentFit="contain"
-        />
+        <Text style={[styles.brandLogoText, { color: theme.text.primary }]}>
+          Communities
+        </Text>
 
         {showTribeHeaderActions && (
           <ScrollView
@@ -192,10 +186,8 @@ export default function CommunityScreen() {
                 activeView === "tribes" && tribesMode === "explore"
                   ? { backgroundColor: theme.brand.primary }
                   : {
-                      backgroundColor: theme.surface,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                    },
+                    backgroundColor: theme.surface,
+                  },
               ]}
               onPress={() => {
                 setTribesMode("explore");
@@ -236,10 +228,8 @@ export default function CommunityScreen() {
                 activeView === "tribes" && tribesMode === "my"
                   ? { backgroundColor: theme.brand.primary }
                   : {
-                      backgroundColor: theme.surface,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                    },
+                    backgroundColor: theme.surface,
+                  },
               ]}
               onPress={() => {
                 setTribesMode("my");
@@ -280,10 +270,8 @@ export default function CommunityScreen() {
                 activeView === "voice-channels"
                   ? { backgroundColor: theme.brand.primary }
                   : {
-                      backgroundColor: theme.surface,
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                    },
+                    backgroundColor: theme.surface,
+                  },
               ]}
               onPress={() => setActiveView("voice-channels")}
               activeOpacity={0.8}
@@ -374,9 +362,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },
-  brandLogo: {
-    height: 24,
-    width: 140,
+  brandLogoText: {
+    fontSize: 26,
+    fontFamily: "Poppins_700Bold",
+    letterSpacing: -0.5,
     marginVertical: Spacing.xs,
     marginLeft: Spacing.xs,
   },
@@ -392,7 +381,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    borderRadius: Layout.radius.full,
+    borderRadius: 30, // Extremely round pill shape
   },
   headerBtnText: {
     ...Typography.presets.bodySmall,

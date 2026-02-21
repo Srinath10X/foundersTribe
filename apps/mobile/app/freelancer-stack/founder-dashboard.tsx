@@ -85,7 +85,7 @@ export default function FounderDashboardScreen() {
               <Ionicons name="wallet-outline" size={16} color={palette.accent} />
             </View>
             <T weight="bold" color={palette.text} style={styles.kpiValue}>
-              $12,450
+              ₹12,450
             </T>
             <View style={styles.chipPositive}>
               <Ionicons name="trending-up" size={12} color="#1D9A5B" />
@@ -183,7 +183,7 @@ export default function FounderDashboardScreen() {
         <SurfaceCard style={styles.activityCard}>
           {[
             {
-              title: "New proposal from Alex Rivera",
+              title: "New proposal from Arjun Patel",
               time: "2 minutes ago",
               icon: "document-text-outline" as const,
               danger: true,

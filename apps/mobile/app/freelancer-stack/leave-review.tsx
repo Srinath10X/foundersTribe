@@ -29,7 +29,7 @@ export default function LeaveReviewScreen() {
               <Ionicons name="checkmark" size={18} color="#fff" />
             </View>
           </View>
-          <T weight="bold" color={palette.text} style={styles.name}>Alex Rivera</T>
+          <T weight="bold" color={palette.text} style={styles.name}>Arjun Patel</T>
           <T weight="medium" color={palette.subText} style={styles.role}>Lead Product Designer • UI/UX App</T>
 
           <T weight="medium" color={palette.text} style={styles.q}>How was your experience?</T>

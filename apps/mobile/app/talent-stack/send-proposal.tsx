@@ -26,7 +26,7 @@ export default function SendProposalScreen() {
             onChangeText={setPrice}
             keyboardType="numeric"
             style={[styles.input, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
-            placeholder="$2500"
+            placeholder="₹2500"
             placeholderTextColor={palette.subText}
           />
 
