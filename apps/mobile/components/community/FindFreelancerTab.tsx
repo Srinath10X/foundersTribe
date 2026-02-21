@@ -1,13 +1,15 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 
 import { useTheme } from "../../context/ThemeContext";
 import { Typography, Spacing } from "../../constants/DesignSystem";
 
 export default function FindFreelancerTab() {
   const { theme } = useTheme();
+  const router = useRouter();
   const demoProfiles = [
     "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80",
     "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=200&q=80",
@@ -55,9 +57,16 @@ export default function FindFreelancerTab() {
         ]}
       >
         <Text style={[styles.badgeText, { color: theme.info }]}>
-          Coming Soon
+          Freelancer Workspace
         </Text>
       </View>
+      <TouchableOpacity
+        style={[styles.cta, { backgroundColor: theme.brand.primary }]}
+        activeOpacity={0.85}
+        onPress={() => router.push("/freelancer-stack" as never)}
+      >
+        <Text style={[styles.ctaText, { color: theme.text.inverse }]}>Open Founder Flow</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -108,6 +117,16 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     ...Typography.presets.bodySmall,
+    fontWeight: "700",
+  },
+  cta: {
+    marginTop: Spacing.md,
+    borderRadius: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+  },
+  ctaText: {
+    ...Typography.presets.body,
     fontWeight: "700",
   },
 });

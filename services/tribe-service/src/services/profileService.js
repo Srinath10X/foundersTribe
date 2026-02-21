@@ -40,8 +40,8 @@ function isProfileMinimumComplete(profileLike) {
 
   const socialLinks = Array.isArray(profileLike?.social_links)
     ? profileLike.social_links.filter(
-        (link) => link && typeof link.url === "string" && link.url.trim().length > 0,
-      )
+      (link) => link && typeof link.url === "string" && link.url.trim().length > 0,
+    )
     : [];
 
   const businessIdeas = parseBusinessIdeas(profileLike);
@@ -49,10 +49,46 @@ function isProfileMinimumComplete(profileLike) {
   return hasName && hasBio && socialLinks.length > 0 && businessIdeas.length > 0;
 }
 
+/**
+ * Normalizes a profile object to ensure consistent shapes for the mobile app.
+ * Resolves null/undefined arrays to empty arrays and enforces user_type constraints.
+ * @param {Record<string, any>} profile
+ * @returns {Record<string, any>}
+ */
+function normalizeProfile(profile) {
+  if (!profile) return profile;
+
+  // Enforce arrays are never null/undefined
+  const previous_works = Array.isArray(profile.previous_works) ? profile.previous_works : [];
+  const social_links = Array.isArray(profile.social_links) ? profile.social_links : [];
+  const completed_gigs = Array.isArray(profile.completed_gigs) ? profile.completed_gigs : [];
+  const business_ideas = parseBusinessIdeas(profile);
+
+  // Enforce user_type allowed values
+  let user_type = profile.user_type;
+  if (typeof user_type === "string") {
+    user_type = user_type.toLowerCase();
+  }
+  if (user_type !== "founder" && user_type !== "freelancer") {
+    user_type = null;
+  }
+
+  return {
+    ...profile,
+    user_type,
+    previous_works,
+    social_links,
+    completed_gigs,
+    business_ideas,
+    // Add backward-compact business_idea as string
+    business_idea: business_ideas[0] || null,
+  };
+}
+
 export async function getMyProfile(userId) {
   const profile = await profileRepository.getByUserId(userId);
   if (!profile) throw new AppError("Profile not found", 404);
-  return profile;
+  return normalizeProfile(profile);
 }
 
 export async function updateProfile(userId, data) {
@@ -105,11 +141,11 @@ export async function updateProfile(userId, data) {
     }
   }
   logger.info({ userId }, "Profile updated");
-  return updated;
+  return normalizeProfile(updated);
 }
 
 export async function getPublicProfile(userId) {
   const profile = await profileRepository.getByUserId(userId);
   if (!profile) throw new AppError("Profile not found", 404);
-  return profile;
+  return normalizeProfile(profile);
 }

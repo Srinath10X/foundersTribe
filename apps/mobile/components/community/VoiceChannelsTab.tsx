@@ -9,6 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -116,7 +117,7 @@ export default function VoiceChannelsTab({
   subTabVisible = true,
 }: VoiceChannelsTabProps) {
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const { session } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabMode>("public");
@@ -262,23 +263,16 @@ export default function VoiceChannelsTab({
           styles.card,
           {
             backgroundColor: theme.surface,
-            borderColor:
-              room.participant_count > 0 ? accentBorder : theme.border,
           },
         ]}
         onPress={() => handleJoinRoom(room.id)}
         activeOpacity={0.7}
       >
         <View style={styles.cardTopRow}>
-          <View style={[styles.roomIcon, { backgroundColor: accentGlow }]}>
-            <Ionicons
-              name={
-                room.type === "public"
-                  ? "radio-outline"
-                  : "lock-closed-outline"
-              }
-              size={20}
-              color={theme.brand.primary}
+          <View style={[styles.roomIcon, { backgroundColor: "#EAEAEA" }]}>
+            <Image
+              source={{ uri: `https://picsum.photos/seed/${room.id}/200/200` }}
+              style={styles.roomIconImg}
             />
           </View>
 
@@ -340,7 +334,7 @@ export default function VoiceChannelsTab({
                   backgroundColor:
                     room.type === "public"
                       ? theme.success + "15"
-                      : theme.info + "15",
+                      : theme.surfaceElevated,
                 },
               ]}
             >
@@ -349,18 +343,18 @@ export default function VoiceChannelsTab({
                   room.type === "public" ? "globe-outline" : "shield-outline"
                 }
                 size={10}
-                color={room.type === "public" ? theme.success : theme.info}
+                color={room.type === "public" ? theme.success : theme.text.primary}
               />
               <Text
                 style={[
                   styles.chipBadgeText,
                   {
                     color:
-                      room.type === "public" ? theme.success : theme.info,
+                      room.type === "public" ? theme.success : theme.text.primary,
                   },
                 ]}
               >
-                {room.type === "public" ? "Public" : "Private"}
+                {room.type === "public" ? "PUBLIC" : "PRIVATE"}
               </Text>
             </View>
           </View>
@@ -643,18 +637,18 @@ const styles = StyleSheet.create({
   /* Tabs */
   segmentedControl: {
     flexDirection: "row",
-    borderRadius: Layout.radius.md,
+    borderRadius: 30, // Much more rounded pill shape
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    padding: Spacing.xxs,
+    marginBottom: 20,
+    padding: 4,
   },
   tabBtn: {
     flex: 1,
     flexDirection: "row",
-    paddingVertical: Spacing.sm,
+    paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: Layout.radius.sm,
+    borderRadius: 26,
   },
   tabBtnText: { ...Typography.presets.body },
   tabBadge: {
@@ -676,29 +670,37 @@ const styles = StyleSheet.create({
 
   /* Card */
   card: {
-    borderRadius: Layout.radius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 16,
     borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
   },
   cardTopRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: Spacing.sm,
+    alignItems: "center",
+    marginBottom: 16,
   },
   roomIcon: {
     width: 44,
     height: 44,
-    borderRadius: Layout.radius.md,
+    borderRadius: 22, // Perfectly circular
     justifyContent: "center",
     alignItems: "center",
     marginRight: Spacing.sm,
+    overflow: "hidden",
+  },
+  roomIconImg: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 22,
   },
   cardTitleWrap: { flex: 1, marginRight: Spacing.xs },
   roomTitle: {
     ...Typography.presets.h3,
-    fontSize: Typography.sizes.md,
+    fontSize: 16,
     lineHeight: 22,
+    fontWeight: "600",
   },
   timeAgo: { ...Typography.presets.caption, marginTop: 2 },
   cardBottomRow: {
@@ -734,7 +736,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    borderRadius: Layout.radius.sm,
+    borderRadius: 16, // Smoother rounded shape
   },
   joinBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
 
@@ -770,7 +772,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    borderRadius: Layout.radius.sm,
+    borderRadius: 24, // Highly rounded
   },
   ctaBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
 

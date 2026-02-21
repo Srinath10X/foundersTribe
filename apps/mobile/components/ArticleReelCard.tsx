@@ -1,36 +1,56 @@
-import { Layout } from '@/constants/DesignSystem';
-import { useTheme } from '@/context/ThemeContext';
-import { useArticleInteractions } from '@/hooks/useArticleInteractions';
-import { MaterialIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, Platform, Share, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
+import { BAR_BOTTOM, BAR_HEIGHT } from "@/components/CustomTabBar";
+import { Layout } from "@/constants/DesignSystem";
+import { useTheme } from "@/context/ThemeContext";
+import { useArticleInteractions } from "@/hooks/useArticleInteractions";
+import { MaterialIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  UIManager,
+  View,
+} from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withSequence,
   withTiming,
-  withSpring
-} from 'react-native-reanimated';
+  withSpring,
+} from "react-native-reanimated";
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: windowWidth } = Dimensions.get('window');
-const REEL_WIDTH = Platform.OS === 'web' ? Math.min(windowWidth, Layout.webMaxWidth) : windowWidth;
+const { width: windowWidth } = Dimensions.get("window");
+const REEL_WIDTH =
+  Platform.OS === "web"
+    ? Math.min(windowWidth, Layout.webMaxWidth)
+    : windowWidth;
+
+/** Dynamic bottom spacing so the hero content clears the floating tab bar */
+const HERO_SECTION_MARGIN_BOTTOM = BAR_HEIGHT + BAR_BOTTOM;
 
 interface Article {
   id: number;
   Title: string;
   Content: string | null;
-  'Image URL': string | null;
-  'Company Name': string | null;
-  'Article Link': string | null;
+  "Image URL": string | null;
+  "Company Name": string | null;
+  "Article Link": string | null;
   Category: string | null;
   Summary: string | null;
 }
@@ -39,16 +59,19 @@ interface ArticleReelCardProps {
   article: Article;
   height?: number;
   bottomInset?: number;
+  isForYou?: boolean;
 }
 
 export function ArticleReelCard({
   article,
   height,
   bottomInset = 48,
+  isForYou = false,
 }: ArticleReelCardProps) {
   const router = useRouter();
   const { theme } = useTheme();
-  const { liked, bookmarked, toggleLike, toggleBookmark } = useArticleInteractions(article.id);
+  const { liked, bookmarked, toggleLike, toggleBookmark } =
+    useArticleInteractions(article.id);
   const [imageLoading, setImageLoading] = useState(true);
 
   const likeScale = useSharedValue(1);
@@ -64,7 +87,7 @@ export function ArticleReelCard({
   }, [bottomInset, contentBottom]);
 
   const triggerHaptic = () => {
-    if (Platform.OS !== 'web') {
+    if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
@@ -72,16 +95,16 @@ export function ArticleReelCard({
   const handleOpenArticle = () => {
     triggerHaptic();
     router.push({
-      pathname: '/article/[id]',
+      pathname: isForYou ? "/article_copy/[id]" : "/article/[id]",
       params: {
         id: article.id.toString(),
         title: article.Title,
-        summary: article.Summary || article.Content || '',
-        content: article.Content || article.Summary || '',
-        imageUrl: article['Image URL'] || '',
-        articleLink: article['Article Link'] || '',
-        category: article.Category || '',
-        companyName: article['Company Name'] || '',
+        summary: article.Summary || article.Content || "",
+        content: article.Content || article.Summary || "",
+        imageUrl: article["Image URL"] || "",
+        articleLink: article["Article Link"] || "",
+        category: article.Category || "",
+        companyName: article["Company Name"] || "",
       },
     });
   };
@@ -93,42 +116,63 @@ export function ArticleReelCard({
       withSpring(1, { damping: 8 })
     );
     try {
-      const shareUrl = article['Article Link'];
+      const shareUrl = article["Article Link"];
       await Share.share({
-        message: shareUrl ? `${article.Title}\n\n${shareUrl}` : `${article.Title}\n\nRead more on foundersTribe`,
+        message: shareUrl
+          ? `${article.Title}\n\n${shareUrl}`
+          : `${article.Title}\n\nRead more on foundersTribe`,
         url: shareUrl || undefined,
       });
     } catch (error) {
-      console.error('Error sharing:', error);
+      console.error("Error sharing:", error);
     }
   };
 
   const handleLike = () => {
     triggerHaptic();
     likeScale.value = withSequence(withSpring(1.4), withSpring(1));
-    try { toggleLike(); } catch (e) { console.error(e); }
+    try {
+      toggleLike();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleBookmark = () => {
     triggerHaptic();
     bookmarkScale.value = withSequence(withSpring(1.4), withSpring(1));
-    try { toggleBookmark(); } catch (e) { console.error(e); }
+    try {
+      toggleBookmark();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const likeAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: likeScale.value }] }));
-  const bookmarkAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: bookmarkScale.value }] }));
-  const shareAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: shareScale.value }] }));
+  const likeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: likeScale.value }],
+  }));
+  const bookmarkAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: bookmarkScale.value }],
+  }));
+  const shareAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: shareScale.value }],
+  }));
   const contentShiftStyle = useAnimatedStyle(() => ({
     bottom: contentBottom.value,
   }));
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background, height }]}>
-
+    <View
+      style={[styles.container, { backgroundColor: theme.background, height }]}
+    >
       {/* Full-bleed background image */}
       <View style={styles.cardVisual}>
         <Image
-          source={{ uri: article['Image URL'] || 'https://images.unsplash.com/photo-1541560052-5e137f229371' }}
+          source={{
+            uri:
+              article["Image URL"] ||
+              "https://images.unsplash.com/photo-1541560052-5e137f229371",
+          }}
           style={styles.visualImg}
           contentFit="cover"
           contentPosition="center"
@@ -137,7 +181,7 @@ export function ArticleReelCard({
         />
         {/* Dark scrim for text readability */}
         <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.70)', 'rgba(0,0,0,0.85)']}
+          colors={["transparent", "rgba(0,0,0,0.70)", "rgba(0,0,0,0.85)"]}
           style={styles.imageOverlay}
           start={{ x: 0, y: 0.25 }}
           end={{ x: 0, y: 1 }}
@@ -145,8 +189,8 @@ export function ArticleReelCard({
       </View>
 
       {imageLoading && (
-        <View style={[styles.loadingSkeleton, { backgroundColor: '#000' }]}>
-          <ActivityIndicator size="large" color="#FF0000" />
+        <View style={[styles.loadingSkeleton, { backgroundColor: "#000" }]}>
+          <ActivityIndicator size="large" color="#FF3B30" />
         </View>
       )}
 
@@ -158,7 +202,7 @@ export function ArticleReelCard({
             {/* Category */}
             <View style={styles.categoryPill}>
               <Text style={styles.categoryText}>
-                {article.Category || 'NEWS'}
+                {article.Category || "NEWS"}
               </Text>
             </View>
 
@@ -186,7 +230,7 @@ export function ArticleReelCard({
                   <MaterialIcons
                     name={liked ? "favorite" : "favorite-outline"}
                     size={30}
-                    color={liked ? "#FF0000" : "#FFFFFF"}
+                    color={liked ? "#FF3B30" : "#FFFFFF"}
                   />
                 </Animated.View>
               </TouchableOpacity>
@@ -199,7 +243,7 @@ export function ArticleReelCard({
                   <MaterialIcons
                     name={bookmarked ? "bookmark" : "bookmark-outline"}
                     size={30}
-                    color={bookmarked ? "#FF0000" : "#FFFFFF"}
+                    color={bookmarked ? "#FF3B30" : "#FFFFFF"}
                   />
                 </Animated.View>
               </TouchableOpacity>
@@ -224,9 +268,9 @@ export function ArticleReelCard({
 const styles = StyleSheet.create({
   container: {
     width: REEL_WIDTH,
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: '#000',
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#000",
   },
 
   cardVisual: {
@@ -234,8 +278,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   visualImg: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -243,24 +287,25 @@ const styles = StyleSheet.create({
   },
   loadingSkeleton: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 3,
   },
 
   contentWrapper: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 16,
     left: 0,
     right: 0,
     zIndex: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
   },
   columnContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
     gap: 12,
+    marginBottom: HERO_SECTION_MARGIN_BOTTOM,
   },
 
   leftColumn: {
@@ -268,66 +313,66 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   categoryPill: {
-    backgroundColor: '#FF0000',
+    backgroundColor: "#FF3B30",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     marginBottom: 12,
   },
   categoryText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 10,
-    fontWeight: '700',
-    fontFamily: 'Poppins_600SemiBold',
-    textTransform: 'uppercase',
+    fontWeight: "700",
+    fontFamily: "Poppins_600SemiBold",
+    textTransform: "uppercase",
     letterSpacing: 1,
   },
   cardTitle: {
     fontSize: 20,
     lineHeight: 26,
     marginBottom: 6,
-    fontFamily: 'Poppins_700Bold',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0,0,0,0.6)',
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   cardSummary: {
     fontSize: 13,
     lineHeight: 19,
-    color: 'rgba(255,255,255,0.85)',
-    fontFamily: 'Poppins_400Regular',
-    textShadowColor: 'rgba(0,0,0,0.5)',
+    color: "rgba(255,255,255,0.85)",
+    fontFamily: "Poppins_400Regular",
+    textShadowColor: "rgba(0,0,0,0.5)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
   moreText: {
-    color: '#FF0000',
-    fontWeight: 'bold',
+    color: "#FF3B30",
+    fontWeight: "bold",
   },
 
   rightColumn: {
     width: 56,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 20,
     paddingBottom: 8,
   },
   actionItem: {
-    alignItems: 'center',
+    alignItems: "center",
     gap: 2,
   },
   iconBtn: {
     width: 44,
     height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   actionLabel: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 10,
-    fontFamily: 'Poppins_500Medium',
-    textShadowColor: 'rgba(0,0,0,0.5)',
+    fontFamily: "Poppins_500Medium",
+    textShadowColor: "rgba(0,0,0,0.5)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },

@@ -1,5 +1,6 @@
 import { Typography } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
+import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
@@ -30,6 +31,7 @@ const STORAGE_BUCKET = "tribe-media";
 export default function EditProfileScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const { switchRole } = useRole();
   const { theme, isDark } = useTheme();
   const token = session?.access_token || "";
   const userId = session?.user?.id || "";
@@ -50,6 +52,13 @@ export default function EditProfileScreen() {
   const [ideaVideoUrl, setIdeaVideoUrl] = useState("");
   const [previousWorks, setPreviousWorks] = useState<PreviousWork[]>([]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  const [contact, setContact] = useState("");
+  const [location, setLocation] = useState("");
+  const [role, setRole] = useState("");
+  const [completedGigs, setCompletedGigs] = useState<any[]>([]);
+  const [userType, setUserType] = useState<"founder" | "freelancer" | null>(
+    null,
+  );
 
   useEffect(() => {
     loadProfile();
@@ -74,8 +83,7 @@ export default function EditProfileScreen() {
       .list(folder, { limit: 20 });
 
     if (error || !Array.isArray(files) || files.length === 0) return "";
-    const preferred =
-      files.find((f) => /^avatar\./i.test(f.name)) || files[0];
+    const preferred = files.find((f) => /^avatar\./i.test(f.name)) || files[0];
     if (!preferred?.name) return "";
 
     const fullPath = `${folder}/${preferred.name}`;
@@ -92,8 +100,11 @@ export default function EditProfileScreen() {
       const data = await tribeApi.getMyProfile(token);
       setDisplayName(data.display_name || "");
       setBio(data.bio || "");
-      const storedPhoto = typeof data.photo_url === "string" ? data.photo_url : "";
-      setPhotoPath(storedPhoto && !/^https?:\/\//i.test(storedPhoto) ? storedPhoto : "");
+      const storedPhoto =
+        typeof data.photo_url === "string" ? data.photo_url : "";
+      setPhotoPath(
+        storedPhoto && !/^https?:\/\//i.test(storedPhoto) ? storedPhoto : "",
+      );
       const resolvedFromProfile = await resolvePhotoUrl(storedPhoto);
       if (resolvedFromProfile) {
         setPhotoUrl(resolvedFromProfile);
@@ -105,8 +116,13 @@ export default function EditProfileScreen() {
         const sanitizedIdeas = data.business_ideas
           .filter((idea: unknown) => typeof idea === "string")
           .map((idea: string) => ({ idea }));
-        setBusinessIdeas(sanitizedIdeas.length ? sanitizedIdeas : [{ idea: "" }]);
-      } else if (typeof data.business_idea === "string" && data.business_idea.trim()) {
+        setBusinessIdeas(
+          sanitizedIdeas.length ? sanitizedIdeas : [{ idea: "" }],
+        );
+      } else if (
+        typeof data.business_idea === "string" &&
+        data.business_idea.trim()
+      ) {
         try {
           const parsed = JSON.parse(data.business_idea);
           if (Array.isArray(parsed)) {
@@ -124,8 +140,21 @@ export default function EditProfileScreen() {
         setBusinessIdeas([{ idea: "" }]);
       }
       setIdeaVideoUrl(data.idea_video_url || "");
-      setPreviousWorks(Array.isArray(data.previous_works) ? data.previous_works : []);
+      setPreviousWorks(
+        Array.isArray(data.previous_works) ? data.previous_works : [],
+      );
       setSocialLinks(Array.isArray(data.social_links) ? data.social_links : []);
+      setContact(data.contact || "");
+      setLocation(data.location || "");
+      setRole(data.role || "");
+      setCompletedGigs(
+        Array.isArray(data.completed_gigs) ? data.completed_gigs : [],
+      );
+      setUserType(
+        typeof data.user_type === "string"
+          ? (data.user_type.toLowerCase() as "founder" | "freelancer")
+          : (data.user_type || null)
+      );
     } catch (error) {
       console.error("Error loading profile:", error);
       // Fallback — load basic info from auth user
@@ -136,12 +165,12 @@ export default function EditProfileScreen() {
         if (user) {
           setDisplayName(
             user.user_metadata?.full_name ||
-              user.user_metadata?.name ||
-              user.email?.split("@")[0] ||
-              "",
+            user.user_metadata?.name ||
+            user.email?.split("@")[0] ||
+            "",
           );
         }
-      } catch (_) {}
+      } catch (_) { }
     } finally {
       setLoading(false);
     }
@@ -167,11 +196,15 @@ export default function EditProfileScreen() {
     if (source === "camera") {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Camera access is required to take a photo.");
+        Alert.alert(
+          "Permission needed",
+          "Camera access is required to take a photo.",
+        );
         return;
       }
     } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission needed", "Photo library access is required.");
         return;
@@ -264,13 +297,23 @@ export default function EditProfileScreen() {
         business_ideas: cleanedIdeas,
         business_idea: cleanedIdeas.length ? cleanedIdeas[0] : null,
         idea_video_url: normalizeUrl(ideaVideoUrl),
-        previous_works: (Array.isArray(previousWorks) ? previousWorks : []).filter(
-          (w) => w && (w.company || w.role),
-        ),
+        previous_works: (Array.isArray(previousWorks)
+          ? previousWorks
+          : []
+        ).filter((w) => w && (w.company || w.role)),
         social_links: (Array.isArray(socialLinks) ? socialLinks : []).filter(
           (l) => l && l.url,
         ),
+        user_type: userType,
+        contact: contact.trim() || null,
+        location: location.trim() || null,
+        role: role.trim() || null,
+        completed_gigs: completedGigs,
       });
+      // Sync the local role context with the saved user type
+      if (userType) {
+        switchRole(userType);
+      }
       Alert.alert("Success", "Profile updated!", [
         { text: "OK", onPress: () => router.back() },
       ]);
@@ -283,9 +326,16 @@ export default function EditProfileScreen() {
 
   // ── Dynamic list helpers ───────────────────────────────
   const addWork = () =>
-    setPreviousWorks([...previousWorks, { company: "", role: "", duration: "" }]);
+    setPreviousWorks([
+      ...previousWorks,
+      { company: "", role: "", duration: "" },
+    ]);
 
-  const updateWork = (index: number, field: keyof PreviousWork, value: string) => {
+  const updateWork = (
+    index: number,
+    field: keyof PreviousWork,
+    value: string,
+  ) => {
     const updated = [...previousWorks];
     updated[index] = { ...updated[index], [field]: value };
     setPreviousWorks(updated);
@@ -297,7 +347,11 @@ export default function EditProfileScreen() {
   const addLink = () =>
     setSocialLinks([...socialLinks, { platform: "", url: "", label: "" }]);
 
-  const updateLink = (index: number, field: keyof SocialLink, value: string) => {
+  const updateLink = (
+    index: number,
+    field: keyof SocialLink,
+    value: string,
+  ) => {
     const updated = [...socialLinks];
     updated[index] = { ...updated[index], [field]: value };
     setSocialLinks(updated);
@@ -339,7 +393,11 @@ export default function EditProfileScreen() {
       <View
         style={[
           styles.container,
-          { backgroundColor: theme.background, justifyContent: "center", alignItems: "center" },
+          {
+            backgroundColor: theme.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
         ]}
       >
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -394,7 +452,10 @@ export default function EditProfileScreen() {
             {photoUrl ? (
               <Image
                 source={{ uri: photoUrl }}
-                style={[styles.photoPreview, { borderColor: theme.brand.primary }]}
+                style={[
+                  styles.photoPreview,
+                  { borderColor: theme.brand.primary },
+                ]}
               />
             ) : (
               <View
@@ -412,7 +473,10 @@ export default function EditProfileScreen() {
               </View>
             )}
             <View
-              style={[styles.cameraIconBadge, { backgroundColor: theme.brand.primary }]}
+              style={[
+                styles.cameraIconBadge,
+                { backgroundColor: theme.brand.primary },
+              ]}
             >
               {uploading ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -430,6 +494,79 @@ export default function EditProfileScreen() {
             <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
               Basic Info
             </Text>
+
+            <Text style={labelStyle}>I am a...</Text>
+            <View style={styles.roleContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.roleOption,
+                  {
+                    backgroundColor:
+                      userType === "founder"
+                        ? theme.brand.primary
+                        : theme.surfaceElevated,
+                    borderColor:
+                      userType === "founder"
+                        ? theme.brand.primary
+                        : theme.border,
+                  },
+                ]}
+                onPress={() => setUserType("founder")}
+              >
+                <Ionicons
+                  name="rocket"
+                  size={20}
+                  color={userType === "founder" ? "#fff" : theme.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.roleText,
+                    {
+                      color:
+                        userType === "founder" ? "#fff" : theme.text.primary,
+                    },
+                  ]}
+                >
+                  Founder
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleOption,
+                  {
+                    backgroundColor:
+                      userType === "freelancer"
+                        ? theme.brand.primary
+                        : theme.surfaceElevated,
+                    borderColor:
+                      userType === "freelancer"
+                        ? theme.brand.primary
+                        : theme.border,
+                  },
+                ]}
+                onPress={() => setUserType("freelancer")}
+              >
+                <Ionicons
+                  name="code-working"
+                  size={20}
+                  color={
+                    userType === "freelancer" ? "#fff" : theme.text.secondary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.roleText,
+                    {
+                      color:
+                        userType === "freelancer" ? "#fff" : theme.text.primary,
+                    },
+                  ]}
+                >
+                  Freelancer
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={labelStyle}>Full Name</Text>
             <TextInput
@@ -463,56 +600,185 @@ export default function EditProfileScreen() {
               autoCapitalize="none"
               keyboardType="url"
             />
-          </View>
 
-          {/* Business Idea */}
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <View style={styles.cardHeader}>
-              <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-                Business Ideas
-              </Text>
-              <TouchableOpacity onPress={addBusinessIdea} style={styles.addBtn}>
-                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
-              </TouchableOpacity>
-            </View>
-
-            {businessIdeas.map((item, index) => (
-              <View
-                key={index}
-                style={[styles.dynamicItem, { borderColor: theme.border }]}
-              >
-                <View style={styles.dynamicItemHeader}>
-                  <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
-                    #{index + 1}
-                  </Text>
-                  <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
+            {userType === "freelancer" && (
+              <>
+                <Text style={labelStyle}>Contact Info</Text>
                 <TextInput
-                  style={[...inputStyle, styles.multiline]}
-                  value={item.idea}
-                  onChangeText={(v) => updateBusinessIdea(index, v)}
-                  placeholder="Tell us about the product/ idea/ problem statement you working on"
+                  style={inputStyle}
+                  value={contact}
+                  onChangeText={setContact}
+                  placeholder="Email or WhatsApp"
                   placeholderTextColor={theme.text.muted}
-                  multiline
-                  maxLength={2000}
-                  textAlignVertical="top"
                 />
-              </View>
-            ))}
 
-            <Text style={labelStyle}>Pitch Video URL (YouTube)</Text>
-            <TextInput
-              style={inputStyle}
-              value={ideaVideoUrl}
-              onChangeText={setIdeaVideoUrl}
-              placeholder="https://youtube.com/watch?v=..."
-              placeholderTextColor={theme.text.muted}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
+                <Text style={labelStyle}>Freelancer Role</Text>
+                <TextInput
+                  style={inputStyle}
+                  value={role}
+                  onChangeText={setRole}
+                  placeholder="e.g. Fullstack Developer, UI Designer"
+                  placeholderTextColor={theme.text.muted}
+                />
+
+                <Text style={labelStyle}>Location</Text>
+                <TextInput
+                  style={inputStyle}
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholder="City, Country"
+                  placeholderTextColor={theme.text.muted}
+                />
+              </>
+            )}
           </View>
+
+          {/* Business Idea (Founder Only) */}
+          {userType === "founder" && (
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
+                  Business Ideas
+                </Text>
+                <TouchableOpacity
+                  onPress={addBusinessIdea}
+                  style={styles.addBtn}
+                >
+                  <Ionicons
+                    name="add-circle"
+                    size={24}
+                    color={theme.brand.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {businessIdeas.map((item, index) => (
+                <View
+                  key={index}
+                  style={[styles.dynamicItem, { borderColor: theme.border }]}
+                >
+                  <View style={styles.dynamicItemHeader}>
+                    <Text
+                      style={[
+                        styles.dynamicItemIndex,
+                        { color: theme.text.muted },
+                      ]}
+                    >
+                      #{index + 1}
+                    </Text>
+                    <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#FF3B30"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <TextInput
+                    style={[...inputStyle, styles.multiline]}
+                    value={item.idea}
+                    onChangeText={(v) => updateBusinessIdea(index, v)}
+                    placeholder="Tell us about the product/ idea/ problem statement you working on"
+                    placeholderTextColor={theme.text.muted}
+                    multiline
+                    maxLength={2000}
+                    textAlignVertical="top"
+                  />
+                </View>
+              ))}
+
+              <Text style={labelStyle}>Pitch Video URL (YouTube)</Text>
+              <TextInput
+                style={inputStyle}
+                value={ideaVideoUrl}
+                onChangeText={setIdeaVideoUrl}
+                placeholder="https://youtube.com/watch?v=..."
+                placeholderTextColor={theme.text.muted}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            </View>
+          )}
+
+          {/* Completed Gigs (Freelancer Only) */}
+          {userType === "freelancer" && (
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <View style={styles.cardHeader}>
+                <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
+                  Completed Gigs
+                </Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    setCompletedGigs([
+                      ...completedGigs,
+                      { title: "", description: "" },
+                    ])
+                  }
+                  style={styles.addBtn}
+                >
+                  <Ionicons
+                    name="add-circle"
+                    size={24}
+                    color={theme.brand.primary}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {completedGigs.map((gig, index) => (
+                <View
+                  key={index}
+                  style={[styles.dynamicItem, { borderColor: theme.border }]}
+                >
+                  <View style={styles.dynamicItemHeader}>
+                    <Text
+                      style={[
+                        styles.dynamicItemIndex,
+                        { color: theme.text.muted },
+                      ]}
+                    >
+                      Gig #{index + 1}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        setCompletedGigs(
+                          completedGigs.filter((_, i) => i !== index),
+                        )
+                      }
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#FF3B30"
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <TextInput
+                    style={inputStyle}
+                    value={gig.title}
+                    onChangeText={(v) => {
+                      const updated = [...completedGigs];
+                      updated[index] = { ...updated[index], title: v };
+                      setCompletedGigs(updated);
+                    }}
+                    placeholder="Gig title"
+                    placeholderTextColor={theme.text.muted}
+                  />
+                  <TextInput
+                    style={[...inputStyle, styles.multiline]}
+                    value={gig.description}
+                    onChangeText={(v) => {
+                      const updated = [...completedGigs];
+                      updated[index] = { ...updated[index], description: v };
+                      setCompletedGigs(updated);
+                    }}
+                    placeholder="Project description or skills used"
+                    placeholderTextColor={theme.text.muted}
+                    multiline
+                  />
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Previous Works */}
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
@@ -521,7 +787,11 @@ export default function EditProfileScreen() {
                 Experience
               </Text>
               <TouchableOpacity onPress={addWork} style={styles.addBtn}>
-                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={theme.brand.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -537,11 +807,16 @@ export default function EditProfileScreen() {
                 style={[styles.dynamicItem, { borderColor: theme.border }]}
               >
                 <View style={styles.dynamicItemHeader}>
-                  <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                  <Text
+                    style={[
+                      styles.dynamicItemIndex,
+                      { color: theme.text.muted },
+                    ]}
+                  >
                     #{index + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeWork(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
                 <TextInput
@@ -576,7 +851,11 @@ export default function EditProfileScreen() {
                 Social Links
               </Text>
               <TouchableOpacity onPress={addLink} style={styles.addBtn}>
-                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
+                <Ionicons
+                  name="add-circle"
+                  size={24}
+                  color={theme.brand.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -592,11 +871,16 @@ export default function EditProfileScreen() {
                 style={[styles.dynamicItem, { borderColor: theme.border }]}
               >
                 <View style={styles.dynamicItemHeader}>
-                  <Text style={[styles.dynamicItemIndex, { color: theme.text.muted }]}>
+                  <Text
+                    style={[
+                      styles.dynamicItemIndex,
+                      { color: theme.text.muted },
+                    ]}
+                  >
                     #{index + 1}
                   </Text>
                   <TouchableOpacity onPress={() => removeLink(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <Ionicons name="trash-outline" size={18} color="#FF3B30" />
                   </TouchableOpacity>
                 </View>
                 <TextInput
@@ -754,5 +1038,25 @@ const styles = StyleSheet.create({
   dynamicItemIndex: {
     fontSize: 12,
     fontWeight: "700",
+  },
+  roleContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  roleOption: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  roleText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

@@ -6,7 +6,7 @@ import {
   DarkTheme,
   ThemeProvider as NavigationThemeProvider,
 } from "@react-navigation/native";
-import { Slot, usePathname, useRouter, useSegments } from "expo-router";
+import { Stack, usePathname, useRouter, useSegments } from "expo-router";
 import { LogBox, Platform } from "react-native";
 import "react-native-reanimated";
 import "react-native-get-random-values";
@@ -27,6 +27,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
+import { RoleProvider, useRole } from "@/context/RoleContext";
 
 import { BrandingView } from "@/components/BrandingView";
 import WebLandingPage from "@/components/WebLandingPage";
@@ -51,7 +52,7 @@ import {
   useFonts as usePoppinsFonts,
 } from "@expo-google-fonts/poppins";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -68,6 +69,7 @@ const BlackTheme = {
   },
 };
 
+
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { session, isLoading: authLoading, hasCompletedOnboarding } = useAuth();
@@ -75,6 +77,7 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { role, isRoleLoaded } = useRole();
 
   const [playfairLoaded] = usePlayfairFonts({
     PlayfairDisplay_400Regular,
@@ -110,16 +113,18 @@ function RootLayoutNav() {
   }, [fontsLoaded]);
 
   // Navigation protection and proactive redirection logic
-  // -- Navigation Protection & Proactive Redirection --
   useEffect(() => {
     // 0. Wait for initialization
-    if (!fontsLoaded || authLoading) return;
+    if (!fontsLoaded || authLoading || !isRoleLoaded) return;
 
     // 1. Analyze current state
-    const inTabs = segments[0] === "(tabs)";
+    // Tab groups are now nested under (role-pager), so check both segment[0] patterns
+    const inRolePager = segments[0] === "(role-pager)";
+    const inFounderTabs =
+      inRolePager && segments[1] === "(founder-tabs)";
+    const inFreelancerTabs =
+      inRolePager && segments[1] === "(freelancer-tabs)";
     const inOnboarding = segments[0] === "onboarding";
-    const isIndex = pathname === "/";
-    const isLogin = pathname === "/login";
 
     if (session) {
       // 2. Handling Logged In Users
@@ -130,34 +135,39 @@ function RootLayoutNav() {
         }
       } else {
         // B. Onboarding Complete -> Protect from Public Routes
-        const currentPath = pathname;
         const segment = segments[0] || "";
 
         // whitelist allowed paths
         const isAllowedPath =
-          segment === "(tabs)" ||
+          segment === "(role-pager)" ||
+          segment === "freelancer-stack" ||
+          segment === "talent-stack" ||
           segment === "room" ||
           segment === "tribe" ||
           segment === "article" ||
+          segment === "article_copy" ||
           segment === "edit-interests" ||
           segment === "edit-profile" ||
-          currentPath.includes("edit-interests") ||
-          currentPath.includes("edit-profile");
+          pathname.includes("edit-interests") ||
+          pathname.includes("edit-profile");
 
-        // Redirect to Home if on unauthorized public page (like /login or /)
+        // Redirect to the correct tab tree based on role if on unauthorized page
         if (!isAllowedPath) {
-          console.log("DEBUG: Redirecting to home from:", currentPath);
-          setTimeout(() => router.replace("/home"), 0);
+          console.log("DEBUG: Redirecting to role tabs from:", pathname);
+          const target =
+            role === "freelancer"
+              ? "/(role-pager)/(freelancer-tabs)/dashboard"
+              : "/(role-pager)/(founder-tabs)/home";
+          setTimeout(() => router.replace(target), 0);
         }
       }
     } else {
       // 3. Handling Logged Out Users
-      // Restore protection for private routes (tabs, onboarding)
-      if (segments[0] === "(tabs)" || segments[0] === "onboarding") {
+      if (inRolePager || inOnboarding) {
         setTimeout(() => router.replace("/"), 0);
       }
     }
-  }, [session, segments, authLoading, fontsLoaded, hasCompletedOnboarding]);
+  }, [session, segments, authLoading, fontsLoaded, hasCompletedOnboarding, isRoleLoaded, role]);
 
   // Create dynamic Navigation Theme
   const navTheme = {
@@ -184,7 +194,39 @@ function RootLayoutNav() {
 
   return (
     <NavigationThemeProvider value={navTheme}>
-      <Slot />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "fade",
+          animationDuration: 200,
+        }}
+      >
+        {/* Auth / public screens */}
+        <Stack.Screen name="index" />
+        <Stack.Screen name="branding" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="login-callback" />
+        <Stack.Screen name="onboarding" />
+
+        {/* Role pager: wraps both tab navigators in a horizontal PagerView */}
+        <Stack.Screen name="(role-pager)" />
+
+        {/* Detail stacks (pushed on top of tabs) */}
+        <Stack.Screen name="freelancer-stack" />
+        <Stack.Screen name="talent-stack" />
+
+        {/* Other screens */}
+        <Stack.Screen name="article" />
+        <Stack.Screen name="article_copy" />
+        <Stack.Screen name="room" />
+        <Stack.Screen name="tribe" />
+        <Stack.Screen name="edit-profile" />
+        <Stack.Screen name="edit-interests" />
+        <Stack.Screen
+          name="modal"
+          options={{ presentation: "modal" }}
+        />
+      </Stack>
       {authLoading && <BrandingView />}
     </NavigationThemeProvider>
   );
@@ -194,7 +236,9 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <RootLayoutNav />
+        <RoleProvider>
+          <RootLayoutNav />
+        </RoleProvider>
       </ThemeProvider>
     </AuthProvider>
   );

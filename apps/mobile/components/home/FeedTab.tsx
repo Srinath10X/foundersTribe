@@ -32,7 +32,7 @@ const REEL_WIDTH =
 const REEL_HEIGHT =
   Platform.OS === "web"
     ? Math.min(windowHeight, Layout.webMaxHeight)
-    : windowHeight - TAB_BAR_HEIGHT - SUB_TAB_BAR_HEIGHT;
+    : windowHeight;
 
 interface Article {
   id: number;
@@ -176,7 +176,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
     if (loadingMore) {
       return (
         <View style={[styles.footerContainer, { backgroundColor: "#000" }]}>
-          <ActivityIndicator color="#FF0000" size="large" />
+          <ActivityIndicator color="#FF3B30" size="large" />
         </View>
       );
     }
@@ -192,14 +192,15 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
           />
           <View style={styles.footerContent}>
             <View style={styles.footerIconCircle}>
-              <Ionicons name="checkmark-done" size={44} color="#FF0000" />
+              <Ionicons name="checkmark-done" size={44} color="#FF3B30" />
             </View>
             <View style={styles.footerCategoryPill}>
               <Text style={styles.footerCategoryText}>ALL CAUGHT UP</Text>
             </View>
             <Text style={styles.footerTitle}>All Articles Complete</Text>
             <Text style={styles.footerSubtitle}>
-              You've seen every story in your feed.{"\n"}Pull down to refresh for new articles.
+              You&apos;ve seen every story in your feed.{"\n"}Pull down to
+              refresh for new articles.
             </Text>
             <TouchableOpacity
               style={styles.footerButton}
@@ -231,8 +232,21 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }]}>
-            <Ionicons name="newspaper-outline" size={48} color={theme.text.muted} />
+          <View
+            style={[
+              styles.emptyIconCircle,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,255,255,0.06)"
+                  : "rgba(0,0,0,0.04)",
+              },
+            ]}
+          >
+            <Ionicons
+              name="newspaper-outline"
+              size={48}
+              color={theme.text.muted}
+            />
           </View>
           <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
             No articles yet
@@ -262,8 +276,8 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#FF0000"
-            colors={["#FF0000"]}
+            tintColor="#FF3B30"
+            colors={["#FF3B30"]}
           />
         }
         getItemLayout={(_, index) => ({
@@ -333,15 +347,15 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: "rgba(255,0,0,0.1)",
+    backgroundColor: "rgba(255,59,48,0.1)",
     borderWidth: 1.5,
-    borderColor: "rgba(255,0,0,0.25)",
+    borderColor: "rgba(255,59,48,0.25)",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
   },
   footerCategoryPill: {
-    backgroundColor: "#FF0000",
+    backgroundColor: "#FF3B30",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
@@ -378,7 +392,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#FF0000",
+    backgroundColor: "#FF3B30",
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 28,

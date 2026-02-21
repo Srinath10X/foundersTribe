@@ -87,7 +87,7 @@ export default function Login() {
                 if (error) throw error;
                 // Give AuthContext time to update, then navigate
                 setTimeout(() => {
-                  router.replace("/home");
+                  router.replace("/(role-pager)/(founder-tabs)/home");
                 }, 100);
                 console.log("Session set via implicit flow");
                 return; // Success
@@ -129,7 +129,7 @@ export default function Login() {
         // Navigation handled by onAuthStateChange in _layout,
         // but explicit redirect is faster for UX
         
-        router.replace("/home");
+        router.replace("/(role-pager)/(founder-tabs)/home");
       } else {
         const { error } = await supabase.auth.signUp({
           email,

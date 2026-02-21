@@ -143,7 +143,7 @@ export default function RoomScreen() {
     activeRoomIdRef.current = null;
     const socket = socketRef.current;
     if (socket?.connected && roomId) {
-      socket.emit("leave_room", { roomId }, () => {});
+      socket.emit("leave_room", { roomId }, () => { });
     }
     socket?.removeAllListeners();
     socket?.disconnect();
@@ -151,8 +151,8 @@ export default function RoomScreen() {
     isReconnectingLiveKitRef.current = true; // prevent ConnectionStateChanged from double-navigating
     roomRef.current?.disconnect();
     roomRef.current = null;
-    routerRef.current.replace("/(tabs)/community");
-  // roomId is the only real dep — routerRef is stable
+    routerRef.current.replace("/(role-pager)/(founder-tabs)/community");
+    // roomId is the only real dep — routerRef is stable
   }, [roomId]);
 
   // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
@@ -230,7 +230,7 @@ export default function RoomScreen() {
         socketRef.current?.disconnect();
         socketRef.current = null;
         roomRef.current = null;
-        routerRef.current.replace("/(tabs)/community");
+        routerRef.current.replace("/(role-pager)/(founder-tabs)/community");
       }
     };
 
@@ -245,7 +245,7 @@ export default function RoomScreen() {
       .on(RoomEvent.ConnectionStateChanged, handleConnectionStateChanged);
 
     updateLKParticipants();
-  // No external deps — uses only refs (stable) and setters (stable)
+    // No external deps — uses only refs (stable) and setters (stable)
   }, []);
 
   // Setup socket and LiveKit
@@ -487,7 +487,7 @@ export default function RoomScreen() {
           socketRef.current?.removeAllListeners();
           socketRef.current?.disconnect();
           socketRef.current = null;
-          router.replace("/(tabs)/community");
+          router.replace("/(role-pager)/(founder-tabs)/community");
         });
 
         socket!.on("room_ended", () => {
@@ -499,7 +499,7 @@ export default function RoomScreen() {
           socketRef.current?.removeAllListeners();
           socketRef.current?.disconnect();
           socketRef.current = null;
-          router.replace("/(tabs)/community");
+          router.replace("/(role-pager)/(founder-tabs)/community");
         });
 
         // FIX #5: Socket.IO reconnection — refresh auth token and restore room state
@@ -575,7 +575,7 @@ export default function RoomScreen() {
                   Alert.alert("Error", "Failed to restore room. Returning to community.");
                   activeRoomIdRef.current = null;
                   socketRef.current?.disconnect();
-                  router.replace("/(tabs)/community");
+                  router.replace("/(role-pager)/(founder-tabs)/community");
                 }
               },
             );
@@ -595,7 +595,7 @@ export default function RoomScreen() {
           roomRef.current?.disconnect();
           roomRef.current = null;
           socketRef.current = null;
-          router.replace("/(tabs)/community");
+          router.replace("/(role-pager)/(founder-tabs)/community");
         });
       } catch (error: any) {
         if (cancelled) return;
@@ -924,13 +924,13 @@ export default function RoomScreen() {
             styles.messageBubble,
             isMe
               ? [
-                  styles.messageBubbleMe,
-                  { backgroundColor: theme.brand.primary },
-                ]
+                styles.messageBubbleMe,
+                { backgroundColor: theme.brand.primary },
+              ]
               : [
-                  styles.messageBubbleOther,
-                  { backgroundColor: theme.surfaceElevated },
-                ],
+                styles.messageBubbleOther,
+                { backgroundColor: theme.surfaceElevated },
+              ],
           ]}
         >
           <Text
@@ -945,9 +945,9 @@ export default function RoomScreen() {
         <Text style={[styles.messageTime, { color: theme.text.muted }]}>
           {item.created_at
             ? new Date(item.created_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
+              hour: "2-digit",
+              minute: "2-digit",
+            })
             : ""}
         </Text>
       </View>
@@ -1559,7 +1559,7 @@ const styles = StyleSheet.create({
   // Main content
   mainContent: {
     flex: 1,
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
     gap: Spacing.md,
   },
   // Connection status
@@ -1607,7 +1607,9 @@ const styles = StyleSheet.create({
   // Participants Grid
   participantsSection: {
     borderRadius: Layout.radius.lg,
-    padding: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingBottom: Spacing.sm,
+    paddingTop: 8,
     borderWidth: 1,
     maxHeight: 280,
   },
