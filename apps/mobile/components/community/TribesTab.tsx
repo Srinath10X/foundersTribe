@@ -22,7 +22,6 @@ import * as tribeApi from "../../lib/tribeApi";
 
 type TabMode = "my" | "explore";
 
-<<<<<<< frontend-new-p
 type TribesTabProps = {
   mode?: TabMode;
   showSegmentedControl?: boolean;
@@ -32,27 +31,13 @@ export default function TribesTab({
   mode,
   showSegmentedControl = true,
 }: TribesTabProps) {
-=======
-interface TribesTabProps {
-  mode?: TabMode;
-  showToggle?: boolean;
-}
-
-export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
->>>>>>> main
   const router = useRouter();
   const { theme } = useTheme();
   const { session } = useAuth();
   const token = session?.access_token || "";
 
-<<<<<<< frontend-new-p
-  const [internalActiveTab, setInternalActiveTab] = useState<TabMode>("explore");
-=======
-  // If mode prop is provided, use it; otherwise use internal state
-  const [internalActiveTab, setInternalActiveTab] = useState<TabMode>("explore");
-  const activeTab = mode || internalActiveTab;
-
->>>>>>> main
+  const [internalActiveTab, setInternalActiveTab] =
+    useState<TabMode>("explore");
   const [myTribes, setMyTribes] = useState<any[]>([]);
   const [publicTribes, setPublicTribes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,7 +140,7 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
         }
       }, 400);
     },
-    [activeTab, myTribes, token],
+    [activeTab, myTribes, token]
   );
 
   /* ── Handlers ──────────────────────────────────────────────── */
@@ -186,10 +171,10 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
   const hasSearch = searchQuery.trim().length > 0;
   const displayed =
     activeTab === "my"
-      ? (searchResults ?? myTribes)
+      ? searchResults ?? myTribes
       : searchResults !== null
-        ? searchResults
-        : exploreTribes;
+      ? searchResults
+      : exploreTribes;
 
   /* ── Empty state ───────────────────────────────────────────── */
 
@@ -200,8 +185,8 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
           hasSearch
             ? "search-outline"
             : activeTab === "my"
-              ? "shield-outline"
-              : "compass-outline"
+            ? "shield-outline"
+            : "compass-outline"
         }
         size={52}
         color={theme.text.muted}
@@ -210,15 +195,15 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
         {hasSearch
           ? "No matches found"
           : activeTab === "my"
-            ? "No tribes yet"
-            : "Nothing to explore"}
+          ? "No tribes yet"
+          : "Nothing to explore"}
       </Text>
       <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
         {hasSearch
           ? "Try a different keyword."
           : activeTab === "my"
-            ? "Join a tribe from Explore or create your own."
-            : "All public tribes have been joined."}
+          ? "Join a tribe from Explore or create your own."
+          : "All public tribes have been joined."}
       </Text>
     </View>
   );
@@ -227,13 +212,8 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
 
   return (
     <View style={styles.container}>
-<<<<<<< frontend-new-p
       {/* Segmented Control */}
       {showSegmentedControl && (
-=======
-      {/* Segmented Control - Only show if toggle is enabled and no fixed mode is set */}
-      {showToggle && !mode && (
->>>>>>> main
         <View
           style={[styles.segmentedControl, { backgroundColor: theme.surface }]}
         >
@@ -242,30 +222,16 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
               key={tab}
               style={[
                 styles.tabButton,
-<<<<<<< frontend-new-p
                 activeTab === tab && { backgroundColor: theme.brand.primary },
               ]}
               onPress={() => setActiveTab(tab)}
-=======
-                internalActiveTab === tab && { backgroundColor: theme.brand.primary },
-              ]}
-              onPress={() => {
-                setInternalActiveTab(tab);
-                setSearchQuery("");
-                setSearchResults(null);
-              }}
->>>>>>> main
               activeOpacity={0.8}
             >
               <Text
                 style={[
                   styles.tabText,
                   { color: theme.text.secondary },
-<<<<<<< frontend-new-p
                   activeTab === tab && {
-=======
-                  internalActiveTab === tab && {
->>>>>>> main
                     color: theme.text.inverse,
                     fontWeight: "600",
                   },
@@ -277,7 +243,6 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
           ))}
         </View>
       )}
-<<<<<<< frontend-new-p
 
       {/* Search Bar */}
       <View
@@ -286,15 +251,13 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
           { backgroundColor: theme.surface, borderColor: theme.border },
         ]}
       >
-        <Ionicons
-          name="search-outline"
-          size={18}
-          color={theme.text.muted}
-        />
+        <Ionicons name="search-outline" size={18} color={theme.text.muted} />
         <TextInput
           style={[styles.searchInput, { color: theme.text.primary }]}
           placeholder={
-            activeTab === "my" ? "Search in my tribes..." : "Search tribes to join..."
+            activeTab === "my"
+              ? "Search in my tribes..."
+              : "Search tribes to join..."
           }
           placeholderTextColor={theme.text.muted}
           value={searchQuery}
@@ -313,16 +276,10 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
               setSearchResults(null);
             }}
           >
-            <Ionicons
-              name="close-circle"
-              size={18}
-              color={theme.text.muted}
-            />
+            <Ionicons name="close-circle" size={18} color={theme.text.muted} />
           </TouchableOpacity>
         )}
       </View>
-=======
->>>>>>> main
 
       {/* List */}
       {loading ? (
@@ -338,9 +295,7 @@ export default function TribesTab({ mode, showToggle = true }: TribesTabProps) {
               onPress={() => router.push(`/tribe/${item.id}` as any)}
               variant={activeTab === "explore" ? "explore" : "default"}
               onJoin={
-                activeTab === "explore"
-                  ? () => handleJoin(item.id)
-                  : undefined
+                activeTab === "explore" ? () => handleJoin(item.id) : undefined
               }
             />
           )}
@@ -422,4 +377,3 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xxs,
   },
 });
-
