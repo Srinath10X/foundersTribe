@@ -36,22 +36,18 @@ export default function SubTabBar<T extends string>({
 
   const glassBackground = isDark
     ? "rgba(18, 18, 22, 0.65)"
-    : "rgba(255, 255, 255, 0.55)";
-
-  const borderColor = isDark
-    ? "rgba(255,255,255,0.10)"
-    : "rgba(0,0,0,0.08)";
+    : "rgba(255, 255, 255, 0.62)";
 
   return (
     <View
       style={[
         styles.glass,
         {
-          borderColor,
-          shadowColor: isDark ? "#000" : "#8E8E93",
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: isDark ? 0.40 : 0.15,
-          shadowRadius: 24,
+          borderColor: isDark ? "rgba(255,255,255,0.10)" : "transparent",
+          shadowColor: isDark ? "#000" : "rgba(0,0,0,0.35)",
+          shadowOffset: { width: 0, height: isDark ? 8 : 12 },
+          shadowOpacity: isDark ? 0.40 : 1,
+          shadowRadius: isDark ? 24 : 32,
           elevation: 12,
         },
       ]}
@@ -77,18 +73,29 @@ export default function SubTabBar<T extends string>({
                 "rgba(0,0,0,0.06)",
               ]
             : [
-                "rgba(255,255,255,0.28)",
-                "rgba(255,255,255,0.06)",
+                "rgba(255,255,255,0.45)",
+                "rgba(255,255,255,0.10)",
                 "rgba(0,0,0,0.0)",
-                "rgba(0,0,0,0.025)",
+                "rgba(0,0,0,0.05)",
               ]
         }
-        locations={[0, 0.3, 0.6, 1]}
+        locations={[0, 0.25, 0.55, 1]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
         style={StyleSheet.absoluteFillObject}
         pointerEvents="none"
       />
+
+      {/* Light mode: neutral tint for tonal separation */}
+      {!isDark && (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: "rgba(0,0,0,0.025)" },
+          ]}
+        />
+      )}
 
       {/* Tabs */}
       <View style={styles.container}>

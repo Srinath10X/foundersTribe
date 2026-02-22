@@ -45,28 +45,41 @@ const GlassSurface = memo(function GlassSurface({
   isDark: boolean;
 }) {
   return (
-    <LinearGradient
-      colors={
-        isDark
-          ? [
-              "rgba(255,255,255,0.06)",
-              "rgba(255,255,255,0.01)",
-              "rgba(0,0,0,0.0)",
-              "rgba(0,0,0,0.06)",
-            ]
-          : [
-              "rgba(255,255,255,0.28)",
-              "rgba(255,255,255,0.06)",
-              "rgba(0,0,0,0.0)",
-              "rgba(0,0,0,0.025)",
-            ]
-      }
-      locations={[0, 0.3, 0.6, 1]}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-      style={StyleSheet.absoluteFillObject}
-      pointerEvents="none"
-    />
+    <>
+      {/* Vertical luminance — top bright, bottom darkened */}
+      <LinearGradient
+        colors={
+          isDark
+            ? [
+                "rgba(255,255,255,0.06)",
+                "rgba(255,255,255,0.01)",
+                "rgba(0,0,0,0.0)",
+                "rgba(0,0,0,0.06)",
+              ]
+            : [
+                "rgba(255,255,255,0.45)",
+                "rgba(255,255,255,0.10)",
+                "rgba(0,0,0,0.0)",
+                "rgba(0,0,0,0.05)",
+              ]
+        }
+        locations={[0, 0.25, 0.55, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
+      {/* Light mode only: neutral tint for tonal separation from page bg */}
+      {!isDark && (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: "rgba(0,0,0,0.025)" },
+          ]}
+        />
+      )}
+    </>
   );
 });
 
@@ -115,11 +128,7 @@ const ModeSwitchPill = memo(function ModeSwitchPill({
 
   const glassBackground = isDark
     ? "rgba(18, 18, 22, 0.65)"
-    : "rgba(255, 255, 255, 0.55)";
-
-  const borderColor = isDark
-    ? "rgba(255,255,255,0.10)"
-    : "rgba(0,0,0,0.08)";
+    : "rgba(255, 255, 255, 0.62)";
 
   return (
     <Animated.View
@@ -128,13 +137,14 @@ const ModeSwitchPill = memo(function ModeSwitchPill({
         switchStyles.container,
         radiusStyle,
         {
-          borderColor,
+          // Dark: subtle white edge. Light: no border — shadow does the work.
+          borderColor: isDark ? "rgba(255,255,255,0.10)" : "transparent",
           borderWidth: StyleSheet.hairlineWidth,
           ...(isLeft ? { borderLeftWidth: 0 } : { borderRightWidth: 0 }),
-          shadowColor: isDark ? "#000" : "#8E8E93",
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: isDark ? 0.35 : 0.12,
-          shadowRadius: 20,
+          shadowColor: isDark ? "#000" : "rgba(0,0,0,0.35)",
+          shadowOffset: { width: 0, height: isDark ? 6 : 10 },
+          shadowOpacity: isDark ? 0.35 : 1,
+          shadowRadius: isDark ? 20 : 28,
           elevation: 10,
         },
       ]}
@@ -388,9 +398,9 @@ const SlidingBubble = memo(function SlidingBubble({
     ? "rgba(255, 255, 255, 0.07)"
     : "rgba(0, 0, 0, 0.04)";
 
-  const borderColor = isDark
+  const bubbleBorder = isDark
     ? "rgba(255,255,255,0.10)"
-    : "rgba(0,0,0,0.05)";
+    : "rgba(0,0,0,0.03)";
 
   const glowColor = isDark
     ? `${accentColor}15`
@@ -417,7 +427,7 @@ const SlidingBubble = memo(function SlidingBubble({
           bubbleStyles.bubble,
           {
             backgroundColor: bubbleBg,
-            borderColor,
+            borderColor: bubbleBorder,
           },
         ]}
       >
@@ -482,11 +492,7 @@ export default function LiquidTabBar({
 
   const glassBackground = isDark
     ? "rgba(18, 18, 22, 0.65)"
-    : "rgba(255, 255, 255, 0.55)";
-
-  const borderColor = isDark
-    ? "rgba(255,255,255,0.10)"
-    : "rgba(0,0,0,0.08)";
+    : "rgba(255, 255, 255, 0.62)";
 
   const tabItems = visibleRoutes.map((route, index) => {
     const { options } = descriptors[route.key];
@@ -534,11 +540,12 @@ export default function LiquidTabBar({
           style={[
             barStyles.glass,
             {
-              borderColor,
-              shadowColor: isDark ? "#000" : "#8E8E93",
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: isDark ? 0.40 : 0.15,
-              shadowRadius: 24,
+              // Dark: subtle white edge. Light: no border — shadow separates.
+              borderColor: isDark ? "rgba(255,255,255,0.10)" : "transparent",
+              shadowColor: isDark ? "#000" : "rgba(0,0,0,0.35)",
+              shadowOffset: { width: 0, height: isDark ? 8 : 12 },
+              shadowOpacity: isDark ? 0.40 : 1,
+              shadowRadius: isDark ? 24 : 32,
               elevation: 12,
               flex: 1,
               marginLeft: !isFounder ? 12 : 16,
