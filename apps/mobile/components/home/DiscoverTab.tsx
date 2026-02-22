@@ -9,8 +9,10 @@ import React, { memo, useCallback, useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,14 +21,15 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import Animated, {
-  FadeIn,
+  FadeInDown,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
 
 const RECENT_SEARCHES_KEY = "@recent_searches";
-const MAX_RECENT_SEARCHES = 3;
+const MAX_RECENT_SEARCHES = 5;
+const DISCOVER_PAGE_SIZE = 10;
 
 const S = {
   xxs: 4,
@@ -340,7 +343,7 @@ const FeaturedCard = memo(function FeaturedCard({
       }}
     >
       <Animated.View
-        entering={FadeIn.duration(300)}
+        entering={FadeInDown.duration(300)}
         style={[
           featuredStyles.card,
           {
@@ -491,7 +494,7 @@ const LatestCard = memo(function LatestCard({
       }}
     >
       <Animated.View
-        entering={FadeIn.duration(250).delay(index * 60)}
+        entering={FadeInDown.duration(250).delay(index * 60)}
         style={[
           latestStyles.card,
           {
@@ -604,12 +607,20 @@ export default function DiscoverTab() {
   const [results, setResults] = useState<Article[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [categories, setCategories] = useState<string[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       setSearchQuery("");
+      Keyboard.dismiss();
     }, [])
   );
 
@@ -620,7 +631,9 @@ export default function DiscoverTab() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      performLocalSearch(searchQuery);
+      setPage(0);
+      setHasMore(true);
+      performLocalSearch(searchQuery, 0, true);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCategory]);
@@ -677,16 +690,29 @@ export default function DiscoverTab() {
     }
   };
 
-  const performLocalSearch = async (query: string) => {
-    setLoading(true);
+  const performLocalSearch = async (
+    query: string,
+    pageNum: number = 0,
+    isRefresh: boolean = false
+  ) => {
+    if (pageNum === 0) {
+      setLoading(true);
+    } else {
+      setIsLoadingMore(true);
+    }
+
     try {
+      const from = pageNum * DISCOVER_PAGE_SIZE;
+      const to = from + DISCOVER_PAGE_SIZE - 1;
+
       let dbQuery = supabase
         .from("Articles")
         .select(
-          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"'
+          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"',
+          { count: "exact" }
         )
         .order("id", { ascending: false })
-        .limit(20);
+        .range(from, to);
 
       const trimmedQuery = query.trim();
 
@@ -700,16 +726,47 @@ export default function DiscoverTab() {
         dbQuery = dbQuery.ilike("Category", selectedCategory);
       }
 
-      const { data, error } = await dbQuery;
+      const { data, count, error } = await dbQuery;
       if (error) throw error;
 
-      setResults(data || []);
+      const newArticles = data || [];
+
+      if (isRefresh || pageNum === 0) {
+        setResults(newArticles);
+      } else {
+        // Prevent duplicates just in case
+        setResults((prev) => {
+          const existingIds = new Set(prev.map((a) => a.id));
+          const uniqueNew = newArticles.filter((a) => !existingIds.has(a.id));
+          return [...prev, ...uniqueNew];
+        });
+      }
+
+      setHasMore(newArticles.length === DISCOVER_PAGE_SIZE);
+      setPage(pageNum);
+
     } catch (error) {
       console.error("Search error:", error);
     } finally {
-      setLoading(false);
+      if (pageNum === 0) {
+        setLoading(false);
+      } else {
+        setIsLoadingMore(false);
+      }
+      setRefreshing(false);
     }
   };
+
+  const loadMore = () => {
+    if (!hasMore || isLoadingMore || loading) return;
+    performLocalSearch(searchQuery, page + 1, false);
+  };
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchCategories();
+    performLocalSearch(searchQuery, 0, true);
+  }, [searchQuery, selectedCategory]);
 
   const handleSearchSubmit = useCallback(() => {
     const trimmedQuery = searchQuery.trim();
@@ -742,7 +799,7 @@ export default function DiscoverTab() {
   );
 
   const featuredArticle = results[0];
-  const latestArticles = results.slice(1, 4);
+  const latestArticles = results.slice(1);
 
   const renderLatestArticle = useCallback(
     ({ item, index }: { item: Article; index: number }) => (
@@ -861,7 +918,7 @@ export default function DiscoverTab() {
         />
       </View>
 
-      {loading ? (
+      {loading && page === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.brand.primary} />
         </View>
@@ -874,6 +931,22 @@ export default function DiscoverTab() {
           ItemSeparatorComponent={() => <View style={{ height: S.xs }} />}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={listHeader}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.brand.primary}
+            />
+          }
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator color={theme.text.tertiary} size="small" />
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.center}>
               <Text
@@ -940,6 +1013,10 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: S.lg,
     paddingBottom: 80,
+  },
+  footerLoader: {
+    paddingVertical: S.lg,
+    alignItems: "center",
   },
   listHeader: {
     marginBottom: S.xxs,
