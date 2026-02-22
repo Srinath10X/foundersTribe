@@ -26,8 +26,8 @@ export default function GlobalSearchScreen() {
         <LinearGradient
           colors={
             isDark
-              ? ["rgba(0,0,0,0.85)", "rgba(0,0,0,0.6)", "transparent"]
-              : ["rgba(255,255,255,0.92)", "rgba(255,255,255,0.6)", "transparent"]
+              ? ["rgba(0,0,0,0.7)", "rgba(0,0,0,0.4)", "transparent"]
+              : ["rgba(255,255,255,0.8)", "rgba(255,255,255,0.4)", "transparent"]
           }
           style={styles.headerGradient}
         >

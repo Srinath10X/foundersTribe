@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 
-import CustomTabBar from "@/components/CustomTabBar";
+import LiquidTabBar from "@/components/LiquidTabBar";
 import { useTheme } from "@/context/ThemeContext";
 
 export default function FounderTabLayout() {
@@ -10,7 +10,7 @@ export default function FounderTabLayout() {
 
   return (
     <Tabs
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => <LiquidTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.brand.primary,
