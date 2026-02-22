@@ -1,4 +1,3 @@
-import { Typography } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,22 +5,41 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 
+// ─── Constants ──────────────────────────────────────────────────
 const RECENT_SEARCHES_KEY = "@recent_searches";
 const MAX_RECENT_SEARCHES = 3;
 
+// Spacing scale: 4 / 8 / 12 / 16 / 20 / 24 / 32
+const S = {
+  xxs: 4,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+// ─── Types ──────────────────────────────────────────────────────
 interface Article {
   id: number;
   Title: string;
@@ -33,6 +51,7 @@ interface Article {
   "Company Name": string | null;
 }
 
+// ─── Utilities ──────────────────────────────────────────────────
 const getReadTimeMinutes = (article: Article) => {
   const text = `${article.Content || ""} ${article.Summary || ""}`.trim();
   const words = text ? text.split(/\s+/).length : 0;
@@ -49,6 +68,507 @@ const getCategoryColor = (category: string | null, isDarkMode: boolean) => {
   return isDarkMode ? "#c7ced9" : "#6E7785";
 };
 
+// ─── Search Bar ─────────────────────────────────────────────────
+const SearchBar = memo(function SearchBar({
+  query,
+  onChangeQuery,
+  onSubmit,
+  onClear,
+}: {
+  query: string;
+  onChangeQuery: (q: string) => void;
+  onSubmit: () => void;
+  onClear: () => void;
+}) {
+  const { theme, isDark } = useTheme();
+
+  const barBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)";
+  const barBorder = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+
+  return (
+    <View style={searchStyles.container}>
+      <View
+        style={[
+          searchStyles.bar,
+          {
+            backgroundColor: barBg,
+            borderColor: barBorder,
+          },
+        ]}
+      >
+        <Pressable onPress={onSubmit} hitSlop={8}>
+          <Ionicons
+            name="search"
+            size={17}
+            color={theme.text.tertiary}
+          />
+        </Pressable>
+        <TextInput
+          style={[
+            searchStyles.input,
+            { color: theme.text.primary },
+          ]}
+          placeholder="Search articles..."
+          placeholderTextColor={theme.text.muted}
+          value={query}
+          onChangeText={onChangeQuery}
+          returnKeyType="search"
+          onSubmitEditing={onSubmit}
+        />
+        <View
+          style={[
+            searchStyles.aiTag,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,59,48,0.10)"
+                : "rgba(255,59,48,0.07)",
+              borderColor: isDark
+                ? "rgba(255,59,48,0.12)"
+                : "rgba(255,59,48,0.08)",
+            },
+          ]}
+        >
+          <Ionicons
+            name="sparkles-outline"
+            size={10}
+            color={theme.brand.primary}
+          />
+          <Text style={[searchStyles.aiTagText, { color: theme.brand.primary }]}>
+            AI
+          </Text>
+        </View>
+        {query.length > 0 && (
+          <Pressable onPress={onClear} hitSlop={8}>
+            <Ionicons
+              name="close-circle"
+              size={17}
+              color={theme.text.tertiary}
+            />
+          </Pressable>
+        )}
+      </View>
+    </View>
+  );
+});
+
+const searchStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: S.lg,
+    marginBottom: S.sm,
+  },
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 14,
+    paddingHorizontal: S.sm,
+    height: 44,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: S.xs,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Poppins_400Regular",
+    paddingVertical: 0,
+  },
+  aiTag: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  aiTagText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 0.3,
+  },
+});
+
+// ─── Category Pills ─────────────────────────────────────────────
+const CategoryPillItem = memo(function CategoryPillItem({
+  label,
+  isActive,
+  onPress,
+  isDark,
+  theme,
+}: {
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+  isDark: boolean;
+  theme: any;
+}) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const activeBg = isDark
+    ? "rgba(255,59,48,0.12)"
+    : "rgba(255,59,48,0.08)";
+  const activeBorder = isDark
+    ? "rgba(255,59,48,0.25)"
+    : "rgba(255,59,48,0.18)";
+  const inactiveBg = isDark
+    ? "rgba(255,255,255,0.04)"
+    : "rgba(0,0,0,0.025)";
+  const inactiveBorder = isDark
+    ? "rgba(255,255,255,0.06)"
+    : "rgba(0,0,0,0.05)";
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+      }}
+    >
+      <Animated.View
+        style={[
+          pillStyles.pill,
+          {
+            backgroundColor: isActive ? activeBg : inactiveBg,
+            borderColor: isActive ? activeBorder : inactiveBorder,
+          },
+          animatedStyle,
+        ]}
+      >
+        <Text
+          style={[
+            pillStyles.pillText,
+            {
+              color: isActive
+                ? theme.brand.primary
+                : theme.text.secondary,
+              fontFamily: isActive
+                ? "Poppins_600SemiBold"
+                : "Poppins_400Regular",
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      </Animated.View>
+    </Pressable>
+  );
+});
+
+const pillStyles = StyleSheet.create({
+  pill: {
+    paddingHorizontal: S.sm,
+    paddingVertical: 6,
+    borderRadius: S.sm,
+    marginRight: S.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  pillText: {
+    fontSize: 12,
+    letterSpacing: 0.1,
+  },
+});
+
+// ─── Featured Card ──────────────────────────────────────────────
+const FeaturedCard = memo(function FeaturedCard({
+  article,
+  onPress,
+}: {
+  article: Article;
+  onPress: () => void;
+}) {
+  const { theme, isDark } = useTheme();
+  const scale = useSharedValue(1);
+  const category = (article.Category || "Payments").toUpperCase();
+  const readTime = getReadTimeMinutes(article);
+  const categoryColor = getCategoryColor(article.Category, isDark);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const cardBg = isDark ? theme.surface : "#F4F7FB";
+  const cardBorder = isDark ? theme.border : "#E8EDF5";
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.985, { damping: 15, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+      }}
+    >
+      <Animated.View
+        entering={FadeIn.duration(300)}
+        style={[
+          featuredStyles.card,
+          {
+            backgroundColor: cardBg,
+            borderColor: cardBorder,
+            shadowColor: isDark ? "#000" : "#64748B",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: isDark ? 0.2 : 0.08,
+            shadowRadius: 16,
+            elevation: 3,
+          },
+          animatedStyle,
+        ]}
+      >
+        {/* Background image */}
+        <Image
+          source={{
+            uri:
+              article["Image URL"] ||
+              "https://images.unsplash.com/photo-1556740749-887f6717d7e4?w=1200&q=80",
+          }}
+          style={[
+            featuredStyles.image,
+            { backgroundColor: theme.surfaceElevated },
+          ]}
+          contentFit="cover"
+          contentPosition="right"
+        />
+
+        {/* Gradient overlays for text readability */}
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(10,12,18,0.75)", "rgba(10,12,18,0.35)", "rgba(10,12,18,0)"]
+              : ["rgba(244,247,251,0.97)", "rgba(244,247,251,0.70)", "rgba(244,247,251,0)"]
+          }
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(10,12,18,0.3)", "rgba(10,12,18,0.1)", "rgba(10,12,18,0.3)"]
+              : ["rgba(244,247,251,0.5)", "rgba(244,247,251,0.15)", "rgba(244,247,251,0.4)"]
+          }
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+
+        {/* Content */}
+        <View style={featuredStyles.content}>
+          <Text style={[featuredStyles.category, { color: categoryColor }]}>
+            {category}
+          </Text>
+          <Text
+            style={[featuredStyles.title, { color: theme.text.primary }]}
+            numberOfLines={3}
+          >
+            {article.Title}
+          </Text>
+          <Text
+            style={[featuredStyles.meta, { color: theme.text.tertiary }]}
+          >
+            {readTime} min read
+          </Text>
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+});
+
+const featuredStyles = StyleSheet.create({
+  card: {
+    borderRadius: 16,
+    minHeight: 160,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  image: {
+    position: "absolute",
+    right: -2,
+    top: 0,
+    bottom: 0,
+    width: "62%",
+    opacity: 0.92,
+  },
+  content: {
+    width: "58%",
+    paddingHorizontal: S.lg,
+    paddingVertical: S.lg,
+    justifyContent: "center",
+    gap: S.xxs,
+    zIndex: 2,
+  },
+  category: {
+    fontSize: 10,
+    fontFamily: "Poppins_600SemiBold",
+    letterSpacing: 1.5,
+    lineHeight: 13,
+  },
+  title: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    lineHeight: 21,
+    letterSpacing: -0.1,
+  },
+  meta: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.1,
+    marginTop: 2,
+  },
+});
+
+// ─── Latest Article Card ────────────────────────────────────────
+const LatestCard = memo(function LatestCard({
+  article,
+  onPress,
+  index,
+}: {
+  article: Article;
+  onPress: () => void;
+  index: number;
+}) {
+  const { theme, isDark } = useTheme();
+  const scale = useSharedValue(1);
+  const category = (article.Category || "General").toUpperCase();
+  const categoryColor = getCategoryColor(article.Category, isDark);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const cardBg = isDark
+    ? "rgba(255,255,255,0.025)"
+    : "rgba(0,0,0,0.015)";
+  const cardBorder = isDark
+    ? "rgba(255,255,255,0.05)"
+    : "rgba(0,0,0,0.04)";
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.985, { damping: 15, stiffness: 300 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+      }}
+    >
+      <Animated.View
+        entering={FadeIn.duration(250).delay(index * 60)}
+        style={[
+          latestStyles.card,
+          {
+            backgroundColor: cardBg,
+            borderColor: cardBorder,
+          },
+          animatedStyle,
+        ]}
+      >
+        <View style={latestStyles.textSection}>
+          <Text
+            style={[latestStyles.category, { color: categoryColor }]}
+            numberOfLines={1}
+          >
+            {category}
+          </Text>
+          <Text
+            style={[latestStyles.title, { color: theme.text.primary }]}
+            numberOfLines={2}
+          >
+            {article.Title}
+          </Text>
+        </View>
+        <Image
+          source={{
+            uri:
+              article["Image URL"] ||
+              "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=600&q=80",
+          }}
+          style={[
+            latestStyles.thumbnail,
+            {
+              backgroundColor: isDark
+                ? "rgba(255,255,255,0.04)"
+                : "rgba(0,0,0,0.03)",
+            },
+          ]}
+          contentFit="cover"
+        />
+      </Animated.View>
+    </Pressable>
+  );
+});
+
+const latestStyles = StyleSheet.create({
+  card: {
+    borderRadius: S.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: S.sm,
+    paddingLeft: S.md,
+    paddingRight: S.sm,
+    paddingVertical: S.sm,
+    minHeight: 96,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  textSection: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    gap: S.xxs,
+  },
+  category: {
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 1.2,
+    fontFamily: "Poppins_600SemiBold",
+    textTransform: "uppercase",
+  },
+  title: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Poppins_500Medium",
+    letterSpacing: -0.1,
+  },
+  thumbnail: {
+    width: 88,
+    height: 72,
+    borderRadius: 10,
+  },
+});
+
+// ─── Section Header ─────────────────────────────────────────────
+const SectionHeader = memo(function SectionHeader({
+  title,
+}: {
+  title: string;
+}) {
+  const { theme } = useTheme();
+  return (
+    <Text style={[sectionStyles.title, { color: theme.text.primary }]}>
+      {title}
+    </Text>
+  );
+});
+
+const sectionStyles = StyleSheet.create({
+  title: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.2,
+    marginBottom: S.sm,
+  },
+});
+
+// ─── Main Discover Tab ──────────────────────────────────────────
 export default function DiscoverTab() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
@@ -69,7 +589,6 @@ export default function DiscoverTab() {
     const timer = setTimeout(() => {
       performSearch(searchQuery);
     }, 350);
-
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCategory]);
 
@@ -163,352 +682,151 @@ export default function DiscoverTab() {
     }
   };
 
-  const handleArticlePress = (article: Article) => {
-    router.push({
-      pathname: "/article/[id]",
-      params: {
-        id: article.id.toString(),
-        title: article.Title,
-        summary: article.Summary || article.Content || "",
-        content: article.Content || article.Summary || "",
-        imageUrl: article["Image URL"] || "",
-        articleLink: article["Article Link"] || "",
-        category: article.Category || "",
-        companyName: article["Company Name"] || "",
-      },
-    });
-  };
+  const handleArticlePress = useCallback(
+    (article: Article) => {
+      router.push({
+        pathname: "/article/[id]",
+        params: {
+          id: article.id.toString(),
+          title: article.Title,
+          summary: article.Summary || article.Content || "",
+          content: article.Content || article.Summary || "",
+          imageUrl: article["Image URL"] || "",
+          articleLink: article["Article Link"] || "",
+          category: article.Category || "",
+          companyName: article["Company Name"] || "",
+        },
+      });
+    },
+    [router]
+  );
 
   const featuredArticle = results[0];
   const latestArticles = results.slice(1, 4);
 
-  const renderFeatured = () => {
-    if (!featuredArticle) return null;
-    const featuredCategory = (
-      featuredArticle.Category || "Payments"
-    ).toUpperCase();
-    const featuredReadTime = getReadTimeMinutes(featuredArticle);
-    const featuredCategoryColor = getCategoryColor(
-      featuredArticle.Category,
-      isDark
-    );
-    return (
-      <TouchableOpacity
-        style={[
-          styles.featuredCard,
-          {
-            backgroundColor: isDark ? theme.surface : "#EEF4FF",
-            borderColor: isDark ? theme.border : "#E3EBF8",
-          },
-        ]}
-        onPress={() => handleArticlePress(featuredArticle)}
-        activeOpacity={0.88}
-      >
-        <Image
-          source={{
-            uri:
-              featuredArticle["Image URL"] ||
-              "https://images.unsplash.com/photo-1556740749-887f6717d7e4?w=1200&q=80",
-          }}
-          style={[
-            styles.featuredArt,
-            { backgroundColor: theme.surfaceElevated },
-          ]}
-          contentFit="cover"
-          contentPosition="right"
-        />
-        <LinearGradient
-          colors={
-            isDark
-              ? [
-                  "rgba(18,14,12,0.34)",
-                  "rgba(20,18,20,0.22)",
-                  "rgba(20,18,20,0.04)",
-                ]
-              : [
-                  "rgba(216,192,162,0.34)",
-                  "rgba(198,220,246,0.28)",
-                  "rgba(228,240,255,0.14)",
-                ]
-          }
-          start={{ x: 1, y: 0.5 }}
-          end={{ x: 0, y: 0.5 }}
-          style={styles.featuredFade}
-        />
-        <LinearGradient
-          colors={
-            isDark
-              ? [
-                  "rgba(16,18,23,0.20)",
-                  "rgba(16,18,23,0.06)",
-                  "rgba(16,18,23,0.22)",
-                ]
-              : [
-                  "rgba(228,240,255,0.42)",
-                  "rgba(241,248,255,0.10)",
-                  "rgba(216,234,252,0.48)",
-                ]
-          }
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.featuredFade}
-        />
-        <LinearGradient
-          colors={
-            isDark
-              ? [
-                  "rgba(10,12,18,0.58)",
-                  "rgba(10,12,18,0.30)",
-                  "rgba(10,12,18,0)",
-                ]
-              : [
-                  "rgba(246,250,255,0.96)",
-                  "rgba(242,248,255,0.78)",
-                  "rgba(242,248,255,0.04)",
-                ]
-          }
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.featuredFade}
-        />
-        <LinearGradient
-          colors={
-            isDark
-              ? [
-                  "rgba(10,12,18,0.20)",
-                  "rgba(10,12,18,0.08)",
-                  "rgba(10,12,18,0)",
-                ]
-              : [
-                  "rgba(238,246,255,0.60)",
-                  "rgba(238,246,255,0.22)",
-                  "rgba(238,246,255,0.00)",
-                ]
-          }
-          start={{ x: 0.54, y: 0.5 }}
-          end={{ x: 0.74, y: 0.5 }}
-          style={styles.featuredFade}
-        />
-        <LinearGradient
-          colors={
-            isDark
-              ? [
-                  "rgba(20,22,30,0.95)",
-                  "rgba(20,22,30,0.55)",
-                  "rgba(20,22,30,0.00)",
-                ]
-              : [
-                  "rgba(238,244,255,0.98)",
-                  "rgba(238,244,255,0.66)",
-                  "rgba(238,244,255,0.00)",
-                ]
-          }
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.featuredSeamMask}
-        />
-        <View style={styles.featuredContent}>
-          <Text
-            style={[styles.featuredBadgeText, { color: featuredCategoryColor }]}
-          >
-            {featuredCategory}
-          </Text>
-          <Text style={[styles.featuredTitle, { color: theme.text.primary }]}>
-            {featuredArticle.Title}
-          </Text>
-          <Text style={[styles.featuredMeta, { color: theme.text.secondary }]}>
-            {featuredReadTime} min read
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderLatestArticle = ({ item }: { item: Article }) => {
-    const categoryText = (item.Category || "General").toUpperCase();
-    const categoryColor = getCategoryColor(item.Category, isDark);
-    return (
-      <TouchableOpacity
-        style={[
-          styles.latestCard,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.border,
-          },
-        ]}
+  const renderLatestArticle = useCallback(
+    ({ item, index }: { item: Article; index: number }) => (
+      <LatestCard
+        article={item}
         onPress={() => handleArticlePress(item)}
-        activeOpacity={0.88}
-      >
-        <View style={styles.latestText}>
-          <Text
-            style={[styles.latestCategory, { color: categoryColor }]}
-            numberOfLines={1}
-          >
-            {categoryText}
-          </Text>
-          <Text style={[styles.latestTitle, { color: theme.text.primary }]}>
-            {item.Title}
-          </Text>
-        </View>
-        <Image
-          source={{
-            uri:
-              item["Image URL"] ||
-              "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?w=600&q=80",
-          }}
-          style={[
-            styles.latestImage,
-            { backgroundColor: theme.surfaceElevated },
-          ]}
-          contentFit="cover"
+        index={index}
+      />
+    ),
+    [handleArticlePress]
+  );
+
+  const listHeader = (
+    <View style={styles.listHeader}>
+      {/* Featured section */}
+      <SectionHeader title="Featured" />
+      {featuredArticle && (
+        <FeaturedCard
+          article={featuredArticle}
+          onPress={() => handleArticlePress(featuredArticle)}
         />
-      </TouchableOpacity>
-    );
-  };
+      )}
+
+      {/* Latest section header */}
+      <View style={styles.latestHeaderWrap}>
+        <SectionHeader title="Latest" />
+      </View>
+    </View>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.searchBarContainer}>
-        <View
-          style={[
-            styles.searchBar,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}
-        >
-          <TouchableOpacity onPress={() => performSearch(searchQuery)}>
-            <Ionicons
-              name="search"
-              size={18}
-              color={theme.text.tertiary}
-              style={{ marginRight: 8 }}
-            />
-          </TouchableOpacity>
-          <TextInput
-            style={[styles.input, { color: theme.text.primary }]}
-            placeholder="Search Globally"
-            placeholderTextColor={theme.text.tertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-            onSubmitEditing={() => performSearch(searchQuery)}
-          />
-          <View
-            style={[
-              styles.aiTag,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,59,48,0.16)"
-                  : "rgba(255,59,48,0.12)",
-              },
-            ]}
-          >
-            <Ionicons
-              name="sparkles-outline"
-              size={12}
-              color={theme.brand.primary}
-            />
-            <Text style={[styles.aiTagText, { color: theme.brand.primary }]}>
-              AI
-            </Text>
-          </View>
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery("")}>
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color={theme.text.tertiary}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      {/* Search */}
+      <SearchBar
+        query={searchQuery}
+        onChangeQuery={setSearchQuery}
+        onSubmit={() => performSearch(searchQuery)}
+        onClear={() => setSearchQuery("")}
+      />
 
+      {/* Recent searches */}
       {searchQuery.length === 0 && recentSearches.length > 0 && (
         <View style={styles.recentWrap}>
           <View style={styles.recentHead}>
-            <Text style={[styles.recentTitle, { color: theme.text.muted }]}>
-              RECENT SEARCHES
+            <Text
+              style={[
+                styles.recentLabel,
+                { color: theme.text.muted },
+              ]}
+            >
+              RECENT
             </Text>
-            <TouchableOpacity
+            <Pressable
               onPress={async () => {
                 setRecentSearches([]);
                 await AsyncStorage.removeItem(RECENT_SEARCHES_KEY);
               }}
+              hitSlop={8}
             >
-              <Text style={[styles.clearText, { color: theme.brand.primary }]}>
+              <Text
+                style={[styles.clearText, { color: theme.text.tertiary }]}
+              >
                 Clear
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.recentList}
           >
-            {recentSearches.map((query) => (
-              <TouchableOpacity
-                key={query}
+            {recentSearches.map((q) => (
+              <Pressable
+                key={q}
                 style={[
                   styles.recentChip,
-                  { backgroundColor: theme.surface, borderColor: theme.border },
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.04)"
+                      : "rgba(0,0,0,0.025)",
+                    borderColor: isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(0,0,0,0.05)",
+                  },
                 ]}
-                onPress={() => setSearchQuery(query)}
+                onPress={() => setSearchQuery(q)}
               >
                 <Ionicons
                   name="time-outline"
-                  size={13}
-                  color={theme.text.tertiary}
+                  size={12}
+                  color={theme.text.muted}
                 />
                 <Text
-                  style={[
-                    styles.recentChipText,
-                    { color: theme.text.secondary },
-                  ]}
+                  style={[styles.recentChipText, { color: theme.text.secondary }]}
                 >
-                  {query}
+                  {q}
                 </Text>
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </ScrollView>
         </View>
       )}
 
-      <View style={styles.filtersContainer}>
+      {/* Category filters */}
+      <View style={styles.filtersWrap}>
         <FlatList
           horizontal
           data={["All", ...categories]}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20 }}
+          contentContainerStyle={{ paddingHorizontal: S.lg }}
           keyExtractor={(item) => item}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.pill,
-                { backgroundColor: theme.surface, borderColor: theme.border },
-                selectedCategory === item && {
-                  backgroundColor: theme.brand.primary,
-                  borderColor: theme.brand.primary,
-                },
-              ]}
+            <CategoryPillItem
+              label={item}
+              isActive={selectedCategory === item}
               onPress={() => setSelectedCategory(item)}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  { color: theme.text.secondary },
-                  selectedCategory === item && {
-                    color: theme.text.inverse,
-                    fontWeight: "600",
-                  },
-                ]}
-              >
-                {item}
-              </Text>
-            </TouchableOpacity>
+              isDark={isDark}
+              theme={theme}
+            />
           )}
         />
       </View>
 
+      {/* Content */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.brand.primary} />
@@ -519,31 +837,14 @@ export default function DiscoverTab() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderLatestArticle}
           contentContainerStyle={styles.listContent}
-          ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: S.xs }} />}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <View style={styles.cardsHeaderWrap}>
-              <Text style={[styles.blockTitle, { color: theme.text.primary }]}>
-                Featured
-              </Text>
-              {renderFeatured()}
-              <Text
-                style={[
-                  styles.blockTitle,
-                  {
-                    color: theme.text.primary,
-                    marginTop: 14,
-                    marginBottom: 10,
-                  },
-                ]}
-              >
-                Latest
-              </Text>
-            </View>
-          }
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={[styles.emptyText, { color: theme.text.tertiary }]}>
+              <Text
+                style={[styles.emptyText, { color: theme.text.tertiary }]}
+              >
                 No articles found.
               </Text>
             </View>
@@ -554,112 +855,70 @@ export default function DiscoverTab() {
   );
 }
 
+// ─── Main Styles ────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === "ios" ? 104 : 84,
+    paddingTop: Platform.OS === "ios" ? 108 : 88,
   },
-  searchBarContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    height: 48,
-    borderWidth: 1,
-  },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: Typography.fonts.primary,
-  },
-  aiTag: {
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginRight: 8,
-  },
-  aiTagText: {
-    ...Typography.presets.caption,
-    fontWeight: "700",
-    fontFamily: "Poppins_700Bold",
-    fontSize: 10,
-  },
+
+  // Recent searches
   recentWrap: {
-    marginBottom: 8,
+    marginBottom: S.xs,
   },
   recentHead: {
-    paddingHorizontal: 20,
+    paddingHorizontal: S.lg,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: S.xs,
   },
-  recentTitle: {
-    ...Typography.presets.label,
-    fontFamily: "Poppins_600SemiBold",
+  recentLabel: {
     fontSize: 10,
+    fontFamily: "Poppins_600SemiBold",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   clearText: {
-    ...Typography.presets.caption,
-    fontWeight: "700",
-    fontFamily: "Poppins_700Bold",
     fontSize: 11,
+    fontFamily: "Poppins_500Medium",
   },
   recentList: {
-    paddingHorizontal: 20,
-    gap: 8,
+    paddingHorizontal: S.lg,
+    gap: S.xs,
   },
   recentChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: S.xs,
+    paddingHorizontal: S.sm,
+    paddingVertical: 5,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   recentChipText: {
-    ...Typography.presets.bodySmall,
-    fontFamily: "Poppins_500Medium",
     fontSize: 11,
+    fontFamily: "Poppins_400Regular",
   },
-  filtersContainer: {
-    marginBottom: 8,
+
+  // Filters
+  filtersWrap: {
+    marginBottom: S.sm,
   },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    marginRight: 8,
-    borderWidth: 1,
-  },
-  pillText: {
-    fontSize: 11,
-    fontWeight: "500",
-    fontFamily: "Poppins_500Medium",
-  },
+
+  // List
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 72,
+    paddingHorizontal: S.lg,
+    paddingBottom: 80,
   },
-  cardsHeaderWrap: {
-    marginBottom: 2,
+  listHeader: {
+    marginBottom: S.xxs,
   },
-  blockTitle: {
-    ...Typography.presets.h3,
-    fontFamily: "Poppins_500Medium",
-    fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.02,
-    marginBottom: 8,
+  latestHeaderWrap: {
+    marginTop: S.xl,
   },
+
+  // States
   center: {
     flex: 1,
     justifyContent: "center",
@@ -667,101 +926,7 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   emptyText: {
-    fontSize: 16,
-  },
-  featuredCard: {
-    borderRadius: 14,
-    minHeight: 142,
-    borderWidth: 0,
-    overflow: "hidden",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  featuredFade: { ...StyleSheet.absoluteFillObject },
-  featuredContent: {
-    width: "66%",
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
-    justifyContent: "center",
-    gap: 3,
-    zIndex: 2,
-  },
-  featuredArt: {
-    position: "absolute",
-    right: -3,
-    top: 0,
-    bottom: 0,
-    width: "66%",
-    opacity: 0.9,
-  },
-  featuredSeamMask: {
-    position: "absolute",
-    left: "34%",
-    top: 0,
-    bottom: 0,
-    width: 36,
-  },
-  featuredBadgeText: {
-    fontWeight: "500",
-    letterSpacing: 1.8,
-    fontFamily: "Poppins_500Medium",
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  featuredTitle: {
-    fontFamily: "Poppins_500Medium",
     fontSize: 14,
-    lineHeight: 20,
-    letterSpacing: 0.02,
-  },
-  featuredMeta: {
     fontFamily: "Poppins_400Regular",
-    fontSize: 10,
-    lineHeight: 14,
-    letterSpacing: 0.2,
-  },
-  latestCard: {
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    minHeight: 106,
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  latestText: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    paddingVertical: 0,
-  },
-  latestCategory: {
-    fontSize: 8,
-    lineHeight: 11,
-    letterSpacing: 1,
-    fontFamily: "Poppins_500Medium",
-    marginBottom: 2,
-  },
-  latestTitle: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontFamily: "Poppins_500Medium",
-    letterSpacing: 0.02,
-    marginBottom: 0,
-  },
-  latestImage: {
-    width: 102,
-    height: 76,
-    borderRadius: 8,
   },
 });
