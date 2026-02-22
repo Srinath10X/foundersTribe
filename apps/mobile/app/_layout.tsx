@@ -148,8 +148,10 @@ function RootLayoutNav() {
           segment === "article_copy" ||
           segment === "edit-interests" ||
           segment === "edit-profile" ||
+          segment === "search" ||
           pathname.includes("edit-interests") ||
-          pathname.includes("edit-profile");
+          pathname.includes("edit-profile") ||
+          pathname.includes("/search/");
 
         // Redirect to the correct tab tree based on role if on unauthorized page
         if (!isAllowedPath) {
@@ -220,6 +222,7 @@ function RootLayoutNav() {
         <Stack.Screen name="article_copy" />
         <Stack.Screen name="room" />
         <Stack.Screen name="tribe" />
+        <Stack.Screen name="search" />
         <Stack.Screen name="edit-profile" />
         <Stack.Screen name="edit-interests" />
         <Stack.Screen

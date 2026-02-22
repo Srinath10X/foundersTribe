@@ -24,11 +24,9 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 
-// ─── Constants ──────────────────────────────────────────────────
 const RECENT_SEARCHES_KEY = "@recent_searches";
 const MAX_RECENT_SEARCHES = 3;
 
-// Spacing scale: 4 / 8 / 12 / 16 / 20 / 24 / 32
 const S = {
   xxs: 4,
   xs: 8,
@@ -39,7 +37,6 @@ const S = {
   xxl: 32,
 } as const;
 
-// ─── Types ──────────────────────────────────────────────────────
 interface Article {
   id: number;
   Title: string;
@@ -51,7 +48,6 @@ interface Article {
   "Company Name": string | null;
 }
 
-// ─── Utilities ──────────────────────────────────────────────────
 const getReadTimeMinutes = (article: Article) => {
   const text = `${article.Content || ""} ${article.Summary || ""}`.trim();
   const words = text ? text.split(/\s+/).length : 0;
@@ -68,7 +64,6 @@ const getCategoryColor = (category: string | null, isDarkMode: boolean) => {
   return isDarkMode ? "#c7ced9" : "#6E7785";
 };
 
-// ─── Search Bar ─────────────────────────────────────────────────
 const SearchBar = memo(function SearchBar({
   query,
   onChangeQuery,
@@ -81,28 +76,45 @@ const SearchBar = memo(function SearchBar({
   onClear: () => void;
 }) {
   const { theme, isDark } = useTheme();
+  const [isFocused, setIsFocused] = useState(false);
+  const scale = useSharedValue(1);
 
-  const barBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)";
-  const barBorder = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+  const barBg = isDark
+    ? (isFocused ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.04)")
+    : (isFocused ? "rgba(0,0,0,0.045)" : "rgba(0,0,0,0.025)");
+  const barBorder = isDark
+    ? (isFocused ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)")
+    : (isFocused ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.05)");
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
     <View style={searchStyles.container}>
-      <View
+      <Animated.View
         style={[
           searchStyles.bar,
           {
             backgroundColor: barBg,
             borderColor: barBorder,
+            shadowColor: isFocused ? (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)") : "transparent",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: isFocused ? 0.06 : 0,
+            shadowRadius: isFocused ? 12 : 0,
+            elevation: isFocused ? 1 : 0,
           },
+          animatedContainerStyle,
         ]}
       >
-        <Pressable onPress={onSubmit} hitSlop={8}>
+        <View style={searchStyles.iconContainer}>
           <Ionicons
             name="search"
-            size={17}
-            color={theme.text.tertiary}
+            size={18}
+            color={isFocused ? theme.brand.primary : theme.text.tertiary}
           />
-        </Pressable>
+        </View>
+
         <TextInput
           style={[
             searchStyles.input,
@@ -114,39 +126,55 @@ const SearchBar = memo(function SearchBar({
           onChangeText={onChangeQuery}
           returnKeyType="search"
           onSubmitEditing={onSubmit}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
         />
-        <View
-          style={[
-            searchStyles.aiTag,
-            {
-              backgroundColor: isDark
-                ? "rgba(255,59,48,0.10)"
-                : "rgba(255,59,48,0.07)",
-              borderColor: isDark
-                ? "rgba(255,59,48,0.12)"
-                : "rgba(255,59,48,0.08)",
-            },
-          ]}
-        >
-          <Ionicons
-            name="sparkles-outline"
-            size={10}
-            color={theme.brand.primary}
-          />
-          <Text style={[searchStyles.aiTagText, { color: theme.brand.primary }]}>
-            AI
-          </Text>
-        </View>
-        {query.length > 0 && (
-          <Pressable onPress={onClear} hitSlop={8}>
-            <Ionicons
-              name="close-circle"
-              size={17}
-              color={theme.text.tertiary}
-            />
+
+        {query.length > 0 ? (
+          <Pressable
+            onPress={onClear}
+            hitSlop={8}
+            style={searchStyles.clearButton}
+          >
+            <View
+              style={[
+                searchStyles.clearIconBg,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,255,255,0.1)"
+                    : "rgba(0,0,0,0.08)",
+                },
+              ]}
+            >
+              <Ionicons
+                name="close"
+                size={12}
+                color={theme.text.tertiary}
+              />
+            </View>
           </Pressable>
+        ) : (
+          <View
+            style={[
+              searchStyles.aiBadge,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255,59,48,0.12)"
+                  : "rgba(255,59,48,0.08)",
+              },
+            ]}
+          >
+            <Ionicons
+              name="sparkles"
+              size={11}
+              color={theme.brand.primary}
+            />
+            <Text style={[searchStyles.aiText, { color: theme.brand.primary }]}>
+              AI
+            </Text>
+          </View>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 });
@@ -154,40 +182,55 @@ const SearchBar = memo(function SearchBar({
 const searchStyles = StyleSheet.create({
   container: {
     paddingHorizontal: S.lg,
-    marginBottom: S.sm,
+    marginBottom: S.md,
   },
   bar: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: S.sm,
-    height: 44,
-    borderWidth: StyleSheet.hairlineWidth,
+    height: 52,
+    borderWidth: 1,
     gap: S.xs,
+  },
+  iconContainer: {
+    width: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Poppins_400Regular",
     paddingVertical: 0,
+    letterSpacing: -0.1,
   },
-  aiTag: {
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+  clearButton: {
+    padding: 4,
+  },
+  clearIconBg: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  aiBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    gap: 4,
   },
-  aiTagText: {
+  aiText: {
+    fontSize: 11,
     fontFamily: "Poppins_600SemiBold",
-    fontSize: 9,
     letterSpacing: 0.3,
   },
 });
 
-// ─── Category Pills ─────────────────────────────────────────────
 const CategoryPillItem = memo(function CategoryPillItem({
   label,
   isActive,
@@ -208,23 +251,23 @@ const CategoryPillItem = memo(function CategoryPillItem({
   }));
 
   const activeBg = isDark
-    ? "rgba(255,59,48,0.12)"
-    : "rgba(255,59,48,0.08)";
+    ? "rgba(255,59,48,0.15)"
+    : "rgba(255,59,48,0.1)";
   const activeBorder = isDark
-    ? "rgba(255,59,48,0.25)"
-    : "rgba(255,59,48,0.18)";
+    ? "rgba(255,59,48,0.3)"
+    : "rgba(255,59,48,0.2)";
   const inactiveBg = isDark
     ? "rgba(255,255,255,0.04)"
-    : "rgba(0,0,0,0.025)";
+    : "rgba(0,0,0,0.03)";
   const inactiveBorder = isDark
-    ? "rgba(255,255,255,0.06)"
-    : "rgba(0,0,0,0.05)";
+    ? "rgba(255,255,255,0.08)"
+    : "rgba(0,0,0,0.06)";
 
   return (
     <Pressable
       onPress={onPress}
       onPressIn={() => {
-        scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
+        scale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
       }}
       onPressOut={() => {
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
@@ -244,12 +287,8 @@ const CategoryPillItem = memo(function CategoryPillItem({
           style={[
             pillStyles.pillText,
             {
-              color: isActive
-                ? theme.brand.primary
-                : theme.text.secondary,
-              fontFamily: isActive
-                ? "Poppins_600SemiBold"
-                : "Poppins_400Regular",
+              color: isActive ? theme.brand.primary : theme.text.secondary,
+              fontFamily: isActive ? "Poppins_600SemiBold" : "Poppins_400Regular",
             },
           ]}
         >
@@ -262,19 +301,21 @@ const CategoryPillItem = memo(function CategoryPillItem({
 
 const pillStyles = StyleSheet.create({
   pill: {
-    paddingHorizontal: S.sm,
-    paddingVertical: 6,
-    borderRadius: S.sm,
+    paddingHorizontal: S.md,
+    paddingVertical: 8,
+    borderRadius: 12,
     marginRight: S.xs,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
   },
   pillText: {
-    fontSize: 12,
-    letterSpacing: 0.1,
+    fontSize: 13,
+    letterSpacing: 0,
   },
 });
 
-// ─── Featured Card ──────────────────────────────────────────────
 const FeaturedCard = memo(function FeaturedCard({
   article,
   onPress,
@@ -321,7 +362,6 @@ const FeaturedCard = memo(function FeaturedCard({
           animatedStyle,
         ]}
       >
-        {/* Background image */}
         <Image
           source={{
             uri:
@@ -336,7 +376,6 @@ const FeaturedCard = memo(function FeaturedCard({
           contentPosition="right"
         />
 
-        {/* Gradient overlays for text readability */}
         <LinearGradient
           colors={
             isDark
@@ -358,7 +397,6 @@ const FeaturedCard = memo(function FeaturedCard({
           style={StyleSheet.absoluteFillObject}
         />
 
-        {/* Content */}
         <View style={featuredStyles.content}>
           <Text style={[featuredStyles.category, { color: categoryColor }]}>
             {category}
@@ -424,7 +462,6 @@ const featuredStyles = StyleSheet.create({
   },
 });
 
-// ─── Latest Article Card ────────────────────────────────────────
 const LatestCard = memo(function LatestCard({
   article,
   onPress,
@@ -544,7 +581,6 @@ const latestStyles = StyleSheet.create({
   },
 });
 
-// ─── Section Header ─────────────────────────────────────────────
 const SectionHeader = memo(function SectionHeader({
   title,
 }: {
@@ -568,7 +604,6 @@ const sectionStyles = StyleSheet.create({
   },
 });
 
-// ─── Main Discover Tab ──────────────────────────────────────────
 export default function DiscoverTab() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
@@ -582,13 +617,12 @@ export default function DiscoverTab() {
   useEffect(() => {
     loadRecentSearches();
     fetchCategories();
-    performSearch("");
   }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      performSearch(searchQuery);
-    }, 350);
+      performLocalSearch(searchQuery);
+    }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCategory]);
 
@@ -644,7 +678,7 @@ export default function DiscoverTab() {
     }
   };
 
-  const performSearch = async (query: string) => {
+  const performLocalSearch = async (query: string) => {
     setLoading(true);
     try {
       let dbQuery = supabase
@@ -671,16 +705,23 @@ export default function DiscoverTab() {
       if (error) throw error;
 
       setResults(data || []);
-
-      if (trimmedQuery) {
-        saveRecentSearch(trimmedQuery);
-      }
     } catch (error) {
       console.error("Search error:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSearchSubmit = useCallback(() => {
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery) {
+      saveRecentSearch(trimmedQuery);
+      router.push({
+        pathname: "/search/[query]",
+        params: { query: trimmedQuery },
+      });
+    }
+  }, [searchQuery, router]);
 
   const handleArticlePress = useCallback(
     (article: Article) => {
@@ -717,7 +758,6 @@ export default function DiscoverTab() {
 
   const listHeader = (
     <View style={styles.listHeader}>
-      {/* Featured section */}
       <SectionHeader title="Featured" />
       {featuredArticle && (
         <FeaturedCard
@@ -726,7 +766,6 @@ export default function DiscoverTab() {
         />
       )}
 
-      {/* Latest section header */}
       <View style={styles.latestHeaderWrap}>
         <SectionHeader title="Latest" />
       </View>
@@ -735,15 +774,13 @@ export default function DiscoverTab() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Search */}
       <SearchBar
         query={searchQuery}
         onChangeQuery={setSearchQuery}
-        onSubmit={() => performSearch(searchQuery)}
+        onSubmit={handleSearchSubmit}
         onClear={() => setSearchQuery("")}
       />
 
-      {/* Recent searches */}
       {searchQuery.length === 0 && recentSearches.length > 0 && (
         <View style={styles.recentWrap}>
           <View style={styles.recentHead}>
@@ -806,7 +843,6 @@ export default function DiscoverTab() {
         </View>
       )}
 
-      {/* Category filters */}
       <View style={styles.filtersWrap}>
         <FlatList
           horizontal
@@ -826,7 +862,6 @@ export default function DiscoverTab() {
         />
       </View>
 
-      {/* Content */}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.brand.primary} />
@@ -855,16 +890,14 @@ export default function DiscoverTab() {
   );
 }
 
-// ─── Main Styles ────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingTop: Platform.OS === "ios" ? 108 : 88,
   },
 
-  // Recent searches
   recentWrap: {
-    marginBottom: S.xs,
+    marginBottom: S.sm,
   },
   recentHead: {
     paddingHorizontal: S.lg,
@@ -901,12 +934,10 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
   },
 
-  // Filters
   filtersWrap: {
     marginBottom: S.sm,
   },
 
-  // List
   listContent: {
     paddingHorizontal: S.lg,
     paddingBottom: 80,
@@ -918,7 +949,6 @@ const styles = StyleSheet.create({
     marginTop: S.xl,
   },
 
-  // States
   center: {
     flex: 1,
     justifyContent: "center",
