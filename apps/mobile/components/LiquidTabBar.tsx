@@ -1,6 +1,7 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { memo, useCallback, useEffect, useMemo } from "react";
 import {
   type LayoutChangeEvent,
@@ -25,14 +26,49 @@ import { useTheme } from "@/context/ThemeContext";
 // ─── Layout constants ──────────────────────────────────────────
 export const BAR_HEIGHT = 66;
 export const BAR_BOTTOM = Platform.OS === "ios" ? 28 : 20;
-const BAR_VERTICAL_PADDING = 7; // breathing room top/bottom inside bar
-const BUBBLE_HEIGHT = BAR_HEIGHT - BAR_VERTICAL_PADDING * 2; // 52px — fills bar with 7px breathing each side
-const BUBBLE_BORDER_RADIUS = BUBBLE_HEIGHT / 2; // perfect capsule
-const BUBBLE_INSET = 4; // horizontal inset inside each tab cell
+const BAR_RADIUS = 40;
+const BAR_VERTICAL_PADDING = 7;
+const BUBBLE_HEIGHT = BAR_HEIGHT - BAR_VERTICAL_PADDING * 2;
+const BUBBLE_BORDER_RADIUS = BUBBLE_HEIGHT / 2;
+const BUBBLE_INSET = 4;
 const ICON_SIZE = 22;
-const ICON_LABEL_GAP = 3; // consistent spacing between icon and label
+const ICON_LABEL_GAP = 3;
 const SPRING_CONFIG = { damping: 18, stiffness: 200, mass: 0.8 };
 const PRESS_SPRING = { damping: 15, stiffness: 300 };
+
+// ─── Glass Surface ──────────────────────────────────────────────
+// Subtle vertical luminance overlay that goes ON TOP of BlurView
+// inside the same overflow-hidden container.
+const GlassSurface = memo(function GlassSurface({
+  isDark,
+}: {
+  isDark: boolean;
+}) {
+  return (
+    <LinearGradient
+      colors={
+        isDark
+          ? [
+              "rgba(255,255,255,0.06)",
+              "rgba(255,255,255,0.01)",
+              "rgba(0,0,0,0.0)",
+              "rgba(0,0,0,0.06)",
+            ]
+          : [
+              "rgba(255,255,255,0.28)",
+              "rgba(255,255,255,0.06)",
+              "rgba(0,0,0,0.0)",
+              "rgba(0,0,0,0.025)",
+            ]
+      }
+      locations={[0, 0.3, 0.6, 1]}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+      style={StyleSheet.absoluteFillObject}
+      pointerEvents="none"
+    />
+  );
+});
 
 // ─── The mode switch pill (attached to edge) ────────────────────
 const ModeSwitchPill = memo(function ModeSwitchPill({
@@ -82,8 +118,8 @@ const ModeSwitchPill = memo(function ModeSwitchPill({
     : "rgba(255, 255, 255, 0.55)";
 
   const borderColor = isDark
-    ? "rgba(255, 255, 255, 0.08)"
-    : "rgba(0, 0, 0, 0.06)";
+    ? "rgba(255,255,255,0.10)"
+    : "rgba(0,0,0,0.08)";
 
   return (
     <Animated.View
@@ -92,14 +128,14 @@ const ModeSwitchPill = memo(function ModeSwitchPill({
         switchStyles.container,
         radiusStyle,
         {
-          shadowColor: isDark ? "#000" : "#8E8E93",
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: isDark ? 0.4 : 0.15,
-          shadowRadius: 24,
-          elevation: 10,
-          borderWidth: StyleSheet.hairlineWidth,
           borderColor,
+          borderWidth: StyleSheet.hairlineWidth,
           ...(isLeft ? { borderLeftWidth: 0 } : { borderRightWidth: 0 }),
+          shadowColor: isDark ? "#000" : "#8E8E93",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: isDark ? 0.35 : 0.12,
+          shadowRadius: 20,
+          elevation: 10,
         },
       ]}
     >
@@ -299,8 +335,6 @@ const tabItemStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    // No paddingTop — vertical centering is handled by justifyContent
-    // Constrain children so long labels truncate instead of expanding
     overflow: "hidden",
   },
   inner: {
@@ -308,7 +342,7 @@ const tabItemStyles = StyleSheet.create({
     justifyContent: "center",
   },
   iconWrap: {
-    width: ICON_SIZE + 4, // 26px — small breathing room around icon
+    width: ICON_SIZE + 4,
     height: ICON_SIZE + 4,
     alignItems: "center",
     justifyContent: "center",
@@ -319,7 +353,6 @@ const tabItemStyles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 13,
     includeFontPadding: false,
-    // Max width prevents long labels from affecting flex layout
     maxWidth: "90%",
   },
 });
@@ -352,16 +385,16 @@ const SlidingBubble = memo(function SlidingBubble({
   }));
 
   const bubbleBg = isDark
-    ? "rgba(255, 255, 255, 0.08)"
-    : "rgba(0, 0, 0, 0.05)";
-
-  const bubbleBorder = isDark
-    ? "rgba(255, 255, 255, 0.1)"
+    ? "rgba(255, 255, 255, 0.07)"
     : "rgba(0, 0, 0, 0.04)";
 
+  const borderColor = isDark
+    ? "rgba(255,255,255,0.10)"
+    : "rgba(0,0,0,0.05)";
+
   const glowColor = isDark
-    ? `${accentColor}18`
-    : `${accentColor}0C`;
+    ? `${accentColor}15`
+    : `${accentColor}0A`;
 
   if (tabWidth === 0) return null;
 
@@ -384,19 +417,18 @@ const SlidingBubble = memo(function SlidingBubble({
           bubbleStyles.bubble,
           {
             backgroundColor: bubbleBg,
-            borderColor: bubbleBorder,
-            shadowColor: accentColor,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: isDark ? 0.3 : 0.15,
-            shadowRadius: 12,
-            elevation: 0,
+            borderColor,
           },
         ]}
       >
+        {/* Accent glow tint */}
         <View
           style={[
-            bubbleStyles.glowLayer,
-            { backgroundColor: glowColor },
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: glowColor,
+              borderRadius: BUBBLE_BORDER_RADIUS,
+            },
           ]}
         />
       </View>
@@ -411,10 +443,6 @@ const bubbleStyles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
-  glowLayer: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: BUBBLE_BORDER_RADIUS,
-  },
 });
 
 // ─── Liquid Glass Tab Bar ───────────────────────────────────────
@@ -427,14 +455,12 @@ export default function LiquidTabBar({
   const { role } = useRole();
   const isFounder = role === "founder";
 
-  // Measure the tabs container in pixels for precise bubble placement
   const [measuredWidth, setMeasuredWidth] = React.useState(0);
 
   const onTabsLayout = useCallback((e: LayoutChangeEvent) => {
     setMeasuredWidth(e.nativeEvent.layout.width);
   }, []);
 
-  // Filter out hidden routes
   const visibleRoutes = useMemo(
     () =>
       state.routes.filter((route) => {
@@ -446,7 +472,6 @@ export default function LiquidTabBar({
     [state.routes, descriptors]
   );
 
-  // Find the active index within visible routes
   const activeVisibleIndex = useMemo(() => {
     const activeRoute = state.routes[state.index];
     return visibleRoutes.findIndex((r) => r.key === activeRoute.key);
@@ -455,19 +480,13 @@ export default function LiquidTabBar({
   const accentColor = theme.brand.primary || "#FF3B30";
   const inactiveColor = isDark ? "#9CA3AF" : "#6B7280";
 
-  // Glass styling
   const glassBackground = isDark
     ? "rgba(18, 18, 22, 0.65)"
     : "rgba(255, 255, 255, 0.55)";
 
   const borderColor = isDark
-    ? "rgba(255, 255, 255, 0.08)"
-    : "rgba(0, 0, 0, 0.06)";
-
-  // Top edge highlight (light refraction effect)
-  const highlightColor = isDark
-    ? "rgba(255, 255, 255, 0.12)"
-    : "rgba(255, 255, 255, 0.7)";
+    ? "rgba(255,255,255,0.10)"
+    : "rgba(0,0,0,0.08)";
 
   const tabItems = visibleRoutes.map((route, index) => {
     const { options } = descriptors[route.key];
@@ -508,20 +527,18 @@ export default function LiquidTabBar({
   return (
     <View style={barStyles.globalContainer} pointerEvents="box-none">
       <View style={barStyles.row}>
-        {/* Freelancer mode => Mode switch on the Left */}
         {!isFounder && <ModeSwitchPill isLeft={true} />}
 
         <Animated.View
           layout={LinearTransition.duration(200)}
           style={[
-            barStyles.mainTabsWrapper,
+            barStyles.glass,
             {
               borderColor,
-              borderWidth: StyleSheet.hairlineWidth,
               shadowColor: isDark ? "#000" : "#8E8E93",
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: isDark ? 0.45 : 0.18,
-              shadowRadius: 30,
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: isDark ? 0.40 : 0.15,
+              shadowRadius: 24,
               elevation: 12,
               flex: 1,
               marginLeft: !isFounder ? 12 : 16,
@@ -529,7 +546,7 @@ export default function LiquidTabBar({
             },
           ]}
         >
-          {/* Frosted glass background */}
+          {/* Frosted glass */}
           <BlurView
             intensity={Platform.OS === "ios" ? 80 : 100}
             tint={isDark ? "dark" : "light"}
@@ -539,22 +556,15 @@ export default function LiquidTabBar({
             ]}
           />
 
-          {/* Top highlight edge (glass refraction) */}
-          <View
-            style={[
-              barStyles.topHighlight,
-              { backgroundColor: highlightColor },
-            ]}
-          />
+          {/* Luminance gradient for depth */}
+          <GlassSurface isDark={isDark} />
 
-          {/* Content layer — NO horizontal padding so bubble aligns with tabs */}
+          {/* Content */}
           <View style={barStyles.contentLayer}>
-            {/* Tabs row — this is measured for bubble math */}
             <View style={barStyles.tabsSection} onLayout={onTabsLayout}>
               {tabItems}
             </View>
 
-            {/* Animated sliding bubble behind active tab */}
             {activeVisibleIndex >= 0 && measuredWidth > 0 && (
               <SlidingBubble
                 activeIndex={activeVisibleIndex}
@@ -567,7 +577,6 @@ export default function LiquidTabBar({
           </View>
         </Animated.View>
 
-        {/* Founder mode => Mode switch on the Right */}
         {isFounder && <ModeSwitchPill isLeft={false} />}
       </View>
     </View>
@@ -586,19 +595,11 @@ const barStyles = StyleSheet.create({
     alignItems: "center",
     height: BAR_HEIGHT,
   },
-  mainTabsWrapper: {
+  glass: {
     height: BAR_HEIGHT,
-    borderRadius: 40,
+    borderRadius: BAR_RADIUS,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-  },
-  topHighlight: {
-    position: "absolute",
-    top: 0,
-    left: 12,
-    right: 12,
-    height: StyleSheet.hairlineWidth,
-    zIndex: 10,
-    borderRadius: 1,
   },
   contentLayer: {
     flex: 1,
