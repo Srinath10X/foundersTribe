@@ -1,6 +1,8 @@
 import { BsStarsIcon } from "@/components/icons/BsStarsIcon";
+import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
   Platform,
@@ -9,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "@/context/ThemeContext";
 
 export type SubTabItem<T extends string> = {
   key: T;
@@ -33,32 +34,64 @@ export default function SubTabBar<T extends string>({
 }: SubTabBarProps<T>) {
   const { theme } = useTheme();
 
+  const glassBackground = isDark
+    ? "rgba(18, 18, 22, 0.65)"
+    : "rgba(255, 255, 255, 0.55)";
+
+  const borderColor = isDark
+    ? "rgba(255,255,255,0.10)"
+    : "rgba(0,0,0,0.08)";
+
   return (
-    <BlurView
-      intensity={Platform.OS === "ios" ? 90 : 125}
-      tint={isDark ? "dark" : "light"}
+    <View
       style={[
-        styles.bottomBlur,
+        styles.glass,
         {
-          backgroundColor: theme.surface,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 10 },
-          opacity: 0.8,
-          shadowOpacity: 0.15,
-          shadowRadius: 20,
-          elevation: 8,
-          marginBottom: 12,
+          borderColor,
+          shadowColor: isDark ? "#000" : "#8E8E93",
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: isDark ? 0.40 : 0.15,
+          shadowRadius: 24,
+          elevation: 12,
         },
       ]}
     >
-      <View
+      {/* Frosted glass */}
+      <BlurView
+        intensity={Platform.OS === "ios" ? 80 : 100}
+        tint={isDark ? "dark" : "light"}
         style={[
-          styles.container,
-          {
-            backgroundColor: "transparent", // relying on BlurView backgroundColor
-          },
+          StyleSheet.absoluteFillObject,
+          { backgroundColor: glassBackground },
         ]}
-      >
+      />
+
+      {/* Luminance gradient for depth */}
+      <LinearGradient
+        colors={
+          isDark
+            ? [
+                "rgba(255,255,255,0.06)",
+                "rgba(255,255,255,0.01)",
+                "rgba(0,0,0,0.0)",
+                "rgba(0,0,0,0.06)",
+              ]
+            : [
+                "rgba(255,255,255,0.28)",
+                "rgba(255,255,255,0.06)",
+                "rgba(0,0,0,0.0)",
+                "rgba(0,0,0,0.025)",
+              ]
+        }
+        locations={[0, 0.3, 0.6, 1]}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+        pointerEvents="none"
+      />
+
+      {/* Tabs */}
+      <View style={styles.container}>
         {tabs.map((tab) => {
           const isActive = activeKey === tab.key;
           const tintColor = isActive
@@ -68,7 +101,7 @@ export default function SubTabBar<T extends string>({
           return (
             <TouchableOpacity
               key={tab.key}
-              style={[styles.tabButton]}
+              style={styles.tabButton}
               onPress={() => onTabPress(tab.key)}
               activeOpacity={0.88}
             >
@@ -100,40 +133,41 @@ export default function SubTabBar<T extends string>({
           );
         })}
       </View>
-    </BlurView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bottomBlur: {
+  glass: {
     borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-    opacity: 0.9,
-    marginHorizontal: "18%", // 🔥 makes the horizontal width smaller
+    marginHorizontal: "18%",
+    marginBottom: 12,
   },
   container: {
     width: "100%",
-    minHeight: 52, // 🔥 smaller height
+    minHeight: 52,
     borderRadius: 999,
-    paddingHorizontal: 12, // 🔥 smaller padding
+    paddingHorizontal: 12,
     paddingVertical: 2,
     flexDirection: "row",
     alignItems: "center",
   },
   tabButton: {
     flex: 1,
-    minHeight: 40, // 🔥 smaller height
+    minHeight: 40,
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 0, // 🔥 tighter gap
+    gap: 0,
     paddingVertical: 0,
   },
   tabLabel: {
     flexShrink: 1,
     minWidth: 0,
     textAlign: "center",
-    fontSize: 9, // 🔥 slightly smaller font
+    fontSize: 9,
     fontWeight: "600",
     letterSpacing: 0,
   },
