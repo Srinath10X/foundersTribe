@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -261,15 +262,6 @@ export const SearchHeader = memo(function SearchHeader({
             {
               backgroundColor: barBg,
               borderColor: barBorder,
-              shadowColor: isFocused
-                ? isDark
-                  ? "rgba(255,255,255,0.15)"
-                  : "rgba(0,0,0,0.1)"
-                : "transparent",
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: isFocused ? 0.06 : 0,
-              shadowRadius: isFocused ? 12 : 0,
-              elevation: isFocused ? 1 : 0,
             },
           ]}
         >
@@ -284,6 +276,7 @@ export const SearchHeader = memo(function SearchHeader({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             autoFocus
+            underlineColorAndroid="transparent"
           />
           {query.length > 0 ? (
             <Pressable
@@ -317,7 +310,9 @@ export const SearchHeader = memo(function SearchHeader({
 
 const headerStyles = StyleSheet.create({
   container: {
-    // No bottom border — SearchTabs has its own hairline
+    zIndex: 101,
+    elevation: 101,
+    position: "relative",
   },
   row: {
     flexDirection: "row",
@@ -341,6 +336,7 @@ const headerStyles = StyleSheet.create({
     height: 52,
     borderWidth: 1,
     gap: 8,
+    overflow: "hidden",
   },
   input: {
     flex: 1,

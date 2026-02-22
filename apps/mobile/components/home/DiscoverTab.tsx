@@ -4,8 +4,8 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
-import React, { memo, useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { memo, useCallback, useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -17,6 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import Animated, {
   FadeIn,
   useAnimatedStyle,
@@ -92,88 +93,76 @@ const SearchBar = memo(function SearchBar({
 
   return (
     <View style={searchStyles.container}>
-      <Animated.View
-        style={[
-          searchStyles.bar,
-          {
-            backgroundColor: barBg,
-            borderColor: barBorder,
-            shadowColor: isFocused ? (isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.1)") : "transparent",
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: isFocused ? 0.06 : 0,
-            shadowRadius: isFocused ? 12 : 0,
-            elevation: isFocused ? 1 : 0,
-          },
-          animatedContainerStyle,
-        ]}
-      >
-        <View style={searchStyles.iconContainer}>
-          <Ionicons
-            name="search"
-            size={18}
-            color={isFocused ? theme.brand.primary : theme.text.tertiary}
-          />
-        </View>
-
-        <TextInput
+      <Animated.View style={animatedContainerStyle}>
+        <View
           style={[
-            searchStyles.input,
-            { color: theme.text.primary },
+            searchStyles.inputContainer,
+            {
+              backgroundColor: barBg,
+              borderColor: barBorder,
+            },
           ]}
-          placeholder="Search articles..."
-          placeholderTextColor={theme.text.muted}
-          value={query}
-          onChangeText={onChangeQuery}
-          returnKeyType="search"
-          onSubmitEditing={onSubmit}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-        />
-
-        {query.length > 0 ? (
-          <Pressable
-            onPress={onClear}
-            hitSlop={8}
-            style={searchStyles.clearButton}
-          >
-            <View
-              style={[
-                searchStyles.clearIconBg,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.1)"
-                    : "rgba(0,0,0,0.08)",
-                },
-              ]}
-            >
-              <Ionicons
-                name="close"
-                size={12}
-                color={theme.text.tertiary}
-              />
-            </View>
-          </Pressable>
-        ) : (
-          <View
-            style={[
-              searchStyles.aiBadge,
-              {
-                backgroundColor: isDark
-                  ? "rgba(255,59,48,0.12)"
-                  : "rgba(255,59,48,0.08)",
-              },
-            ]}
-          >
+        >
+          <View style={searchStyles.iconContainer}>
             <Ionicons
-              name="sparkles"
-              size={11}
-              color={theme.brand.primary}
+              name="search"
+              size={18}
+              color={isFocused ? theme.brand.primary : theme.text.tertiary}
             />
-            <Text style={[searchStyles.aiText, { color: theme.brand.primary }]}>
-              AI
-            </Text>
           </View>
-        )}
+
+          <TextInput
+            style={[
+              searchStyles.input,
+              { color: theme.text.primary },
+            ]}
+            placeholder="Search articles..."
+            placeholderTextColor={theme.text.muted}
+            value={query}
+            onChangeText={onChangeQuery}
+            returnKeyType="search"
+            onSubmitEditing={onSubmit}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            underlineColorAndroid="transparent"
+          />
+
+          {query.length > 0 ? (
+            <Pressable
+              onPress={onClear}
+              hitSlop={8}
+              style={searchStyles.clearButton}
+            >
+              <View
+                style={[
+                  searchStyles.clearIconBg,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(0,0,0,0.08)",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="close"
+                  size={12}
+                  color={theme.text.tertiary}
+                />
+              </View>
+            </Pressable>
+          ) : (
+            <View style={searchStyles.aiBadge}>
+              <Ionicons
+                name="sparkles"
+                size={11}
+                color={theme.brand.primary}
+              />
+              <Text style={[searchStyles.aiText, { color: theme.brand.primary }]}>
+                AI
+              </Text>
+            </View>
+          )}
+        </View>
       </Animated.View>
     </View>
   );
@@ -183,8 +172,11 @@ const searchStyles = StyleSheet.create({
   container: {
     paddingHorizontal: S.lg,
     marginBottom: S.md,
+    zIndex: 101,
+    elevation: 101,
+    position: "relative",
   },
-  bar: {
+  inputContainer: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 16,
@@ -192,6 +184,7 @@ const searchStyles = StyleSheet.create({
     height: 52,
     borderWidth: 1,
     gap: S.xs,
+    overflow: "hidden",
   },
   iconContainer: {
     width: 24,
@@ -614,6 +607,12 @@ export default function DiscoverTab() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [categories, setCategories] = useState<string[]>([]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setSearchQuery("");
+    }, [])
+  );
+
   useEffect(() => {
     loadRecentSearches();
     fetchCategories();
@@ -645,7 +644,7 @@ export default function DiscoverTab() {
           )
         )
           .sort()
-          .slice(0, 10);
+          .slice(0, 10) as string[];
         setCategories(uniqueCategories);
       }
     } catch (error) {
