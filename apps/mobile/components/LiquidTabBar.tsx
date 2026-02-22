@@ -3,6 +3,7 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import React, { memo, useCallback, useEffect, useMemo } from "react";
 import {
+  type LayoutChangeEvent,
   Platform,
   Pressable,
   StyleSheet,
@@ -24,8 +25,12 @@ import { useTheme } from "@/context/ThemeContext";
 // ─── Layout constants ──────────────────────────────────────────
 export const BAR_HEIGHT = 66;
 export const BAR_BOTTOM = Platform.OS === "ios" ? 28 : 20;
-const BUBBLE_HEIGHT = 42;
-const BUBBLE_BORDER_RADIUS = 21;
+const BAR_VERTICAL_PADDING = 7; // breathing room top/bottom inside bar
+const BUBBLE_HEIGHT = BAR_HEIGHT - BAR_VERTICAL_PADDING * 2; // 52px — fills bar with 7px breathing each side
+const BUBBLE_BORDER_RADIUS = BUBBLE_HEIGHT / 2; // perfect capsule
+const BUBBLE_INSET = 4; // horizontal inset inside each tab cell
+const ICON_SIZE = 22;
+const ICON_LABEL_GAP = 3; // consistent spacing between icon and label
 const SPRING_CONFIG = { damping: 18, stiffness: 200, mass: 0.8 };
 const PRESS_SPRING = { damping: 15, stiffness: 300 };
 
@@ -210,12 +215,12 @@ const TabItem = memo(function TabItem({
   inactiveColor,
 }: TabItemProps) {
   const pressScale = useSharedValue(1);
-  const iconScale = useSharedValue(isFocused ? 1.05 : 1);
-  const textOpacity = useSharedValue(isFocused ? 1 : 0.6);
+  const iconScale = useSharedValue(isFocused ? 1.07 : 1);
+  const textOpacity = useSharedValue(isFocused ? 1 : 0.55);
 
   useEffect(() => {
-    iconScale.value = withSpring(isFocused ? 1.05 : 1, SPRING_CONFIG);
-    textOpacity.value = withTiming(isFocused ? 1 : 0.6, { duration: 200 });
+    iconScale.value = withSpring(isFocused ? 1.07 : 1, SPRING_CONFIG);
+    textOpacity.value = withTiming(isFocused ? 1 : 0.55, { duration: 200 });
   }, [isFocused]);
 
   const animatedIconStyle = useAnimatedStyle(() => ({
@@ -264,12 +269,13 @@ const TabItem = memo(function TabItem({
           {options.tabBarIcon?.({
             focused: isFocused,
             color: tintColor,
-            size: 22,
+            size: ICON_SIZE,
           })}
         </View>
       </Animated.View>
       <Animated.Text
         numberOfLines={1}
+        ellipsizeMode="tail"
         style={[
           tabItemStyles.label,
           animatedTextStyle,
@@ -293,30 +299,35 @@ const tabItemStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-    paddingTop: 2,
+    // No paddingTop — vertical centering is handled by justifyContent
+    // Constrain children so long labels truncate instead of expanding
+    overflow: "hidden",
   },
   inner: {
     alignItems: "center",
     justifyContent: "center",
   },
   iconWrap: {
-    width: 26,
-    height: 26,
+    width: ICON_SIZE + 4, // 26px — small breathing room around icon
+    height: ICON_SIZE + 4,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 2,
+    marginBottom: ICON_LABEL_GAP,
   },
   label: {
     fontSize: 10,
     textAlign: "center",
-    lineHeight: 12,
+    lineHeight: 13,
     includeFontPadding: false,
+    // Max width prevents long labels from affecting flex layout
+    maxWidth: "90%",
   },
 });
 
 // ─── Sliding Bubble Component ───────────────────────────────────
 interface SlidingBubbleProps {
   activeIndex: number;
+  containerWidth: number;
   tabCount: number;
   isDark: boolean;
   accentColor: string;
@@ -324,29 +335,21 @@ interface SlidingBubbleProps {
 
 const SlidingBubble = memo(function SlidingBubble({
   activeIndex,
+  containerWidth,
   tabCount,
   isDark,
   accentColor,
 }: SlidingBubbleProps) {
-  const translateX = useSharedValue(0);
+  const tabWidth = tabCount > 0 ? containerWidth / tabCount : 0;
+  const translateX = useSharedValue(activeIndex * tabWidth);
 
   useEffect(() => {
-    translateX.value = withSpring(activeIndex, SPRING_CONFIG);
-  }, [activeIndex]);
+    translateX.value = withSpring(activeIndex * tabWidth, SPRING_CONFIG);
+  }, [activeIndex, tabWidth]);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    const tabFraction = tabCount > 0 ? 1 / tabCount : 1;
-    const widthPercent = tabFraction * 100;
-    const leftPercent = (translateX.value / tabCount) * 100;
-
-    return {
-      position: "absolute" as const,
-      left: `${leftPercent}%` as any,
-      width: `${widthPercent}%` as any,
-      height: BUBBLE_HEIGHT,
-      top: (BAR_HEIGHT - BUBBLE_HEIGHT) / 2,
-    };
-  });
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   const bubbleBg = isDark
     ? "rgba(255, 255, 255, 0.08)"
@@ -356,13 +359,26 @@ const SlidingBubble = memo(function SlidingBubble({
     ? "rgba(255, 255, 255, 0.1)"
     : "rgba(0, 0, 0, 0.04)";
 
-  // Subtle glow from accent color
   const glowColor = isDark
-    ? `${accentColor}18` // ~10% opacity
-    : `${accentColor}0C`; // ~5% opacity
+    ? `${accentColor}18`
+    : `${accentColor}0C`;
+
+  if (tabWidth === 0) return null;
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View
+      style={[
+        {
+          position: "absolute",
+          left: 0,
+          top: (BAR_HEIGHT - BUBBLE_HEIGHT) / 2,
+          width: tabWidth,
+          height: BUBBLE_HEIGHT,
+          paddingHorizontal: BUBBLE_INSET,
+        },
+        animatedStyle,
+      ]}
+    >
       <View
         style={[
           bubbleStyles.bubble,
@@ -377,7 +393,6 @@ const SlidingBubble = memo(function SlidingBubble({
           },
         ]}
       >
-        {/* Inner subtle glow layer */}
         <View
           style={[
             bubbleStyles.glowLayer,
@@ -392,7 +407,6 @@ const SlidingBubble = memo(function SlidingBubble({
 const bubbleStyles = StyleSheet.create({
   bubble: {
     flex: 1,
-    marginHorizontal: 6,
     borderRadius: BUBBLE_BORDER_RADIUS,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
@@ -412,6 +426,13 @@ export default function LiquidTabBar({
   const { theme, isDark } = useTheme();
   const { role } = useRole();
   const isFounder = role === "founder";
+
+  // Measure the tabs container in pixels for precise bubble placement
+  const [measuredWidth, setMeasuredWidth] = React.useState(0);
+
+  const onTabsLayout = useCallback((e: LayoutChangeEvent) => {
+    setMeasuredWidth(e.nativeEvent.layout.width);
+  }, []);
 
   // Filter out hidden routes
   const visibleRoutes = useMemo(
@@ -526,20 +547,23 @@ export default function LiquidTabBar({
             ]}
           />
 
-          {/* Content layer with bubble + tabs */}
+          {/* Content layer — NO horizontal padding so bubble aligns with tabs */}
           <View style={barStyles.contentLayer}>
+            {/* Tabs row — this is measured for bubble math */}
+            <View style={barStyles.tabsSection} onLayout={onTabsLayout}>
+              {tabItems}
+            </View>
+
             {/* Animated sliding bubble behind active tab */}
-            {activeVisibleIndex >= 0 && (
+            {activeVisibleIndex >= 0 && measuredWidth > 0 && (
               <SlidingBubble
                 activeIndex={activeVisibleIndex}
+                containerWidth={measuredWidth}
                 tabCount={visibleRoutes.length}
                 isDark={isDark}
                 accentColor={accentColor}
               />
             )}
-
-            {/* Tab items */}
-            <View style={barStyles.tabsSection}>{tabItems}</View>
           </View>
         </Animated.View>
 
@@ -578,13 +602,11 @@ const barStyles = StyleSheet.create({
   },
   contentLayer: {
     flex: 1,
-    paddingHorizontal: 4,
   },
   tabsSection: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
     height: "100%",
     zIndex: 10,
   },
