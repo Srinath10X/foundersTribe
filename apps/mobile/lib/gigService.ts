@@ -32,12 +32,52 @@ export interface FreelancerStats {
     earnings_growth_pct?: number;
 }
 
+export interface Contract {
+    id: string;
+    gig_id: string;
+    proposal_id: string;
+    founder_id: string;
+    freelancer_id: string;
+    status: "active" | "completed" | "cancelled" | "disputed";
+    freelancer_marked_complete: boolean;
+    founder_approved: boolean;
+    started_at: string;
+    completed_at: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ContractMessage {
+    id: string;
+    contract_id: string;
+    sender_id: string;
+    recipient_id: string | null;
+    message_type: "text" | "file" | "system";
+    body: string | null;
+    file_url: string | null;
+    metadata: Record<string, unknown> | null;
+    read_at: string | null;
+    created_at: string;
+    updated_at?: string;
+}
+
 export interface GigFilters {
     status?: "draft" | "open" | "in_progress" | "completed" | "cancelled";
     freelancer_id?: string;
     client_id?: string;
     limit?: number;
     offset?: number;
+}
+
+export interface ContractFilters {
+    status?: "active" | "completed" | "cancelled" | "disputed";
+    limit?: number;
+    cursor?: string;
+}
+
+export interface MessageListParams {
+    limit?: number;
+    cursor?: string;
 }
 
 class GigServiceError extends Error {
@@ -192,5 +232,73 @@ export const gigService = {
         await fetchWithAuth<void>(`/api/gigs/${id}`, {
             method: "DELETE",
         });
-    }
+    },
+
+    /**
+     * Fetch contracts for the current authenticated user.
+     */
+    getContracts: async (filters?: ContractFilters): Promise<{ items: Contract[]; next_cursor: string | null }> => {
+        const params = new URLSearchParams();
+        if (filters?.status) params.append("status", filters.status);
+        if (filters?.limit) params.append("limit", filters.limit.toString());
+        if (filters?.cursor) params.append("cursor", filters.cursor);
+        const query = params.toString();
+
+        const response = await fetchWithAuth<any>(`/api/contracts${query ? `?${query}` : ""}`);
+        return {
+            items: response.items || response.data || [],
+            next_cursor: response.next_cursor ?? null,
+        };
+    },
+
+    /**
+     * Fetch contract messages.
+     */
+    getContractMessages: async (
+        contractId: string,
+        params?: MessageListParams,
+    ): Promise<{ items: ContractMessage[]; next_cursor: string | null }> => {
+        const q = new URLSearchParams();
+        if (params?.limit) q.append("limit", params.limit.toString());
+        if (params?.cursor) q.append("cursor", params.cursor);
+        const query = q.toString();
+
+        const response = await fetchWithAuth<any>(
+            `/api/contracts/${contractId}/messages${query ? `?${query}` : ""}`,
+        );
+
+        return {
+            items: response.items || response.data || [],
+            next_cursor: response.next_cursor ?? null,
+        };
+    },
+
+    /**
+     * Send a contract message.
+     */
+    sendContractMessage: async (
+        contractId: string,
+        payload: {
+            recipient_id?: string;
+            message_type: "text" | "file" | "system";
+            body?: string;
+            file_url?: string;
+            metadata?: Record<string, unknown>;
+        },
+    ): Promise<ContractMessage> => {
+        const response = await fetchWithAuth<any>(`/api/contracts/${contractId}/messages`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+        return response.data || response;
+    },
+
+    /**
+     * Mark unread messages as read for a contract.
+     */
+    markContractMessagesRead: async (contractId: string): Promise<void> => {
+        await fetchWithAuth(`/api/contracts/${contractId}/messages/read`, {
+            method: "POST",
+        });
+    },
 };

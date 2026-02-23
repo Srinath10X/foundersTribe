@@ -66,7 +66,7 @@ export function useArticleInteractions(articleId: number) {
           console.log("DEBUG: Local sync received for article", articleId);
           setInteraction((prev) => ({ ...prev, ...payload.updates }));
         }
-      },
+      }
     );
 
     const setupSubscription = async () => {
@@ -89,14 +89,14 @@ export function useArticleInteractions(articleId: number) {
             if (payload.new && payload.new.article_id === articleId) {
               console.log(
                 "REALTIME: Remote update received for article",
-                articleId,
+                articleId
               );
               setInteraction({
                 liked: payload.new.liked,
                 bookmarked: payload.new.bookmarked,
               });
             }
-          },
+          }
         )
         .subscribe();
     };
@@ -114,7 +114,7 @@ export function useArticleInteractions(articleId: number) {
   useFocusEffect(
     useCallback(() => {
       fetchInteraction();
-    }, [fetchInteraction]),
+    }, [fetchInteraction])
   );
 
   const toggleLike = async () => {
@@ -136,22 +136,40 @@ export function useArticleInteractions(articleId: number) {
         updates: { liked: newLiked },
       });
 
-      const { error } = await supabase.from("user_interactions").upsert(
-        {
+      // Check if interaction exists
+      const { data: existing } = await supabase
+        .from("user_interactions")
+        .select("liked") // using any column to check existence
+        .eq("user_id", user.id)
+        .eq("article_id", articleId)
+        .maybeSingle();
+
+      let dbError;
+      if (existing) {
+        const { error } = await supabase
+          .from("user_interactions")
+          .update({
+            liked: newLiked,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id)
+          .eq("article_id", articleId);
+        dbError = error;
+      } else {
+        const { error } = await supabase.from("user_interactions").insert({
           user_id: user.id,
           article_id: articleId,
           liked: newLiked,
           bookmarked: interaction.bookmarked,
           updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id,article_id",
-        },
-      );
+        });
+        dbError = error;
+      }
 
-      if (error) throw error;
-    } catch (error) {
+      if (dbError) throw dbError;
+    } catch (error: any) {
       console.error("Error toggling like:", error);
+      alert(`Could not save like: ${error.message || "Unknown error"}`);
     }
   };
 
@@ -171,20 +189,37 @@ export function useArticleInteractions(articleId: number) {
         updates: { bookmarked: newBookmarked },
       });
 
-      const { error } = await supabase.from("user_interactions").upsert(
-        {
+      // Check if interaction exists
+      const { data: existing } = await supabase
+        .from("user_interactions")
+        .select("bookmarked")
+        .eq("user_id", user.id)
+        .eq("article_id", articleId)
+        .maybeSingle();
+
+      let dbError;
+      if (existing) {
+        const { error } = await supabase
+          .from("user_interactions")
+          .update({
+            bookmarked: newBookmarked,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id)
+          .eq("article_id", articleId);
+        dbError = error;
+      } else {
+        const { error } = await supabase.from("user_interactions").insert({
           user_id: user.id,
           article_id: articleId,
           liked: interaction.liked,
           bookmarked: newBookmarked,
           updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "user_id,article_id",
-        },
-      );
+        });
+        dbError = error;
+      }
 
-      if (error) throw error;
+      if (dbError) throw dbError;
     } catch (error) {
       console.error("Error toggling bookmark:", error);
     }

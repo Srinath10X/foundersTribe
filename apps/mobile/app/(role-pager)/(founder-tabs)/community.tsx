@@ -28,7 +28,7 @@ import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import * as tribeApi from "@/lib/tribeApi";
-import { Typography, Spacing, Layout } from "@/constants/DesignSystem";
+import { Spacing, Layout } from "@/constants/DesignSystem";
 
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 const { width: windowWidth } = Dimensions.get("window");
@@ -135,13 +135,31 @@ export default function CommunityScreen() {
   const handleCreateTribe = async (
     name: string,
     description: string,
-    isPublic: boolean
+    isPublic: boolean,
+    avatarUrl?: string,
+    coverUrl?: string,
   ) => {
-    await tribeApi.createTribe(authToken, {
-      name,
-      description: description || undefined,
-      is_public: isPublic,
-    });
+    try {
+      await tribeApi.createTribe(authToken, {
+        name,
+        description: description || undefined,
+        avatar_url: avatarUrl || undefined,
+        cover_url: coverUrl || undefined,
+        is_public: isPublic,
+      });
+    } catch (e: any) {
+      const msg = String(e?.message || "").toLowerCase();
+      const coverFieldIssue =
+        msg.includes("cover_url") || msg.includes("column") || msg.includes("schema");
+      if (!coverFieldIssue) throw e;
+      // Compatibility fallback for environments without cover_url migrated yet.
+      await tribeApi.createTribe(authToken, {
+        name,
+        description: description || undefined,
+        avatar_url: avatarUrl || undefined,
+        is_public: isPublic,
+      });
+    }
     setShowCreateTribe(false);
   };
 
@@ -387,8 +405,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.05)",
   },
   headerBtnText: {
-    ...Typography.presets.bodySmall,
-    fontWeight: "600",
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: -0.1,
+    fontFamily: "Poppins_600SemiBold",
   },
 
   /* Sub-tabs above bottom tab bar */

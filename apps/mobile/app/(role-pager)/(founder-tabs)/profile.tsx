@@ -29,7 +29,7 @@ const { width } = Dimensions.get("window");
 
 type PreviousWork = { company: string; role: string; duration: string };
 type SocialLink = { platform: string; url: string; label: string };
-type BusinessIdeaItem = { idea: string };
+type BusinessIdeaItem = { idea: string; pitch_url?: string | null };
 const STORAGE_BUCKET = "tribe-media";
 
 type Profile = {
@@ -45,8 +45,9 @@ type Profile = {
   idea_video_url: string | null;
   previous_works: PreviousWork[];
   social_links: SocialLink[];
-  user_type: "founder" | "freelancer" | null;
+  user_type: "founder" | "freelancer" | "both" | null;
   contact?: string | null;
+  address?: string | null;
   location?: string | null;
   role?: string | null;
   rating?: number | null;
@@ -90,7 +91,40 @@ export default function ProfileScreen() {
         try {
           if (!token) return;
           const data = await tribeApi.getMyProfile(token);
-          let resolvedPhotoUrl = data?.photo_url || null;
+          const {
+            data: { user: freshUser },
+          } = await supabase.auth.getUser();
+          const metadataProfile =
+            freshUser?.user_metadata?.profile_data ||
+            session?.user?.user_metadata?.profile_data ||
+            {};
+          const mergedProfile = {
+            ...data,
+            contact: data?.contact ?? metadataProfile?.contact ?? null,
+            address: data?.address ?? metadataProfile?.address ?? null,
+            location: data?.location ?? metadataProfile?.location ?? null,
+            role: data?.role ?? metadataProfile?.role ?? null,
+            linkedin_url: data?.linkedin_url ?? metadataProfile?.linkedin_url ?? null,
+            previous_works:
+              Array.isArray(data?.previous_works) && data.previous_works.length > 0
+                ? data.previous_works
+                : Array.isArray(metadataProfile?.previous_works)
+                  ? metadataProfile.previous_works
+                  : [],
+            social_links:
+              Array.isArray(data?.social_links) && data.social_links.length > 0
+                ? data.social_links
+                : Array.isArray(metadataProfile?.social_links)
+                  ? metadataProfile.social_links
+                  : [],
+            completed_gigs:
+              Array.isArray(data?.completed_gigs) && data.completed_gigs.length > 0
+                ? data.completed_gigs
+                : Array.isArray(metadataProfile?.completed_gigs)
+                  ? metadataProfile.completed_gigs
+                  : [],
+          };
+          let resolvedPhotoUrl = data?.photo_url || data?.avatar_url || null;
           if (
             typeof resolvedPhotoUrl === "string" &&
             resolvedPhotoUrl &&
@@ -126,7 +160,7 @@ export default function ProfileScreen() {
 
           if (!cancelled) {
             setProfile({
-              ...data,
+              ...mergedProfile,
               photo_url: resolvedPhotoUrl,
             });
           }
@@ -366,19 +400,33 @@ export default function ProfileScreen() {
 
   const userName = profile?.display_name || "User";
   const userEmail = session?.user?.email || "";
-  const ideaVideoUrl = profile?.idea_video_url || null;
-  const videoThumbnail = ideaVideoUrl ? getYoutubeThumbnail(ideaVideoUrl) : null;
   const previousWorks: PreviousWork[] = Array.isArray(profile?.previous_works)
     ? profile.previous_works
     : [];
-  const socialLinks: SocialLink[] = (Array.isArray(profile?.social_links) ? profile?.social_links : []).filter(
+  const isPitchVideoLink = (item: SocialLink) =>
+    String(item?.platform || "").toLowerCase() === "pitch_video" ||
+    /^pitch\s*video/i.test(String(item?.label || ""));
+  const allProfileSocialLinks: SocialLink[] = (Array.isArray(profile?.social_links) ? profile?.social_links : []).filter(
     (item) => item && typeof item.url === "string",
+  );
+  const socialLinks: SocialLink[] = allProfileSocialLinks.filter(
+    (item) => item && typeof item.url === "string" && !isPitchVideoLink(item),
+  );
+  const pitchVideoUrls = Array.from(
+    new Set(
+      [
+        typeof profile?.idea_video_url === "string" ? profile.idea_video_url.trim() : "",
+        ...allProfileSocialLinks
+          .filter(isPitchVideoLink)
+          .map((item) => String(item.url || "").trim()),
+      ].filter(Boolean),
+    ),
   );
   const businessIdeas: BusinessIdeaItem[] = (() => {
     if (Array.isArray(profile?.business_ideas)) {
       return profile.business_ideas
         .filter((idea) => typeof idea === "string" && idea.trim().length > 0)
-        .map((idea) => ({ idea }));
+        .map((idea, index) => ({ idea, pitch_url: pitchVideoUrls[index] || null }));
     }
 
     const singleIdea = profile?.business_idea?.trim();
@@ -389,14 +437,27 @@ export default function ProfileScreen() {
       if (Array.isArray(parsed)) {
         return parsed
           .filter((idea) => typeof idea === "string" && idea.trim().length > 0)
-          .map((idea) => ({ idea }));
+          .map((idea, index) => ({ idea, pitch_url: pitchVideoUrls[index] || null }));
       }
     } catch {
       // Keep backward compatibility when this field is plain text.
     }
 
-    return [{ idea: singleIdea }];
+    return [{ idea: singleIdea, pitch_url: pitchVideoUrls[0] || null }];
   })();
+  const completionSignals = [
+    !!profile?.display_name?.trim(),
+    !!profile?.bio?.trim(),
+    !!(profile?.photo_url || profile?.avatar_url),
+    !!profile?.linkedin_url?.trim() || socialLinks.length > 0,
+    businessIdeas.length > 0 || previousWorks.length > 0,
+  ];
+  const completionPct = Math.round(
+    (completionSignals.filter(Boolean).length / completionSignals.length) * 100,
+  );
+  const ringRadius = 58;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringOffset = ringCircumference * (1 - completionPct / 100);
 
   const MenuItem = ({
     icon,
@@ -494,17 +555,26 @@ export default function ProfileScreen() {
         <View style={styles.profileHeaderNew}>
           <View style={styles.avatarContainerNew}>
             <View style={styles.svgWrapperNew}>
-              <Svg width={140} height={140} viewBox="0 0 140 140">
+              <Svg width={136} height={136} viewBox="0 0 136 136">
                 <Circle
-                  cx="70"
-                  cy="70"
-                  r="64"
-                  stroke={theme.text.primary}
-                  strokeWidth="4"
+                  cx="68"
+                  cy="68"
+                  r={ringRadius}
+                  stroke={theme.border}
+                  strokeWidth="6"
+                  fill="none"
+                />
+                <Circle
+                  cx="68"
+                  cy="68"
+                  r={ringRadius}
+                  stroke={theme.brand.primary}
+                  strokeWidth="6"
                   strokeLinecap="round"
                   fill="none"
-                  strokeDasharray="95 38"
-                  strokeDashoffset="15"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={ringOffset}
+                  transform="rotate(-90 68 68)"
                 />
               </Svg>
             </View>
@@ -522,23 +592,43 @@ export default function ProfileScreen() {
               </View>
             )}
 
-            <LinearGradient
-              colors={['#FF4D6D', '#FF7E67']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.completionPillNew}
-            >
-              <Text style={styles.completionTextNew}>
-                20% complete
-              </Text>
-            </LinearGradient>
           </View>
 
           <View style={styles.nameRowNew}>
-            <Text style={[styles.userNameNew, { color: theme.text.primary }]}>
-              {userName}{profile?.user_type === "founder" ? ", 23" : ""}
+            <Text
+              style={[styles.userNameNew, { color: theme.text.primary }]}
+              numberOfLines={1}
+            >
+              {userName}
             </Text>
-            <MaterialIcons name="verified" size={20} color={theme.text.primary} style={{ marginLeft: 6 }} />
+            <MaterialIcons name="verified" size={16} color={theme.brand.primary} style={{ marginLeft: 5 }} />
+          </View>
+          <Text style={[styles.userMetaNew, { color: theme.text.muted }]} numberOfLines={1}>
+            {profile?.username ? `@${profile.username}` : userEmail}
+          </Text>
+
+          <View
+            style={[
+              styles.completionCardNew,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <View style={styles.completionRowNew}>
+              <Text style={[styles.completionTitleNew, { color: theme.text.secondary }]}>
+                Profile Completion
+              </Text>
+              <Text style={[styles.completionValueNew, { color: theme.text.primary }]}>
+                {completionPct}%
+              </Text>
+            </View>
+            <View style={[styles.progressTrackNew, { backgroundColor: theme.border }]}>
+              <View
+                style={[
+                  styles.progressFillNew,
+                  { width: `${completionPct}%`, backgroundColor: theme.brand.primary },
+                ]}
+              />
+            </View>
           </View>
 
           <View style={styles.actionButtonsRowNew}>
@@ -604,264 +694,290 @@ export default function ProfileScreen() {
 
         {/* Content Sections */}
         <View style={styles.sectionsContainer}>
-          {/* About Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-              ABOUT
+              About
             </Text>
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
-              {profile?.bio ? (
-                <View style={styles.cardContent}>
-                  <Text style={[styles.bodyText, { color: theme.text.secondary }]}>
-                    {profile.bio}
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.cardContent}>
-                  <Text style={[styles.emptyText, { color: theme.text.muted }]}>
-                    Add a bio via Edit Profile
-                  </Text>
-                </View>
-              )}
-              {profile?.linkedin_url && (
+            <View
+              style={[
+                styles.premiumCard,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
+              <Text style={[styles.aboutText, { color: theme.text.secondary }]}>
+                {profile?.bio?.trim() || "No bio yet. Add your story in Edit Profile."}
+              </Text>
+              {!!profile?.linkedin_url && (
                 <TouchableOpacity
-                  style={[styles.linkedinRow, { borderTopColor: theme.border }]}
                   onPress={() => openURL(profile.linkedin_url!)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
+                  style={[
+                    styles.minimalLinkRow,
+                    {
+                      borderTopColor: theme.border,
+                      backgroundColor: theme.surfaceElevated,
+                    },
+                  ]}
                 >
-                  <Ionicons name="logo-linkedin" size={20} color="#0A66C2" />
-                  <Text
-                    style={[styles.linkedinText, { color: theme.brand.primary }]}
-                    numberOfLines={1}
-                  >
-                    LinkedIn Profile
+                  <Ionicons name="logo-linkedin" size={16} color="#0A66C2" />
+                  <Text style={[styles.minimalLinkText, { color: theme.text.primary }]}>
+                    LinkedIn
                   </Text>
-                  <Ionicons
-                    name="open-outline"
-                    size={14}
-                    color={theme.text.muted}
-                  />
+                  <Ionicons name="open-outline" size={14} color={theme.text.muted} />
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* Freelancer Specific Section: Details */}
-          {profile?.user_type === "freelancer" && (profile.contact || profile.location || profile.role) && (
+          {(profile?.contact || profile?.address || profile?.location || profile?.role) && (
             <View style={styles.section}>
               <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-                DETAILS
+                Professional Details
               </Text>
-              <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                {profile.role && (
-                  <View style={styles.detailRow}>
-                    <Ionicons name="briefcase-outline" size={18} color={theme.text.tertiary} />
-                    <Text style={[styles.detailText, { color: theme.text.primary }]}>{profile.role}</Text>
+              <View
+                style={[
+                  styles.premiumCard,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                ]}
+              >
+                {!!profile?.contact && (
+                  <View style={[styles.infoRowNew, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.infoLabel, { color: theme.text.muted }]}>Phone</Text>
+                    <Text style={[styles.infoValue, { color: theme.text.primary }]} numberOfLines={1}>
+                      {profile.contact}
+                    </Text>
                   </View>
                 )}
-                {profile.location && (
-                  <View style={styles.detailRow}>
-                    <Ionicons name="location-outline" size={18} color={theme.text.tertiary} />
-                    <Text style={[styles.detailText, { color: theme.text.primary }]}>{profile.location}</Text>
+                {!!profile?.address && (
+                  <View style={[styles.infoRowNew, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.infoLabel, { color: theme.text.muted }]}>Address</Text>
+                    <Text style={[styles.infoValue, { color: theme.text.primary }]} numberOfLines={1}>
+                      {profile.address}
+                    </Text>
                   </View>
                 )}
-                {profile.contact && (
-                  <View style={styles.detailRow}>
-                    <Ionicons name="mail-outline" size={18} color={theme.text.tertiary} />
-                    <Text style={[styles.detailText, { color: theme.text.primary }]}>{profile.contact}</Text>
+                {!!profile?.location && (
+                  <View style={[styles.infoRowNew, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.infoLabel, { color: theme.text.muted }]}>Location</Text>
+                    <Text style={[styles.infoValue, { color: theme.text.primary }]} numberOfLines={1}>
+                      {profile.location}
+                    </Text>
+                  </View>
+                )}
+                {!!profile?.role && (
+                  <View style={styles.infoRowNew}>
+                    <Text style={[styles.infoLabel, { color: theme.text.muted }]}>Role</Text>
+                    <Text style={[styles.infoValue, { color: theme.text.primary }]} numberOfLines={1}>
+                      {profile.role}
+                    </Text>
                   </View>
                 )}
               </View>
             </View>
           )}
 
-          {/* Founder Specific Section: Business Ideas */}
-          {profile?.user_type === "founder" && (
+          {(profile?.user_type === "founder" || profile?.user_type === "both") && (
             <View style={styles.section}>
               <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-                BUSINESS IDEAS
+                Business Ideas
               </Text>
-              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <View
+                style={[
+                  styles.premiumCard,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                ]}
+              >
                 {businessIdeas.length > 0 ? (
-                  <View style={styles.cardContent}>
+                  <View style={styles.ideaSectionWrapNew}>
                     {businessIdeas.map((item, index) => (
                       <View
                         key={index}
                         style={[
-                          styles.experienceItem,
-                          index < businessIdeas.length - 1 && {
-                            borderBottomWidth: 1,
-                            borderBottomColor: theme.border,
+                          styles.ideaCardShellNew,
+                          {
+                            backgroundColor: theme.surfaceElevated,
+                            borderColor: theme.border,
                           },
                         ]}
                       >
-                        <View
-                          style={[
-                            styles.experienceDot,
-                            { backgroundColor: theme.text.primary },
-                          ]}
-                        />
-                        <Text style={[styles.bodyText, { color: theme.text.secondary, flex: 1 }]}>
+                        <View style={styles.ideaCardTopRowNew}>
+                          <View
+                            style={[
+                              styles.ideaIndexNew,
+                              { backgroundColor: theme.background, borderColor: theme.border },
+                            ]}
+                          >
+                            <Text style={[styles.ideaIndexTextNew, { color: theme.text.muted }]}>
+                              #{String(index + 1).padStart(2, "0")}
+                            </Text>
+                          </View>
+                          <Text style={[styles.ideaTagNew, { color: theme.text.muted }]}>
+                            Business Idea
+                          </Text>
+                        </View>
+                        <Text style={[styles.ideaBodyStrongNew, { color: theme.text.primary }]}>
                           {item.idea}
                         </Text>
+                        {!!item.pitch_url && (
+                          <TouchableOpacity
+                            style={[
+                              styles.ideaPitchLinkRowNew,
+                              {
+                                borderTopColor: theme.border,
+                              },
+                            ]}
+                            onPress={() => openURL(item.pitch_url!)}
+                            activeOpacity={0.75}
+                          >
+                            <View
+                              style={[
+                                styles.ideaPitchPillNew,
+                                {
+                                  backgroundColor: theme.surfaceElevated,
+                                  borderColor: theme.border,
+                                },
+                              ]}
+                            >
+                              <Ionicons name="play-circle" size={14} color={theme.brand.primary} />
+                              <Text style={[styles.ideaPitchLinkTextNew, { color: theme.brand.primary }]}>
+                                Pitch Video
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     ))}
                   </View>
                 ) : (
-                  <View style={styles.cardContent}>
-                    <Text style={[styles.emptyText, { color: theme.text.muted }]}>
-                      Share your business ideas via Edit Profile
+                  <View style={styles.ideaEmptyWrapNew}>
+                    <Text style={[styles.ideaEmptyTitleNew, { color: theme.text.primary }]}>
+                      No ideas yet
+                    </Text>
+                    <Text style={[styles.ideaEmptySubNew, { color: theme.text.muted }]}>
+                      Add your first business idea from Edit Profile.
                     </Text>
                   </View>
                 )}
-                {ideaVideoUrl && (
-                  <TouchableOpacity
-                    style={[styles.videoRow, { borderTopColor: theme.border }]}
-                    onPress={() => openURL(ideaVideoUrl)}
-                    activeOpacity={0.7}
-                  >
-                    {videoThumbnail ? (
-                      <Image
-                        source={{ uri: videoThumbnail }}
-                        style={styles.videoThumb}
-                      />
-                    ) : (
-                      <View
-                        style={[
-                          styles.videoThumb,
-                          { backgroundColor: theme.surfaceElevated, justifyContent: "center", alignItems: "center" },
-                        ]}
-                      >
-                        <Ionicons name="play-circle" size={24} color={theme.text.muted} />
-                      </View>
-                    )}
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={[styles.videoLabel, { color: theme.text.primary }]}>
-                        Pitch Video
-                      </Text>
-                      <Text style={[styles.videoUrl, { color: theme.text.muted }]} numberOfLines={1}>
-                        {ideaVideoUrl}
-                      </Text>
-                    </View>
-                    <Ionicons
-                      name="open-outline"
-                      size={14}
-                      color={theme.text.muted}
-                    />
-                  </TouchableOpacity>
-                )}
               </View>
             </View>
           )}
 
-          {/* Freelancer Specific Section: Completed Gigs */}
-          {profile?.user_type === "freelancer" && Array.isArray(profile.completed_gigs) && profile.completed_gigs.length > 0 && (
-            <View style={styles.section}>
-              <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-                COMPLETED GIGS
-              </Text>
-              <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                {profile.completed_gigs.map((gig, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.experienceItem,
-                      index < (profile.completed_gigs?.length || 0) - 1 && {
-                        borderBottomWidth: 1,
-                        borderBottomColor: theme.border,
-                      },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.experienceDot,
-                        { backgroundColor: "#10B981" },
-                      ]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.experienceRole, { color: theme.text.primary }]}>
-                        {gig.title}
-                      </Text>
-                      <Text style={[styles.experienceCompany, { color: theme.text.secondary }]}>
-                        {gig.description}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Experience Section */}
           {previousWorks.length > 0 && (
             <View style={styles.section}>
               <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-                EXPERIENCE
+                Experience
               </Text>
-              <View style={[styles.card, { backgroundColor: theme.surface }]}>
-                {previousWorks.map((work, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.experienceItem,
-                      index < previousWorks.length - 1 && {
-                        borderBottomWidth: 1,
-                        borderBottomColor: theme.border,
-                      },
-                    ]}
-                  >
+              <View
+                style={[
+                  styles.premiumCard,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                ]}
+              >
+                <View style={{ padding: 12, gap: 10 }}>
+                  {previousWorks.map((work, index) => (
                     <View
+                      key={index}
                       style={[
-                        styles.experienceDot,
-                        { backgroundColor: theme.text.primary },
+                        styles.experienceCardNew,
+                        {
+                          backgroundColor: theme.surfaceElevated,
+                          borderColor: theme.border,
+                        },
                       ]}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        style={[styles.experienceRole, { color: theme.text.primary }]}
-                      >
-                        {work.role}
-                      </Text>
-                      <Text
-                        style={[styles.experienceCompany, { color: theme.text.secondary }]}
-                      >
-                        {work.company}
-                      </Text>
-                      <Text
-                        style={[styles.experienceDuration, { color: theme.text.muted }]}
-                      >
-                        {work.duration}
+                    >
+                      <View style={styles.experienceHeaderRowNew}>
+                        <Text style={[styles.experienceRoleNew, { color: theme.text.primary }]} numberOfLines={1}>
+                          {work.role || "Role"}
+                        </Text>
+                        {!!work.duration && (
+                          <View
+                            style={[
+                              styles.experienceDurationPillNew,
+                              { backgroundColor: theme.background, borderColor: theme.border },
+                            ]}
+                          >
+                            <Text style={[styles.experienceDurationTextNew, { color: theme.text.muted }]}>
+                              {work.duration}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.experienceCompanyNew, { color: theme.text.secondary }]} numberOfLines={1}>
+                        {work.company || "Company"}
                       </Text>
                     </View>
-                  </View>
-                ))}
+                  ))}
+                </View>
               </View>
             </View>
           )}
 
-          {/* Social Links Section */}
+          {(profile?.user_type === "freelancer" || profile?.user_type === "both") &&
+            Array.isArray(profile.completed_gigs) &&
+            profile.completed_gigs.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
+                  Completed Gigs
+                </Text>
+                <View
+                  style={[
+                    styles.premiumCard,
+                    { backgroundColor: theme.surface, borderColor: theme.border },
+                  ]}
+                >
+                  {profile.completed_gigs.map((gig, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.timelineRowNew,
+                        index < (profile.completed_gigs?.length || 0) - 1 && {
+                          borderBottomWidth: 1,
+                          borderBottomColor: theme.border,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.timelineDotNew, { backgroundColor: "#10B981" }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.timelineTitleNew, { color: theme.text.primary }]}>
+                          {gig.title}
+                        </Text>
+                        <Text style={[styles.timelineSubNew, { color: theme.text.secondary }]}>
+                          {gig.description}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
           {socialLinks.length > 0 && (
             <View style={styles.section}>
               <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-                SOCIAL LINKS
+                Connect
               </Text>
-              <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <View
+                style={[
+                  styles.premiumCard,
+                  { backgroundColor: theme.surface, borderColor: theme.border },
+                ]}
+              >
                 {socialLinks.map((link, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[
-                      styles.socialItem,
+                      styles.socialMinimalRow,
                       index < socialLinks.length - 1 && {
                         borderBottomWidth: 1,
                         borderBottomColor: theme.border,
                       },
                     ]}
                     onPress={() => openURL(link.url)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.75}
                   >
                     <View
                       style={[
-                        styles.socialIconWrap,
+                        styles.socialMinimalIcon,
                         { backgroundColor: theme.surfaceElevated },
                       ]}
                     >
@@ -870,129 +986,146 @@ export default function ProfileScreen() {
                           (PLATFORM_ICONS[String(link.platform || "").toLowerCase()] ||
                             "link-outline") as any
                         }
-                        size={18}
+                        size={16}
                         color={theme.text.primary}
                       />
                     </View>
-                    <Text
-                      style={[styles.socialLabel, { color: theme.text.primary }]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.socialMinimalLabel, { color: theme.text.primary }]} numberOfLines={1}>
                       {link.label || link.platform}
                     </Text>
-                    <Ionicons
-                      name="open-outline"
-                      size={14}
-                      color={theme.text.muted}
-                    />
+                    <Ionicons name="open-outline" size={14} color={theme.text.muted} />
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
           )}
 
-          {/* Settings Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-              PERSONALIZATION
+              Preferences
             </Text>
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
-              <MenuItem
-                icon="heart"
-                title="Edit Interests"
-                subtitle="Customize your news feed"
+            <View
+              style={[
+                styles.premiumCard,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
+              <TouchableOpacity
+                style={[styles.actionMinimalRow, { borderBottomColor: theme.border }]}
                 onPress={handleEditInterests}
-              />
-              <MenuItem
-                icon="notifications"
-                title="Notifications"
-                subtitle="Manage your alerts"
-                onPress={() => triggerHaptic()}
-              />
-            </View>
-          </View>
+                activeOpacity={0.75}
+              >
+                <View>
+                  <Text style={[styles.actionMinimalTitle, { color: theme.text.primary }]}>
+                    Edit Interests
+                  </Text>
+                  <Text style={[styles.actionMinimalSub, { color: theme.text.muted }]}>
+                    Tune what appears in your feed
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
 
-          {/* Appearance Section */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-              APPEARANCE
-            </Text>
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
-              <MenuItem
-                icon="moon"
-                title="Theme"
-                subtitle={themeMode === "light" ? "Light Mode" : "Dark Mode"}
-                showChevron={false}
-                rightElement={
-                  <View
+              <View style={styles.actionMinimalRow}>
+                <View>
+                  <Text style={[styles.actionMinimalTitle, { color: theme.text.primary }]}>
+                    Theme
+                  </Text>
+                  <Text style={[styles.actionMinimalSub, { color: theme.text.muted }]}>
+                    {themeMode === "light" ? "Light mode" : "Dark mode"}
+                  </Text>
+                </View>
+                <View style={[styles.themeToggle, { backgroundColor: theme.border }]}>
+                  <TouchableOpacity
                     style={[
-                      styles.themeToggle,
-                      { backgroundColor: theme.border },
+                      styles.themePill,
+                      themeMode === "light" && {
+                        backgroundColor: theme.brand.primary,
+                      },
                     ]}
+                    onPress={() => {
+                      triggerHaptic();
+                      setThemeMode("light");
+                    }}
                   >
-                    <TouchableOpacity
-                      style={[
-                        styles.themePill,
-                        themeMode === "light" && {
-                          backgroundColor: theme.brand.primary,
-                        },
-                      ]}
-                      onPress={() => {
-                        triggerHaptic();
-                        setThemeMode("light");
-                      }}
-                    >
-                      <Ionicons
-                        name="sunny-outline"
-                        size={14}
-                        color={
-                          themeMode === "light"
-                            ? theme.text.inverse
-                            : theme.text.tertiary
-                        }
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.themePill,
-                        themeMode === "dark" && {
-                          backgroundColor: theme.brand.primary,
-                        },
-                      ]}
-                      onPress={() => {
-                        triggerHaptic();
-                        setThemeMode("dark");
-                      }}
-                    >
-                      <Ionicons
-                        name="moon"
-                        size={14}
-                        color={
-                          themeMode === "dark"
-                            ? theme.text.inverse
-                            : theme.text.tertiary
-                        }
-                      />
-                    </TouchableOpacity>
-                  </View>
-                }
-              />
+                    <Ionicons
+                      name="sunny-outline"
+                      size={14}
+                      color={
+                        themeMode === "light"
+                          ? theme.text.inverse
+                          : theme.text.tertiary
+                      }
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.themePill,
+                      themeMode === "dark" && {
+                        backgroundColor: theme.brand.primary,
+                      },
+                    ]}
+                    onPress={() => {
+                      triggerHaptic();
+                      setThemeMode("dark");
+                    }}
+                  >
+                    <Ionicons
+                      name="moon"
+                      size={14}
+                      color={
+                        themeMode === "dark"
+                          ? theme.text.inverse
+                          : theme.text.tertiary
+                      }
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </View>
 
-          {/* Account Section */}
           <View style={styles.section}>
             <Text style={[styles.sectionHeader, { color: theme.text.muted }]}>
-              ACCOUNT
+              Account
             </Text>
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
-              <MenuItem
-                icon="log-out"
-                title="Logout"
-                subtitle="Sign out of your account"
+            <View
+              style={[
+                styles.premiumCard,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
+              <TouchableOpacity
+                style={[styles.actionMinimalRow, { borderBottomColor: theme.border }]}
+                onPress={handleEditProfile}
+                activeOpacity={0.75}
+              >
+                <View>
+                  <Text style={[styles.actionMinimalTitle, { color: theme.text.primary }]}>
+                    Edit Profile
+                  </Text>
+                  <Text style={[styles.actionMinimalSub, { color: theme.text.muted }]}>
+                    Update your identity and details
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionMinimalRow}
                 onPress={handleLogout}
-                accentColor="#FF3B30"
-              />
+                activeOpacity={0.75}
+              >
+                <View>
+                  <Text style={[styles.actionMinimalTitle, { color: "#FF4D4F" }]}>
+                    Logout
+                  </Text>
+                  <Text style={[styles.actionMinimalSub, { color: theme.text.muted }]}>
+                    Sign out from this device
+                  </Text>
+                </View>
+                <Ionicons name="log-out-outline" size={16} color="#FF4D4F" />
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1000,7 +1133,7 @@ export default function ProfileScreen() {
         {/* App Footer */}
         <View style={styles.footer}>
           <Text style={[styles.footerVersion, { color: theme.text.muted }]}>
-            dayStart.ai V1.0
+            foundersTribe
           </Text>
         </View>
       </ScrollView>
@@ -1079,17 +1212,264 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   sectionsContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
   },
   section: {
-    marginBottom: 28,
+    marginBottom: 18,
   },
   sectionHeader: {
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+    letterSpacing: 0.2,
+    marginBottom: 10,
+    marginLeft: 2,
+  },
+  premiumCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  aboutText: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: Typography.fonts.primary,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  minimalLinkRow: {
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  minimalLinkText: {
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+    flex: 1,
+  },
+  infoRowNew: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  infoLabel: {
     fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 1.5,
-    marginBottom: 12,
-    marginLeft: 4,
+    fontFamily: Typography.fonts.primary,
+    width: 72,
+  },
+  infoValue: {
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+    flex: 1,
+  },
+  minimalListRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  minimalListIndex: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  minimalListIndexText: {
+    fontSize: 11,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  minimalListBody: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    fontFamily: Typography.fonts.primary,
+  },
+  ideaSectionWrapNew: {
+    padding: 12,
+    gap: 10,
+  },
+  ideaCardShellNew: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  ideaCardTopRowNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  ideaIndexNew: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  ideaIndexTextNew: {
+    fontSize: 10,
+    letterSpacing: 0.4,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  ideaTagNew: {
+    fontSize: 11,
+    fontFamily: Typography.fonts.primary,
+  },
+  ideaBodyStrongNew: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  pitchRowNew: {
+    marginTop: 2,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  ideaPitchLinkRowNew: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    paddingTop: 8,
+    paddingHorizontal: 2,
+  },
+  ideaPitchPillNew: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  ideaPitchLinkTextNew: {
+    fontSize: 11,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  ideaEmptyWrapNew: {
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+  },
+  ideaEmptyTitleNew: {
+    fontSize: 14,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+    marginBottom: 3,
+  },
+  ideaEmptySubNew: {
+    fontSize: 12,
+    fontFamily: Typography.fonts.primary,
+  },
+  timelineRowNew: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  timelineDotNew: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginTop: 7,
+  },
+  timelineTitleNew: {
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  timelineSubNew: {
+    fontSize: 12,
+    marginTop: 2,
+    fontFamily: Typography.fonts.primary,
+  },
+  timelineMetaNew: {
+    fontSize: 11,
+    marginTop: 4,
+    fontFamily: Typography.fonts.primary,
+  },
+  experienceCardNew: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  experienceHeaderRowNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 4,
+  },
+  experienceRoleNew: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  experienceDurationPillNew: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  experienceDurationTextNew: {
+    fontSize: 10,
+    fontFamily: Typography.fonts.primary,
+  },
+  experienceCompanyNew: {
+    fontSize: 12,
+    fontFamily: Typography.fonts.primary,
+  },
+  socialMinimalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  socialMinimalIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socialMinimalLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  actionMinimalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  actionMinimalTitle: {
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  actionMinimalSub: {
+    fontSize: 11,
+    marginTop: 2,
+    fontFamily: Typography.fonts.primary,
   },
   card: {
     borderRadius: 16,
@@ -1266,16 +1646,16 @@ const styles = StyleSheet.create({
   },
   profileHeaderNew: {
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 24,
+    paddingTop: 6,
+    paddingBottom: 20,
   },
   avatarContainerNew: {
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    width: 140,
-    height: 140,
-    marginBottom: 24,
+    width: 136,
+    height: 136,
+    marginBottom: 14,
   },
   svgWrapperNew: {
     position: 'absolute',
@@ -1287,49 +1667,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarNew: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarInitialNew: {
-    fontSize: 40,
+    fontSize: 34,
     fontFamily: Typography.fonts.primary,
-  },
-  completionPillNew: {
-    position: 'absolute',
-    bottom: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    shadowColor: '#FF4D6D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  completionTextNew: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '700',
   },
   nameRowNew: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 4,
+    maxWidth: "84%",
   },
   userNameNew: {
-    fontSize: 26,
-    fontFamily: Typography.fonts.primary,
+    fontSize: 20,
+    fontFamily: "BricolageGrotesque_600SemiBold",
     fontWeight: '600',
+  },
+  userMetaNew: {
+    fontSize: 12,
+    marginBottom: 12,
+    fontFamily: Typography.fonts.primary,
+  },
+  completionCardNew: {
+    width: "86%",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  completionRowNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  completionTitleNew: {
+    fontSize: 12,
+    fontFamily: Typography.fonts.primary,
+  },
+  completionValueNew: {
+    fontSize: 13,
+    fontFamily: "BricolageGrotesque_600SemiBold",
+  },
+  progressTrackNew: {
+    height: 6,
+    borderRadius: 999,
+    overflow: "hidden",
+  },
+  progressFillNew: {
+    height: "100%",
+    borderRadius: 999,
   },
   actionButtonsRowNew: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'center',
-    gap: 28,
-    marginBottom: 16,
+    gap: 24,
+    marginBottom: 10,
     width: '100%',
   },
   actionButtonContainerNew: {
@@ -1338,23 +1743,23 @@ const styles = StyleSheet.create({
     width: 80,
   },
   actionButtonSmNew: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   actionButtonLgNew: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   actionButtonTextNew: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
   },

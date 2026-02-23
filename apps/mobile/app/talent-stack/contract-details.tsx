@@ -41,7 +41,7 @@ export default function TalentContractDetails() {
           ))}
         </SurfaceCard>
 
-        <PrimaryButton label="Open Chat" icon="chatbubble-ellipses" onPress={() => nav.push("/talent-stack/chat-thread")} />
+        <PrimaryButton label="Open Chat" icon="chatbubble-ellipses" onPress={() => nav.push("/talent-stack/chat-thread?title=Alex%20Rivers")} />
       </View>
     </FlowScreen>
   );

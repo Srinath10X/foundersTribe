@@ -57,7 +57,7 @@ export default function ContractDetailsScreen() {
       </SurfaceCard>
 
       <View style={styles.ctaWrap}>
-        <PrimaryButton label="Open Chat" icon="chatbubble-ellipses-outline" onPress={() => nav.push("/freelancer-stack/contract-chat-thread")} />
+        <PrimaryButton label="Open Chat" icon="chatbubble-ellipses-outline" onPress={() => nav.push("/freelancer-stack/contract-chat-thread?title=Priya%20Sharma%20%E2%80%A2%20Contract%20Chat")} />
       </View>
     </FlowScreen>
   );

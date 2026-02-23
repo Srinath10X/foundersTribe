@@ -218,11 +218,6 @@ function RootLayoutNav() {
         <Stack.Screen name="talent-stack" />
 
         {/* Other screens */}
-        <Stack.Screen name="article" />
-        <Stack.Screen name="article_copy" />
-        <Stack.Screen name="room" />
-        <Stack.Screen name="tribe" />
-        <Stack.Screen name="search" />
         <Stack.Screen name="edit-profile" />
         <Stack.Screen name="edit-interests" />
         <Stack.Screen

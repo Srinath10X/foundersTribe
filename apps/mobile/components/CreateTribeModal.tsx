@@ -4,15 +4,20 @@ import {
   View,
   Text,
   TextInput,
+  Image,
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Switch,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 import { Typography, Spacing, Layout } from "../constants/DesignSystem";
 
 interface Props {
@@ -22,15 +27,24 @@ interface Props {
     name: string,
     description: string,
     isPublic: boolean,
+    avatarUrl?: string,
+    coverUrl?: string,
   ) => Promise<void>;
 }
 
 export default function CreateTribeModal({ visible, onClose, onCreate }: Props) {
   const { theme } = useTheme();
+  const { session } = useAuth();
+  const userId = session?.user?.id || "";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(true);
+  const [avatarPath, setAvatarPath] = useState("");
+  const [coverPath, setCoverPath] = useState("");
+  const [avatarPreview, setAvatarPreview] = useState("");
+  const [coverPreview, setCoverPreview] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState<"" | "avatar" | "cover">("");
   const [error, setError] = useState("");
 
   const handleCreate = async () => {
@@ -38,15 +52,79 @@ export default function CreateTribeModal({ visible, onClose, onCreate }: Props) 
     setLoading(true);
     setError("");
     try {
-      await onCreate(name.trim(), description.trim(), isPublic);
+      await onCreate(
+        name.trim(),
+        description.trim(),
+        isPublic,
+        avatarPath || undefined,
+        coverPath || undefined,
+      );
       setName("");
       setDescription("");
       setIsPublic(true);
+      setAvatarPath("");
+      setCoverPath("");
+      setAvatarPreview("");
+      setCoverPreview("");
       onClose();
     } catch (e: any) {
       setError(e.message || "Failed to create tribe");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const pickImageAndUpload = async (target: "avatar" | "cover") => {
+    if (!userId) {
+      Alert.alert("Error", "Please login again.");
+      return;
+    }
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Photo library access is required.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: target === "cover" ? [16, 9] : [1, 1],
+      quality: 0.75,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const localUri = result.assets[0].uri;
+    setUploading(target);
+    try {
+      const ext = localUri.split(".").pop()?.toLowerCase() || "jpg";
+      const contentType = `image/${ext === "jpg" ? "jpeg" : ext}`;
+      const filePath = `tribes/${userId}/drafts/${target}-${Date.now()}.${ext}`;
+
+      const response = await fetch(localUri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      const { error: uploadError } = await supabase.storage
+        .from("tribe-media")
+        .upload(filePath, arrayBuffer, { contentType, upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { data, error: signError } = await supabase.storage
+        .from("tribe-media")
+        .createSignedUrl(filePath, 60 * 60 * 24 * 30);
+      const signed = !signError && data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : "";
+
+      if (target === "avatar") {
+        setAvatarPath(filePath);
+        setAvatarPreview(signed);
+      } else {
+        setCoverPath(filePath);
+        setCoverPreview(signed);
+      }
+    } catch (e: any) {
+      Alert.alert("Upload failed", e?.message || "Could not upload image");
+    } finally {
+      setUploading("");
     }
   };
 
@@ -127,6 +205,44 @@ export default function CreateTribeModal({ visible, onClose, onCreate }: Props) 
             numberOfLines={3}
             maxLength={1000}
           />
+
+          <Text style={[styles.label, { color: theme.text.secondary }]}>
+            Tribe photo
+          </Text>
+          <TouchableOpacity
+            style={[styles.mediaPicker, { borderColor: theme.border, backgroundColor: theme.background }]}
+            onPress={() => pickImageAndUpload("avatar")}
+            activeOpacity={0.85}
+            disabled={uploading === "avatar"}
+          >
+            {avatarPreview ? (
+              <Image source={{ uri: avatarPreview }} style={styles.avatarPreview} />
+            ) : (
+              <Ionicons name="image-outline" size={20} color={theme.text.muted} />
+            )}
+            <Text style={[styles.mediaText, { color: theme.text.primary }]}>
+              {uploading === "avatar" ? "Uploading..." : "Upload tribe photo"}
+            </Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.label, { color: theme.text.secondary }]}>
+            Background photo
+          </Text>
+          <TouchableOpacity
+            style={[styles.mediaPicker, { borderColor: theme.border, backgroundColor: theme.background }]}
+            onPress={() => pickImageAndUpload("cover")}
+            activeOpacity={0.85}
+            disabled={uploading === "cover"}
+          >
+            {coverPreview ? (
+              <Image source={{ uri: coverPreview }} style={styles.coverPreview} />
+            ) : (
+              <Ionicons name="images-outline" size={20} color={theme.text.muted} />
+            )}
+            <Text style={[styles.mediaText, { color: theme.text.primary }]}>
+              {uploading === "cover" ? "Uploading..." : "Upload background photo"}
+            </Text>
+          </TouchableOpacity>
 
           {/* Public toggle */}
           <View style={styles.toggleRow}>
@@ -219,6 +335,29 @@ const styles = StyleSheet.create({
     borderRadius: Layout.radius.md,
     padding: Spacing.sm,
     ...Typography.presets.body,
+  },
+  mediaPicker: {
+    borderWidth: 1,
+    borderRadius: Layout.radius.md,
+    padding: Spacing.sm,
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  mediaText: {
+    ...Typography.presets.bodySmall,
+    fontFamily: "Poppins_500Medium",
+  },
+  avatarPreview: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  coverPreview: {
+    width: 52,
+    height: 34,
+    borderRadius: 8,
   },
   multiline: { minHeight: 80, textAlignVertical: "top" },
   toggleRow: {

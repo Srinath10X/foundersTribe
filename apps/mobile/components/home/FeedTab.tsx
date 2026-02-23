@@ -111,6 +111,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
       }
 
       const data = await response.json();
+      console.log("Fetched personalized articles data:", data);
       return data || [];
     } catch (error) {
       console.error("Error fetching articles:", error);
@@ -152,6 +153,13 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
   const onScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+
+      // iOS workaround: detect manual pull-down when snapToInterval is active
+      if (Platform.OS === "ios" && contentOffset.y < -80 && !refreshing) {
+        handleRefresh();
+        return;
+      }
+
       const distanceFromEnd =
         contentSize.height - layoutMeasurement.height - contentOffset.y;
       // When within 2 reel heights of the end, load more
@@ -159,7 +167,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
         loadNextPage();
       }
     },
-    [loadNextPage]
+    [loadNextPage, handleRefresh, refreshing]
   );
 
   const renderItem = ({ item }: { item: Article; index: number }) => (
@@ -267,7 +275,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
-        snapToInterval={REEL_HEIGHT}
+        snapToInterval={refreshing ? undefined : REEL_HEIGHT}
         snapToAlignment="start"
         decelerationRate="fast"
         onMomentumScrollEnd={onScrollEnd}

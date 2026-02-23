@@ -11,14 +11,16 @@ import {
   Alert,
   TextInput,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import TribeCard from "../TribeCard";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
-import { Typography, Spacing, Layout } from "../../constants/DesignSystem";
+import { Spacing } from "../../constants/DesignSystem";
 import * as tribeApi from "../../lib/tribeApi";
+import { supabase } from "../../lib/supabase";
 
 type TabMode = "my" | "explore";
 
@@ -35,6 +37,7 @@ export default function TribesTab({
   const { theme } = useTheme();
   const { session } = useAuth();
   const token = session?.access_token || "";
+  const userId = session?.user?.id || "";
 
   const [internalActiveTab, setInternalActiveTab] =
     useState<TabMode>("explore");
@@ -48,6 +51,8 @@ export default function TribesTab({
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncInFlightRef = useRef(false);
+  const tribesCacheKey = `tribes:tab-cache:v1:${userId || "anon"}`;
   const activeTab = mode ?? internalActiveTab;
 
   const setActiveTab = (tab: TabMode) => {
@@ -62,6 +67,8 @@ export default function TribesTab({
 
   const loadTribes = useCallback(async () => {
     if (!token) return;
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
     try {
       const [my, pub] = await Promise.all([
         tribeApi.getMyTribes(token),
@@ -71,13 +78,104 @@ export default function TribesTab({
       setPublicTribes(Array.isArray(pub) ? pub : []);
     } catch (e: any) {
       console.error("Failed to load tribes:", e.message);
+    } finally {
+      syncInFlightRef.current = false;
     }
   }, [token]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(tribesCacheKey);
+        if (!cached) return;
+        const parsed = JSON.parse(cached);
+        if (cancelled) return;
+        if (Array.isArray(parsed?.myTribes)) setMyTribes(parsed.myTribes);
+        if (Array.isArray(parsed?.publicTribes)) setPublicTribes(parsed.publicTribes);
+        setLoading(false);
+      } catch {
+        // ignore cache failures
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tribesCacheKey, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        await AsyncStorage.setItem(
+          tribesCacheKey,
+          JSON.stringify({
+            myTribes,
+            publicTribes,
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+      } catch {
+        // ignore cache failures
+      }
+    })();
+  }, [myTribes, publicTribes, tribesCacheKey, userId]);
 
   useEffect(() => {
     setLoading(true);
     loadTribes().finally(() => setLoading(false));
   }, [loadTribes]);
+
+  // Keep tabs synced while user navigates around the app.
+  useFocusEffect(
+    useCallback(() => {
+      loadTribes();
+    }, [loadTribes]),
+  );
+
+  // Near-realtime refresh so my/explore stays current.
+  useEffect(() => {
+    if (!token) return;
+    const id = setInterval(() => {
+      loadTribes();
+    }, 10000);
+    return () => clearInterval(id);
+  }, [loadTribes, token]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`tribes-realtime:${userId}:${Date.now()}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tribe_members",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          loadTribes();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tribes",
+        },
+        () => {
+          loadTribes();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadTribes, userId]);
 
   useEffect(() => {
     return () => {
@@ -90,6 +188,18 @@ export default function TribesTab({
     setSearchResults(null);
     setSearching(false);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "my") return;
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return;
+    const localMatches = myTribes.filter((tribe) => {
+      const name = String(tribe?.name ?? "").toLowerCase();
+      const description = String(tribe?.description ?? "").toLowerCase();
+      return name.includes(query) || description.includes(query);
+    });
+    setSearchResults(localMatches);
+  }, [activeTab, myTribes, searchQuery]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -147,7 +257,17 @@ export default function TribesTab({
 
   const handleJoin = async (tribeId: string) => {
     try {
+      const joined = publicTribes.find((t) => t.id === tribeId);
       await tribeApi.joinTribe(token, tribeId);
+      if (joined) {
+        setMyTribes((prev) =>
+          prev.some((t) => t.id === tribeId) ? prev : [joined, ...prev],
+        );
+        setPublicTribes((prev) => prev.filter((t) => t.id !== tribeId));
+        setSearchResults((prev) =>
+          prev === null ? prev : prev.filter((t) => t.id !== tribeId),
+        );
+      }
       await loadTribes();
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -233,7 +353,7 @@ export default function TribesTab({
                   { color: theme.text.secondary },
                   activeTab === tab && {
                     color: theme.text.inverse,
-                    fontWeight: "600",
+                    ...styles.tabTextActive,
                   },
                 ]}
               >
@@ -244,20 +364,26 @@ export default function TribesTab({
         </View>
       )}
 
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>
+          {activeTab === "explore" ? "Discover Groups" : "My Tribes"}
+        </Text>
+      </View>
+
       {/* Search Bar */}
       <View
         style={[
           styles.searchContainer,
-          { backgroundColor: theme.surface, borderColor: theme.border },
+          { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight },
         ]}
       >
-        <Ionicons name="search-outline" size={18} color={theme.text.muted} />
+        <Ionicons name="search-outline" size={20} color={theme.text.muted} />
         <TextInput
           style={[styles.searchInput, { color: theme.text.primary }]}
           placeholder={
             activeTab === "my"
-              ? "Search in my tribes..."
-              : "Search tribes to join..."
+              ? "Search your groups..."
+              : "Search tribes..."
           }
           placeholderTextColor={theme.text.muted}
           value={searchQuery}
@@ -334,10 +460,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 26, // Rounded inner active button
   },
-  tabText: { ...Typography.presets.body },
+  sectionHeader: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xs,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.2,
+    fontFamily: "Poppins_500Medium",
+  },
   listContent: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 120,
+    paddingBottom: 130,
+    paddingTop: 2,
   },
   emptyContainer: {
     alignItems: "center",
@@ -346,12 +482,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxl,
   },
   emptyTitle: {
-    ...Typography.presets.h3,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.2,
+    fontFamily: "Poppins_500Medium",
     marginTop: Spacing.md,
     textAlign: "center",
   },
   emptySubtitle: {
-    ...Typography.presets.bodySmall,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: 0,
+    fontFamily: "Poppins_400Regular",
     marginTop: Spacing.xs,
     textAlign: "center",
   },
@@ -364,16 +506,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: Layout.radius.md,
+    borderRadius: 16,
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Platform.OS === "ios" ? Spacing.sm : Spacing.xxs,
+    marginBottom: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Platform.OS === "ios" ? Spacing.sm : Spacing.xs,
     gap: Spacing.xs,
   },
   searchInput: {
     flex: 1,
-    ...Typography.presets.body,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.1,
+    fontFamily: "Poppins_400Regular",
     paddingVertical: Spacing.xxs,
+  },
+  tabText: {
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0,
+    fontFamily: "Poppins_400Regular",
+  },
+  tabTextActive: {
+    fontFamily: "Poppins_600SemiBold",
   },
 });

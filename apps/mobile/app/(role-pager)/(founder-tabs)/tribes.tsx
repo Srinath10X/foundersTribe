@@ -12,15 +12,17 @@ import {
   Alert,
   TextInput,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import TribeCard from "@/components/TribeCard";
 import CreateTribeModal from "@/components/CreateTribeModal";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
-import { Typography, Spacing, Layout } from "@/constants/DesignSystem";
+import { Spacing, Layout } from "@/constants/DesignSystem";
 import * as tribeApi from "@/lib/tribeApi";
+import { supabase } from "@/lib/supabase";
 
 type TabMode = "my" | "explore";
 
@@ -29,6 +31,7 @@ export default function TribesScreen() {
   const { theme, isDark } = useTheme();
   const { session } = useAuth();
   const token = session?.access_token || "";
+  const userId = session?.user?.id || "";
 
   const [activeTab, setActiveTab] = useState<TabMode>("my");
   const [myTribes, setMyTribes] = useState<any[]>([]);
@@ -42,11 +45,15 @@ export default function TribesScreen() {
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncInFlightRef = useRef(false);
+  const tribesCacheKey = `tribes:screen-cache:v1:${userId || "anon"}`;
 
   /* ── Fetch data ────────────────────────────────────────────── */
 
   const loadTribes = useCallback(async () => {
     if (!token) return;
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
     try {
       const [my, pub] = await Promise.all([
         tribeApi.getMyTribes(token),
@@ -56,13 +63,102 @@ export default function TribesScreen() {
       setPublicTribes(Array.isArray(pub) ? pub : []);
     } catch (e: any) {
       console.error("Failed to load tribes:", e.message);
+    } finally {
+      syncInFlightRef.current = false;
     }
   }, [token]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(tribesCacheKey);
+        if (!cached) return;
+        const parsed = JSON.parse(cached);
+        if (cancelled) return;
+        if (Array.isArray(parsed?.myTribes)) setMyTribes(parsed.myTribes);
+        if (Array.isArray(parsed?.publicTribes)) setPublicTribes(parsed.publicTribes);
+        setLoading(false);
+      } catch {
+        // ignore cache failures
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tribesCacheKey, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        await AsyncStorage.setItem(
+          tribesCacheKey,
+          JSON.stringify({
+            myTribes,
+            publicTribes,
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+      } catch {
+        // ignore cache failures
+      }
+    })();
+  }, [myTribes, publicTribes, tribesCacheKey, userId]);
 
   useEffect(() => {
     setLoading(true);
     loadTribes().finally(() => setLoading(false));
   }, [loadTribes]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTribes();
+    }, [loadTribes]),
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    const id = setInterval(() => {
+      loadTribes();
+    }, 10000);
+    return () => clearInterval(id);
+  }, [loadTribes, token]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`tribes-screen-realtime:${userId}:${Date.now()}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tribe_members",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          loadTribes();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tribes",
+        },
+        () => {
+          loadTribes();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadTribes, userId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -107,18 +203,45 @@ export default function TribesScreen() {
     name: string,
     description: string,
     isPublic: boolean,
+    avatarUrl?: string,
+    coverUrl?: string,
   ) => {
-    await tribeApi.createTribe(token, {
-      name,
-      description: description || undefined,
-      is_public: isPublic,
-    });
+    try {
+      await tribeApi.createTribe(token, {
+        name,
+        description: description || undefined,
+        avatar_url: avatarUrl || undefined,
+        cover_url: coverUrl || undefined,
+        is_public: isPublic,
+      });
+    } catch (e: any) {
+      const msg = String(e?.message || "").toLowerCase();
+      const coverFieldIssue =
+        msg.includes("cover_url") || msg.includes("column") || msg.includes("schema");
+      if (!coverFieldIssue) throw e;
+      await tribeApi.createTribe(token, {
+        name,
+        description: description || undefined,
+        avatar_url: avatarUrl || undefined,
+        is_public: isPublic,
+      });
+    }
     await loadTribes();
   };
 
   const handleJoin = async (tribeId: string) => {
     try {
+      const joined = publicTribes.find((t) => t.id === tribeId);
       await tribeApi.joinTribe(token, tribeId);
+      if (joined) {
+        setMyTribes((prev) =>
+          prev.some((t) => t.id === tribeId) ? prev : [joined, ...prev],
+        );
+        setPublicTribes((prev) => prev.filter((t) => t.id !== tribeId));
+        setSearchResults((prev) =>
+          prev === null ? prev : prev.filter((t) => t.id !== tribeId),
+        );
+      }
       await loadTribes();
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -129,11 +252,13 @@ export default function TribesScreen() {
 
   const myTribeIds = new Set(myTribes.map((t) => t.id));
   const exploreTribes = publicTribes.filter((t) => !myTribeIds.has(t.id));
+  const filteredExploreSearch =
+    searchResults?.filter((t) => !myTribeIds.has(t.id)) ?? null;
   const displayed =
     activeTab === "my"
       ? myTribes
-      : searchResults !== null
-        ? searchResults
+      : filteredExploreSearch !== null
+        ? filteredExploreSearch
         : exploreTribes;
 
   /* ── Empty state ───────────────────────────────────────────── */
@@ -196,7 +321,7 @@ export default function TribesScreen() {
                 { color: theme.text.secondary },
                 activeTab === tab && {
                   color: theme.text.inverse,
-                  fontWeight: "600",
+                  ...styles.tabTextActive,
                 },
               ]}
             >
@@ -320,13 +445,16 @@ const styles = StyleSheet.create({
   headerTitle: {
     marginVertical: Spacing.xs,
     marginLeft: Spacing.xs,
-    ...Typography.presets.h1,
+    fontSize: 22,
+    lineHeight: 30,
+    letterSpacing: -0.3,
+    fontFamily: "Poppins_600SemiBold",
   },
   segmentedControl: {
     flexDirection: "row",
     borderRadius: Layout.radius.md,
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     padding: Spacing.xxs,
   },
   tabButton: {
@@ -336,10 +464,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: Layout.radius.sm,
   },
-  tabText: { ...Typography.presets.body },
+  tabText: {
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0,
+    fontFamily: "Poppins_400Regular",
+  },
+  tabTextActive: {
+    fontFamily: "Poppins_600SemiBold",
+  },
   listContent: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: 120,
+    paddingTop: 2,
   },
   emptyContainer: {
     alignItems: "center",
@@ -348,12 +485,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxl,
   },
   emptyTitle: {
-    ...Typography.presets.h3,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.2,
+    fontFamily: "Poppins_500Medium",
     marginTop: Spacing.md,
     textAlign: "center",
   },
   emptySubtitle: {
-    ...Typography.presets.bodySmall,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: 0,
+    fontFamily: "Poppins_400Regular",
     marginTop: Spacing.xs,
     textAlign: "center",
   },
@@ -368,14 +511,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: Layout.radius.md,
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.xs,
     paddingHorizontal: Spacing.sm,
     paddingVertical: Platform.OS === "ios" ? Spacing.sm : Spacing.xxs,
     gap: Spacing.xs,
   },
   searchInput: {
     flex: 1,
-    ...Typography.presets.body,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.1,
+    fontFamily: "Poppins_400Regular",
     paddingVertical: Spacing.xxs,
   },
   fab: {

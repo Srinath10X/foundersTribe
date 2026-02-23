@@ -7,6 +7,7 @@ import * as tribeApi from "@/lib/tribeApi";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -25,13 +26,14 @@ import {
 
 type PreviousWork = { company: string; role: string; duration: string };
 type SocialLink = { platform: string; url: string; label: string };
-type BusinessIdeaItem = { idea: string };
+type BusinessIdeaItem = { idea: string; pitch_url?: string };
 const STORAGE_BUCKET = "tribe-media";
+const PITCH_LINK_PLATFORM = "pitch_video";
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const { session } = useAuth();
-  const { switchRole } = useRole();
+  const { switchRole, role: appRole } = useRole();
   const { theme, isDark } = useTheme();
   const token = session?.access_token || "";
   const userId = session?.user?.id || "";
@@ -47,22 +49,59 @@ export default function EditProfileScreen() {
   const [photoPath, setPhotoPath] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [businessIdeas, setBusinessIdeas] = useState<BusinessIdeaItem[]>([
-    { idea: "" },
+    { idea: "", pitch_url: "" },
   ]);
-  const [ideaVideoUrl, setIdeaVideoUrl] = useState("");
   const [previousWorks, setPreviousWorks] = useState<PreviousWork[]>([]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
-  const [contact, setContact] = useState("");
+  const [contact, setContact] = useState(""); // phone number
+  const [address, setAddress] = useState("");
   const [location, setLocation] = useState("");
   const [role, setRole] = useState("");
   const [completedGigs, setCompletedGigs] = useState<any[]>([]);
-  const [userType, setUserType] = useState<"founder" | "freelancer" | null>(
+  const [userType, setUserType] = useState<"founder" | "freelancer" | "both" | null>(
     null,
   );
+  const formCacheKey = `profile:edit-cache:v1:${userId || "anon"}`;
 
   useEffect(() => {
     loadProfile();
   }, []);
+
+  const parseUserType = (raw: unknown): "founder" | "freelancer" | "both" | null => {
+    if (typeof raw !== "string") return null;
+    const normalized = raw.trim().toLowerCase();
+    if (normalized === "founder" || normalized === "freelancer" || normalized === "both") {
+      return normalized;
+    }
+    return null;
+  };
+  const firstFilledString = (...values: unknown[]) => {
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) return value;
+    }
+    return "";
+  };
+  const loadCachedForm = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(formCacheKey);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+  const saveCachedForm = async (payload: Record<string, any>) => {
+    try {
+      await AsyncStorage.setItem(formCacheKey, JSON.stringify(payload));
+    } catch {
+      // noop
+    }
+  };
+  const preferNonEmptyArray = <T,>(primary: unknown, fallback: unknown): T[] => {
+    const primaryArr = Array.isArray(primary) ? (primary as T[]) : [];
+    if (primaryArr.length > 0) return primaryArr;
+    return Array.isArray(fallback) ? (fallback as T[]) : [];
+  };
 
   const resolvePhotoUrl = async (storedPhotoValue: string) => {
     if (!storedPhotoValue) return "";
@@ -93,15 +132,50 @@ export default function EditProfileScreen() {
 
   const loadProfile = async () => {
     try {
+      const cached = await loadCachedForm();
+      const {
+        data: { user: freshUser },
+      } = await supabase.auth.getUser();
+      const metadataProfile =
+        freshUser?.user_metadata?.profile_data ||
+        session?.user?.user_metadata?.profile_data ||
+        {};
+      if (cached) {
+        setDisplayName(firstFilledString(cached.displayName));
+        setBio(firstFilledString(cached.bio));
+        setLinkedinUrl(firstFilledString(cached.linkedinUrl));
+        setContact(firstFilledString(cached.contact));
+        setAddress(firstFilledString(cached.address));
+        setLocation(firstFilledString(cached.location));
+        setRole(firstFilledString(cached.role));
+        setUserType(parseUserType(cached.userType));
+        if (Array.isArray(cached.previousWorks)) setPreviousWorks(cached.previousWorks);
+        if (Array.isArray(cached.socialLinks)) setSocialLinks(cached.socialLinks);
+        if (Array.isArray(cached.completedGigs)) setCompletedGigs(cached.completedGigs);
+        if (Array.isArray(cached.businessIdeas)) setBusinessIdeas(cached.businessIdeas);
+      }
       if (!token) {
         setLoading(false);
         return;
       }
       const data = await tribeApi.getMyProfile(token);
-      setDisplayName(data.display_name || "");
-      setBio(data.bio || "");
+      setDisplayName(
+        firstFilledString(
+          data.display_name,
+          cached?.displayName,
+          freshUser?.user_metadata?.full_name,
+          freshUser?.user_metadata?.name,
+          session?.user?.user_metadata?.full_name,
+          session?.user?.user_metadata?.name,
+        ),
+      );
+      setBio(firstFilledString(data.bio, cached?.bio));
       const storedPhoto =
-        typeof data.photo_url === "string" ? data.photo_url : "";
+        typeof data.photo_url === "string" && data.photo_url.trim()
+          ? data.photo_url
+          : typeof data.avatar_url === "string"
+            ? data.avatar_url
+            : "";
       setPhotoPath(
         storedPhoto && !/^https?:\/\//i.test(storedPhoto) ? storedPhoto : "",
       );
@@ -112,12 +186,21 @@ export default function EditProfileScreen() {
         setPhotoUrl(await resolveLatestAvatarFromStorage());
       }
       setLinkedinUrl(data.linkedin_url || "");
+      const metadataBusinessIdeas = Array.isArray(metadataProfile?.business_ideas)
+        ? metadataProfile.business_ideas
+          .filter((idea: unknown) => typeof idea === "string")
+          .map((idea: string) => ({ idea, pitch_url: "" }))
+        : [];
       if (Array.isArray(data.business_ideas)) {
         const sanitizedIdeas = data.business_ideas
           .filter((idea: unknown) => typeof idea === "string")
-          .map((idea: string) => ({ idea }));
+          .map((idea: string) => ({ idea, pitch_url: "" }));
         setBusinessIdeas(
-          sanitizedIdeas.length ? sanitizedIdeas : [{ idea: "" }],
+          sanitizedIdeas.length
+            ? sanitizedIdeas
+            : metadataBusinessIdeas.length
+              ? metadataBusinessIdeas
+              : [{ idea: "", pitch_url: "" }],
         );
       } else if (
         typeof data.business_idea === "string" &&
@@ -128,33 +211,89 @@ export default function EditProfileScreen() {
           if (Array.isArray(parsed)) {
             const parsedIdeas = parsed
               .filter((idea: unknown) => typeof idea === "string")
-              .map((idea: string) => ({ idea }));
-            setBusinessIdeas(parsedIdeas.length ? parsedIdeas : [{ idea: "" }]);
+              .map((idea: string) => ({ idea, pitch_url: "" }));
+            setBusinessIdeas(parsedIdeas.length ? parsedIdeas : [{ idea: "", pitch_url: "" }]);
           } else {
-            setBusinessIdeas([{ idea: data.business_idea }]);
+            setBusinessIdeas([{ idea: data.business_idea, pitch_url: "" }]);
           }
         } catch {
-          setBusinessIdeas([{ idea: data.business_idea }]);
+          setBusinessIdeas([{ idea: data.business_idea, pitch_url: "" }]);
         }
+      } else if (Array.isArray(cached?.businessIdeas) && cached.businessIdeas.length > 0) {
+        setBusinessIdeas(cached.businessIdeas);
+      } else if (metadataBusinessIdeas.length > 0) {
+        setBusinessIdeas(metadataBusinessIdeas);
       } else {
-        setBusinessIdeas([{ idea: "" }]);
+        setBusinessIdeas([{ idea: "", pitch_url: "" }]);
       }
-      setIdeaVideoUrl(data.idea_video_url || "");
       setPreviousWorks(
-        Array.isArray(data.previous_works) ? data.previous_works : [],
+        preferNonEmptyArray<PreviousWork>(
+          data.previous_works,
+          preferNonEmptyArray<PreviousWork>(
+            metadataProfile?.previous_works,
+            cached?.previousWorks,
+          ),
+        ),
       );
-      setSocialLinks(Array.isArray(data.social_links) ? data.social_links : []);
-      setContact(data.contact || "");
-      setLocation(data.location || "");
-      setRole(data.role || "");
+      const incomingSocialLinks: SocialLink[] = preferNonEmptyArray<SocialLink>(
+        data.social_links,
+        preferNonEmptyArray<SocialLink>(
+          metadataProfile?.social_links,
+          cached?.socialLinks,
+        ),
+      );
+      const isPitchLink = (link: SocialLink) =>
+        (link?.platform || "").toLowerCase() === PITCH_LINK_PLATFORM ||
+        /^pitch\s*video/i.test(link?.label || "");
+      const pitchFromLinks = incomingSocialLinks
+        .filter(isPitchLink)
+        .map((link) => ({ url: link.url || "" }))
+        .filter((item) => !!item.url.trim());
+      const allPitch = [
+        ...(typeof data.idea_video_url === "string" && data.idea_video_url.trim()
+          ? [data.idea_video_url]
+          : []),
+        ...pitchFromLinks.map((item) => item.url),
+      ];
+      if (allPitch.length > 0) {
+        setBusinessIdeas((prev) => {
+          const seeded = prev.length > 0 ? [...prev] : [{ idea: "", pitch_url: "" }];
+          for (let i = 0; i < allPitch.length; i += 1) {
+            if (seeded[i]) {
+              seeded[i] = { ...seeded[i], pitch_url: allPitch[i] };
+            } else {
+              seeded.push({ idea: "", pitch_url: allPitch[i] });
+            }
+          }
+          return seeded;
+        });
+      }
+      setSocialLinks(incomingSocialLinks.filter((link) => !isPitchLink(link)));
+      setContact(firstFilledString(data.contact, metadataProfile.contact, cached?.contact));
+      setAddress(firstFilledString(data.address, metadataProfile.address, cached?.address));
+      setLocation(firstFilledString(data.location, metadataProfile.location, cached?.location));
+      setRole(firstFilledString(data.role, metadataProfile.role, cached?.role));
+      setLinkedinUrl(firstFilledString(data.linkedin_url, metadataProfile.linkedin_url, cached?.linkedinUrl));
       setCompletedGigs(
-        Array.isArray(data.completed_gigs) ? data.completed_gigs : [],
+        preferNonEmptyArray<any>(
+          data.completed_gigs,
+          preferNonEmptyArray<any>(
+            metadataProfile?.completed_gigs,
+            cached?.completedGigs,
+          ),
+        ),
       );
-      setUserType(
-        typeof data.user_type === "string"
-          ? (data.user_type.toLowerCase() as "founder" | "freelancer")
-          : (data.user_type || null)
-      );
+      const dbUserType = parseUserType(data.user_type);
+      const metadataUserType =
+        parseUserType(freshUser?.user_metadata?.user_type) ||
+        parseUserType(freshUser?.user_metadata?.role) ||
+        parseUserType(session?.user?.user_metadata?.user_type) ||
+        parseUserType(session?.user?.user_metadata?.role);
+      const cachedUserType = parseUserType(cached?.userType);
+      const roleFallback = appRole === "founder" || appRole === "freelancer"
+        ? appRole
+        : null;
+      setUserType(dbUserType || metadataUserType || cachedUserType || roleFallback || null);
     } catch (error) {
       console.error("Error loading profile:", error);
       // Fallback — load basic info from auth user
@@ -280,41 +419,182 @@ export default function EditProfileScreen() {
     if (/^https?:\/\//i.test(trimmed)) return trimmed;
     return `https://${trimmed}`;
   };
+  const isValidPhone = (value: string) =>
+    /^[+]?[\d\s\-()]{7,20}$/.test(value.trim());
+  const isYouTubeUrl = (value: string) =>
+    /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i.test(value.trim());
 
   const handleSave = async () => {
     if (!token) return;
+    if (!displayName.trim()) {
+      Alert.alert("Missing info", "Please enter your full name.");
+      return;
+    }
+    if (!userType) {
+      Alert.alert("Missing info", "Please choose whether you are founder, freelancer, or both.");
+      return;
+    }
+    if (!bio.trim()) {
+      Alert.alert("Missing info", "Please enter your bio.");
+      return;
+    }
+    if (!contact.trim() || !isValidPhone(contact)) {
+      Alert.alert("Missing info", "Please enter a valid phone number.");
+      return;
+    }
+    if (!address.trim()) {
+      Alert.alert("Missing info", "Please enter your address.");
+      return;
+    }
+    if (!location.trim()) {
+      Alert.alert("Missing info", "Please enter your location.");
+      return;
+    }
+    if (!normalizeUrl(linkedinUrl)) {
+      Alert.alert("Missing info", "Please enter a valid LinkedIn URL.");
+      return;
+    }
     setSaving(true);
     try {
       const cleanedIdeas = businessIdeas
-        .map((item) => item.idea.trim())
+        .map((item) => (item.idea || "").trim())
         .filter(Boolean);
+      const normalizedExperience = (Array.isArray(previousWorks)
+        ? previousWorks
+        : []
+      ).map((w) => ({
+        company: (w?.company || "").trim(),
+        role: (w?.role || "").trim(),
+        duration: (w?.duration || "").trim(),
+      })).filter((w) => w.company || w.role || w.duration);
+      if (normalizedExperience.length === 0) {
+        Alert.alert("Missing info", "Please add at least one experience entry.");
+        setSaving(false);
+        return;
+      }
+      const normalizedSocialLinks = (Array.isArray(socialLinks) ? socialLinks : [])
+        .map((link) => ({
+          platform: (link?.platform || "").trim(),
+          label: (link?.label || "").trim(),
+          url: normalizeUrl(link?.url || "") || "",
+        }))
+        .filter((link) => !!link.url);
+      if (normalizedSocialLinks.length === 0) {
+        Alert.alert("Missing info", "Please add at least one social link.");
+        setSaving(false);
+        return;
+      }
+      const normalizedPitchVideoUrls = businessIdeas
+        .map((item) => normalizeUrl(item.pitch_url || "") || "")
+        .filter(Boolean);
+      if (
+        (userType === "founder" || userType === "both") &&
+        cleanedIdeas.length === 0
+      ) {
+        Alert.alert("Missing info", "Please add at least one business idea.");
+        setSaving(false);
+        return;
+      }
+      if (normalizedPitchVideoUrls.length > 0) {
+        if (!normalizedPitchVideoUrls.every((u) => isYouTubeUrl(u))) {
+          Alert.alert("Invalid URL", "Pitch video URLs must be YouTube links.");
+          setSaving(false);
+          return;
+        }
+      }
+      if ((userType === "freelancer" || userType === "both") && !role.trim()) {
+        Alert.alert("Missing info", "Please enter your freelance role.");
+        setSaving(false);
+        return;
+      }
+      const pitchUrlsForPayload =
+        userType === "founder" || userType === "both"
+          ? normalizedPitchVideoUrls
+          : [];
+      const pitchSocialLinks = pitchUrlsForPayload.map((url, idx) => ({
+        platform: PITCH_LINK_PLATFORM,
+        label: `Pitch Video ${idx + 1}`,
+        url,
+      }));
+      const combinedSocialLinks = [...normalizedSocialLinks, ...pitchSocialLinks];
+      if (combinedSocialLinks.length > 10) {
+        Alert.alert(
+          "Too many links",
+          "Total links (social + pitch videos) can be at most 10.",
+        );
+        setSaving(false);
+        return;
+      }
 
-      await tribeApi.updateMyProfile(token, {
+      const payload = {
         display_name: displayName.trim() || undefined,
         bio: bio.trim() || null,
-        photo_url: (photoUrl || photoPath || "").trim() || null,
+        // Persist storage path, not temporary signed URL.
+        photo_url: (photoPath || photoUrl || "").trim() || null,
         linkedin_url: normalizeUrl(linkedinUrl),
         business_ideas: cleanedIdeas,
         business_idea: cleanedIdeas.length ? cleanedIdeas[0] : null,
-        idea_video_url: normalizeUrl(ideaVideoUrl),
-        previous_works: (Array.isArray(previousWorks)
-          ? previousWorks
-          : []
-        ).filter((w) => w && (w.company || w.role)),
-        social_links: (Array.isArray(socialLinks) ? socialLinks : []).filter(
-          (l) => l && l.url,
-        ),
+        idea_video_url:
+          userType === "founder" || userType === "both"
+            ? pitchUrlsForPayload[0] || null
+            : null,
+        previous_works: normalizedExperience,
+        social_links: combinedSocialLinks,
         user_type: userType,
         contact: contact.trim() || null,
+        address: address.trim() || null,
         location: location.trim() || null,
         role: role.trim() || null,
         completed_gigs: completedGigs,
+      };
+      let profileSaved = false;
+      try {
+        await tribeApi.updateMyProfile(token, payload);
+        profileSaved = true;
+      } catch (apiErr: any) {
+        console.warn("[EditProfile] API save failed, using fallback persistence:", apiErr?.message);
+      }
+      await saveCachedForm({
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        linkedinUrl: normalizeUrl(linkedinUrl),
+        businessIdeas,
+        previousWorks: normalizedExperience,
+        socialLinks: normalizedSocialLinks,
+        contact: contact.trim(),
+        address: address.trim(),
+        location: location.trim(),
+        role: role.trim(),
+        completedGigs,
+        userType,
       });
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            user_type: userType,
+            role: userType === "both" ? undefined : userType,
+            profile_data: {
+              contact: contact.trim(),
+              address: address.trim(),
+              location: location.trim(),
+              role: role.trim(),
+              linkedin_url: normalizeUrl(linkedinUrl),
+              business_ideas: cleanedIdeas,
+              idea_video_urls: pitchUrlsForPayload,
+              previous_works: normalizedExperience,
+              social_links: normalizedSocialLinks,
+              completed_gigs: completedGigs,
+            },
+          },
+        });
+      } catch {
+        // Non-blocking: profile DB save already succeeded.
+      }
       // Sync the local role context with the saved user type
-      if (userType) {
+      if (userType === "founder" || userType === "freelancer") {
         switchRole(userType);
       }
-      Alert.alert("Success", "Profile updated!", [
+      Alert.alert(profileSaved ? "Success" : "Saved Locally", profileSaved ? "Profile updated!" : "Server save failed, but your data is kept locally and in account metadata.", [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (error: any) {
@@ -361,18 +641,23 @@ export default function EditProfileScreen() {
     setSocialLinks(socialLinks.filter((_, i) => i !== index));
 
   const addBusinessIdea = () =>
-    setBusinessIdeas([...businessIdeas, { idea: "" }]);
+    setBusinessIdeas([...businessIdeas, { idea: "", pitch_url: "" }]);
 
   const updateBusinessIdea = (index: number, value: string) => {
     const updated = [...businessIdeas];
-    updated[index] = { idea: value };
+    updated[index] = { ...updated[index], idea: value };
+    setBusinessIdeas(updated);
+  };
+  const updateBusinessPitch = (index: number, value: string) => {
+    const updated = [...businessIdeas];
+    updated[index] = { ...updated[index], pitch_url: value };
     setBusinessIdeas(updated);
   };
 
   const removeBusinessIdea = (index: number) =>
     setBusinessIdeas(
       businessIdeas.length <= 1
-        ? [{ idea: "" }]
+        ? [{ idea: "", pitch_url: "" }]
         : businessIdeas.filter((_, i) => i !== index),
     );
 
@@ -566,6 +851,40 @@ export default function EditProfileScreen() {
                   Freelancer
                 </Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleOption,
+                  {
+                    backgroundColor:
+                      userType === "both"
+                        ? theme.brand.primary
+                        : theme.surfaceElevated,
+                    borderColor:
+                      userType === "both"
+                        ? theme.brand.primary
+                        : theme.border,
+                  },
+                ]}
+                onPress={() => setUserType("both")}
+              >
+                <Ionicons
+                  name="swap-horizontal"
+                  size={20}
+                  color={userType === "both" ? "#fff" : theme.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.roleText,
+                    {
+                      color:
+                        userType === "both" ? "#fff" : theme.text.primary,
+                    },
+                  ]}
+                >
+                  Both
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <Text style={labelStyle}>Full Name</Text>
@@ -590,6 +909,34 @@ export default function EditProfileScreen() {
               textAlignVertical="top"
             />
 
+            <Text style={labelStyle}>Phone Number</Text>
+            <TextInput
+              style={inputStyle}
+              value={contact}
+              onChangeText={setContact}
+              placeholder="+91 98XXXXXXX"
+              placeholderTextColor={theme.text.muted}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={labelStyle}>Address</Text>
+            <TextInput
+              style={inputStyle}
+              value={address}
+              onChangeText={setAddress}
+              placeholder="Street / Area"
+              placeholderTextColor={theme.text.muted}
+            />
+
+            <Text style={labelStyle}>Location</Text>
+            <TextInput
+              style={inputStyle}
+              value={location}
+              onChangeText={setLocation}
+              placeholder="City, State, Country"
+              placeholderTextColor={theme.text.muted}
+            />
+
             <Text style={labelStyle}>LinkedIn URL</Text>
             <TextInput
               style={inputStyle}
@@ -601,17 +948,8 @@ export default function EditProfileScreen() {
               keyboardType="url"
             />
 
-            {userType === "freelancer" && (
+            {(userType === "freelancer" || userType === "both") && (
               <>
-                <Text style={labelStyle}>Contact Info</Text>
-                <TextInput
-                  style={inputStyle}
-                  value={contact}
-                  onChangeText={setContact}
-                  placeholder="Email or WhatsApp"
-                  placeholderTextColor={theme.text.muted}
-                />
-
                 <Text style={labelStyle}>Freelancer Role</Text>
                 <TextInput
                   style={inputStyle}
@@ -621,20 +959,12 @@ export default function EditProfileScreen() {
                   placeholderTextColor={theme.text.muted}
                 />
 
-                <Text style={labelStyle}>Location</Text>
-                <TextInput
-                  style={inputStyle}
-                  value={location}
-                  onChangeText={setLocation}
-                  placeholder="City, Country"
-                  placeholderTextColor={theme.text.muted}
-                />
               </>
             )}
           </View>
 
           {/* Business Idea (Founder Only) */}
-          {userType === "founder" && (
+          {(userType === "founder" || userType === "both") && (
             <View style={[styles.card, { backgroundColor: theme.surface }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
@@ -684,24 +1014,22 @@ export default function EditProfileScreen() {
                     maxLength={2000}
                     textAlignVertical="top"
                   />
+                  <TextInput
+                    style={inputStyle}
+                    value={item.pitch_url || ""}
+                    onChangeText={(v) => updateBusinessPitch(index, v)}
+                    placeholder="Pitch Video URL (YouTube) - optional"
+                    placeholderTextColor={theme.text.muted}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                  />
                 </View>
               ))}
-
-              <Text style={labelStyle}>Pitch Video URL (YouTube)</Text>
-              <TextInput
-                style={inputStyle}
-                value={ideaVideoUrl}
-                onChangeText={setIdeaVideoUrl}
-                placeholder="https://youtube.com/watch?v=..."
-                placeholderTextColor={theme.text.muted}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
             </View>
           )}
 
           {/* Completed Gigs (Freelancer Only) */}
-          {userType === "freelancer" && (
+          {(userType === "freelancer" || userType === "both") && (
             <View style={[styles.card, { backgroundColor: theme.surface }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.text.primary }]}>

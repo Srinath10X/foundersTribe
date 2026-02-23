@@ -8,8 +8,21 @@
  *   Error    → { status: "error", message: "..." }                 (AppError)
  */
 
-const BASE_URL =
-    process.env.EXPO_PUBLIC_TRIBE_API_URL || "http://192.168.1.4:3003";
+const DEFAULT_TRIBE_API_BASE_URL = "http://192.168.0.25:3003";
+
+function normalizeBaseUrl(raw?: string): string {
+    const candidate = (raw || "").trim();
+    try {
+        const parsed = new URL(candidate || DEFAULT_TRIBE_API_BASE_URL);
+        return parsed.toString().replace(/\/$/, "");
+    } catch {
+        return DEFAULT_TRIBE_API_BASE_URL;
+    }
+}
+
+export const TRIBE_API_BASE_URL = normalizeBaseUrl(
+    process.env.EXPO_PUBLIC_TRIBE_API_URL,
+);
 
 /* ------------------------------------------------------------------ */
 /*  Generic request helper                                            */
@@ -31,14 +44,20 @@ async function request<T = any>(
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const url = `${BASE_URL}${path}`;
+    const url = `${TRIBE_API_BASE_URL}${path}`;
     console.log(`[tribeApi] ${method} ${url}`);
-
-    const res = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+        res = await fetch(url, {
+            method,
+            headers,
+            body: body ? JSON.stringify(body) : undefined,
+        });
+    } catch (error: any) {
+        throw new Error(
+            `Network request failed for ${url}. Check EXPO_PUBLIC_TRIBE_API_URL and server availability.`,
+        );
+    }
 
     // 204 No Content
     if (res.status === 204) return null as T;
@@ -110,13 +129,25 @@ export const getTribe = (token: string, tribeId: string) =>
 
 export const createTribe = (
     token: string,
-    data: { name: string; description?: string; is_public?: boolean },
+    data: {
+        name: string;
+        description?: string;
+        avatar_url?: string;
+        cover_url?: string;
+        is_public?: boolean;
+    },
 ) => request<any>("/api/tribes", { method: "POST", body: data, token });
 
 export const updateTribe = (
     token: string,
     tribeId: string,
-    data: { name?: string; description?: string; is_public?: boolean },
+    data: {
+        name?: string;
+        description?: string;
+        avatar_url?: string | null;
+        cover_url?: string | null;
+        is_public?: boolean;
+    },
 ) =>
     request<any>(`/api/tribes/${tribeId}`, {
         method: "PATCH",
@@ -191,7 +222,7 @@ export const getGroup = (token: string, tribeId: string, groupId: string) =>
 export const createGroup = (
     token: string,
     tribeId: string,
-    data: { name: string; description?: string },
+    data: { name: string; description?: string; avatar_url?: string },
 ) =>
     request<any>(`/api/tribes/${tribeId}/groups`, {
         method: "POST",
@@ -203,7 +234,7 @@ export const updateGroup = (
     token: string,
     tribeId: string,
     groupId: string,
-    data: { name?: string; description?: string },
+    data: { name?: string; description?: string; avatar_url?: string | null },
 ) =>
     request<any>(`/api/tribes/${tribeId}/groups/${groupId}`, {
         method: "PATCH",
@@ -437,8 +468,29 @@ export const getAuditLogs = (
 /*  Profiles                                                          */
 /* ------------------------------------------------------------------ */
 
-export const getMyProfile = (token: string) =>
-    request<any>("/api/profiles/me", { token });
+export const getMyProfile = async (token: string) => {
+    const data = await request<any>("/api/profiles/me", { token });
+    console.log("[tribeApi] getMyProfile response:", data);
+    const expectedProfileKeys = [
+        "user_type",
+        "contact",
+        "address",
+        "location",
+        "role",
+        "linkedin_url",
+        "previous_works",
+        "social_links",
+        "business_ideas",
+        "completed_gigs",
+    ];
+    const missingKeys = expectedProfileKeys.filter((key) => !(key in (data || {})));
+    if (missingKeys.length > 0) {
+        console.warn(
+            `[tribeApi] getMyProfile missing columns in backend response: ${missingKeys.join(", ")}. Apply profile migrations on tribe-service DB.`,
+        );
+    }
+    return data;
+};
 
 export const updateMyProfile = (token: string, data: Record<string, any>) =>
     request<any>("/api/profiles/me", { method: "PATCH", body: data, token });

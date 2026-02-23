@@ -18,7 +18,13 @@ export default function TalentMessagesScreen() {
       <FlowTopBar title="Messages" showLeft={false} right="search" onRightPress={() => { }} />
       <View style={styles.content}>
         {threads.map((t) => (
-          <TouchableOpacity key={t.name} onPress={() => nav.push("/talent-stack/chat-thread")} activeOpacity={0.9}>
+          <TouchableOpacity
+            key={t.name}
+            onPress={() =>
+              nav.push(`/talent-stack/chat-thread?title=${encodeURIComponent(t.name)}`)
+            }
+            activeOpacity={0.9}
+          >
             <SurfaceCard style={styles.card}>
               <View style={styles.row}>
                 <Avatar source={t.avatar} size={44} />

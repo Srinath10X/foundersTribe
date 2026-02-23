@@ -1,14 +1,10 @@
 import React from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-} from "react-native";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+
+import { Spacing } from "../constants/DesignSystem";
 import { useTheme } from "../context/ThemeContext";
-import { Typography, Spacing, Layout } from "../constants/DesignSystem";
+import { supabase } from "../lib/supabase";
 
 interface TribeCardProps {
   tribe: {
@@ -24,154 +20,161 @@ interface TribeCardProps {
   onJoin?: () => void;
 }
 
-const getDemoAvatarUri = (id: string, name: string) => {
-  const seed = encodeURIComponent(`${id}-${name || "tribe"}`);
-  return `https://api.dicebear.com/7.x/initials/png?seed=${seed}&backgroundType=gradientLinear`;
-};
-
 export default function TribeCard({
   tribe,
   onPress,
   variant = "default",
   onJoin,
 }: TribeCardProps) {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
+  const members = tribe.member_count ?? 0;
+  const summary = tribe.description?.trim() || `${members} members`;
+  const [avatarSrc, setAvatarSrc] = React.useState<string>("");
+
+  React.useEffect(() => {
+    let mounted = true;
+    const resolveAvatar = async () => {
+      const raw = (tribe.avatar_url || "").trim();
+      if (!raw) {
+        if (mounted) setAvatarSrc("");
+        return;
+      }
+      if (/^https?:\/\//i.test(raw)) {
+        if (mounted) setAvatarSrc(raw);
+        return;
+      }
+      const { data, error } = await supabase.storage
+        .from("tribe-media")
+        .createSignedUrl(raw, 60 * 60 * 24 * 30);
+      if (mounted) {
+        setAvatarSrc(!error && data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : "");
+      }
+    };
+    resolveAvatar();
+    return () => {
+      mounted = false;
+    };
+  }, [tribe.avatar_url]);
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        { backgroundColor: theme.surface, borderColor: theme.border },
-      ]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.cardLeft}>
-        {/* Avatar / Icon */}
-        <View
-          style={[
-            styles.avatar,
-            { backgroundColor: "#EAEAEA" },
-          ]}
-        >
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.left}>
+        <View style={[styles.avatarWrap, { borderColor: theme.borderLight }]}>
           <Image
-            source={{ uri: tribe.avatar_url || `https://picsum.photos/seed/${tribe.id}/200/200` }}
-            style={styles.avatarImg}
+            source={{
+              uri: avatarSrc || `https://picsum.photos/seed/${encodeURIComponent(tribe.id)}/240/240`,
+            }}
+            style={styles.avatar}
           />
         </View>
 
-        {/* Info */}
-        <View style={styles.info}>
-          <Text
-            style={[styles.name, { color: theme.text.primary }]}
-            numberOfLines={1}
-          >
+        <View style={styles.meta}>
+          <Text style={[styles.title, { color: theme.text.primary }]} numberOfLines={1}>
             {tribe.name}
           </Text>
-          <Text
-            style={[styles.desc, { color: theme.text.tertiary }]}
-            numberOfLines={1}
-          >
-            {tribe.description || `${tribe.member_count ?? 0} members`}
-          </Text>
+          <View style={styles.metaLine}>
+            <Text style={[styles.members, { color: theme.text.tertiary }]}>
+              {members} members
+            </Text>
+          </View>
+          {!!tribe.description && (
+            <Text style={[styles.desc, { color: theme.text.tertiary }]} numberOfLines={1}>
+              {summary}
+            </Text>
+          )}
         </View>
       </View>
 
-      {/* Action / Meta */}
-      <View style={styles.actionContainer}>
-        {tribe.member_count !== undefined && tribe.member_count > 0 && (
-          <View style={[styles.badge, { backgroundColor: theme.brand.primary }]}>
-            <Text style={styles.badgeText}>{tribe.member_count}</Text>
-          </View>
-        )}
-
-        {/* Action */}
-        {variant === "explore" && onJoin ? (
-          <TouchableOpacity
-            style={[styles.joinBtn, { backgroundColor: theme.brand.primary }]}
-            onPress={(e: any) => {
-              e.stopPropagation?.();
-              onJoin();
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.joinText, { color: theme.text.inverse }]}>
-              Join
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
-        )}
-      </View>
+      {variant === "explore" && onJoin ? (
+        <TouchableOpacity
+          style={[
+            styles.joinBtn,
+            { backgroundColor: theme.brand.primary, shadowColor: theme.brand.primary },
+          ]}
+          onPress={(e: any) => {
+            e.stopPropagation?.();
+            onJoin();
+          }}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.joinText}>Join</Text>
+        </TouchableOpacity>
+      ) : (
+        <Ionicons name="chevron-forward" size={20} color={theme.text.muted} />
+      )}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
+  row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(150, 150, 150, 0.15)",
+    marginBottom: Spacing.lg,
   },
-  cardLeft: {
+  left: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
+    minWidth: 0,
+    marginRight: Spacing.sm,
+  },
+  avatarWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    overflow: "hidden",
+    marginRight: Spacing.sm,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24, // Perfect circle
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: Spacing.sm,
-    overflow: "hidden",
-  },
-  avatarImg: {
     width: "100%",
     height: "100%",
-    borderRadius: 24, // Perfect circle
   },
-  info: {
+  meta: {
     flex: 1,
-    justifyContent: "center"
+    minWidth: 0,
   },
-  name: {
-    fontSize: 16,
-    fontFamily: "Poppins_600SemiBold",
-    marginBottom: 4,
+  title: {
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.1,
+    fontFamily: "Poppins_500Medium",
+  },
+  metaLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+    gap: 6,
+  },
+  members: {
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.1,
+    fontFamily: "Poppins_400Regular",
   },
   desc: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
-  actionContainer: {
-    alignItems: "flex-end",
-    justifyContent: "center",
-    gap: 8,
-  },
-  badge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  badgeText: {
-    color: "#FFF",
-    fontSize: 10,
-    fontWeight: "bold",
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.1,
+    fontFamily: "Poppins_400Regular",
+    marginTop: 2,
   },
   joinBtn: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
-    borderRadius: 16, // More roundy
+    borderRadius: 999,
+    paddingHorizontal: 22,
+    paddingVertical: 9,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   joinText: {
-    ...Typography.presets.bodySmall,
-    fontWeight: "600",
+    color: "#fff",
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: -0.1,
+    fontFamily: "Poppins_600SemiBold",
   },
 });

@@ -30,6 +30,7 @@ import Animated, {
 
 if (
   Platform.OS === "android" &&
+  !(global as any).nativeFabricUIManager &&
   UIManager.setLayoutAnimationEnabledExperimental
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
