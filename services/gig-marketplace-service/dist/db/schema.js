@@ -1,4 +1,4 @@
-import { boolean, check, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, smallint, text, timestamp, unique, uniqueIndex, uuid, } from "drizzle-orm/pg-core";
+import { boolean, date, check, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, smallint, text, timestamp, unique, uniqueIndex, uuid, } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 export const userRoleEnum = pgEnum("user_role_enum", ["founder", "freelancer", "both"]);
 export const availabilityStatusEnum = pgEnum("availability_status_enum", ["open", "busy", "inactive"]);
@@ -27,7 +27,7 @@ export const userProfiles = pgTable("user_profiles", {
     lastName: text("last_name"),
     phone: text("phone"),
     email: text("email"),
-    dateOfBirth: timestamp("date_of_birth", { withTimezone: false }),
+    dateOfBirth: date("date_of_birth"),
     gender: text("gender"),
     addressLine1: text("address_line1"),
     addressLine2: text("address_line2"),

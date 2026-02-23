@@ -54,63 +54,15 @@ export function registerSocketHandlers(io) {
       });
     });
 
-    // ---- Broadcast new message to group (called after REST create) ----
-    socket.on("new_message", ({ groupId, message }) => {
-      if (!socketRateLimit(socket.id)) return;
-
-      socket.to(`group:${groupId}`).emit("message", {
-        groupId,
-        message,
-      });
-    });
-
-    // ---- Broadcast message read receipt ----
-    socket.on("message_read", ({ groupId, lastReadMsgId }) => {
-      socket.to(`group:${groupId}`).emit("user_read", {
-        groupId,
-        userId,
-        lastReadMsgId,
-        timestamp: Date.now(),
-      });
-    });
-
-    // ---- Broadcast message edit ----
-    socket.on("message_edited", ({ groupId, messageId, content }) => {
-      socket.to(`group:${groupId}`).emit("message_updated", {
-        groupId,
-        messageId,
-        content,
-        editedAt: new Date().toISOString(),
-      });
-    });
-
-    // ---- Broadcast message deletion ----
-    socket.on("message_deleted", ({ groupId, messageId }) => {
-      socket.to(`group:${groupId}`).emit("message_removed", {
-        groupId,
-        messageId,
-      });
-    });
-
-    // ---- Broadcast reaction added ----
-    socket.on("reaction_added", ({ groupId, messageId, emoji }) => {
-      socket.to(`group:${groupId}`).emit("reaction_added", {
-        groupId,
-        messageId,
-        emoji,
-        userId,
-      });
-    });
-
-    // ---- Broadcast reaction removed ----
-    socket.on("reaction_removed", ({ groupId, messageId, emoji }) => {
-      socket.to(`group:${groupId}`).emit("reaction_removed", {
-        groupId,
-        messageId,
-        emoji,
-        userId,
-      });
-    });
+    // Message/reaction/read realtime events are emitted by REST routes
+    // after successful writes. Keep these listeners as no-op for backward
+    // compatibility with older clients that may still emit them.
+    socket.on("new_message", () => {});
+    socket.on("message_read", () => {});
+    socket.on("message_edited", () => {});
+    socket.on("message_deleted", () => {});
+    socket.on("reaction_added", () => {});
+    socket.on("reaction_removed", () => {});
 
     // ---- Disconnect cleanup ----
     socket.on("disconnect", (reason) => {

@@ -108,7 +108,6 @@ app.post("/api/user_categories", authenticate, async (req, res) => {
 app.get("/api/personalized_articles", authenticate, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-    const offset = parseInt(req.query.offset) || 0;
 
     // 1. Get user interests
     const { data: interestData, error: interestError } = await supabase
@@ -123,17 +122,36 @@ app.get("/api/personalized_articles", authenticate, async (req, res) => {
     // 2. Query Articles, filter by Category if interests exist
     let query = supabase
       .from("Articles")
-      .select("*")
-      .order("id", { ascending: false });
+      .select("*");
 
     if (interests.length > 0) {
       query = query.in("Category", interests);
     }
 
-    const { data, error } = await query.range(offset, offset + limit - 1);
+    // Instead of ordering by strict ID descending and paginating,
+    // we fetch a larger pool of recent articles so we can shuffle them.
+    // We grab the last 200 possible matches, then randomly pick 'limit' amount.
+    const { data: recentPool, error } = await query
+      .order("id", { ascending: false })
+      .limit(200);
+
     if (error) throw error;
 
-    res.json(data || []);
+    if (!recentPool || recentPool.length === 0) {
+      return res.json([]);
+    }
+
+    // Randomly shuffle the recent pool of articles
+    // Fisher-Yates shuffle algorithm
+    for (let i = recentPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [recentPool[i], recentPool[j]] = [recentPool[j], recentPool[i]];
+    }
+    
+    // Pick the selected amount
+    const randomizedData = recentPool.slice(0, limit);
+
+    res.json(randomizedData);
   } catch (error) {
     console.error("Feed error:", error);
     res.status(500).json({ error: error.message });

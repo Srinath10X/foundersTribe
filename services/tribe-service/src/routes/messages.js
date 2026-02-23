@@ -31,6 +31,10 @@ router.post("/", messageRateLimiter, validate(sendMessageSchema), async (req, re
     const message = await messageService.sendMessage(
       req.params.groupId, req.user.id, req.body,
     );
+    req.app.get("io")?.to(`group:${req.params.groupId}`).emit("message", {
+      groupId: req.params.groupId,
+      message,
+    });
     res.status(201).json({ data: message });
   } catch (err) {
     next(err);
@@ -43,6 +47,12 @@ router.patch("/:messageId", validate(editMessageSchema), async (req, res, next) 
     const message = await messageService.editMessage(
       req.params.messageId, req.user.id, req.body.content,
     );
+    req.app.get("io")?.to(`group:${req.params.groupId}`).emit("message_updated", {
+      groupId: req.params.groupId,
+      messageId: req.params.messageId,
+      content: message.content,
+      editedAt: message.edited_at || new Date().toISOString(),
+    });
     res.json({ data: message });
   } catch (err) {
     next(err);
@@ -55,6 +65,10 @@ router.delete("/:messageId", validate(messageIdParamSchema), async (req, res, ne
     await messageService.deleteMessage(
       req.params.messageId, req.user.id, req.params.groupId,
     );
+    req.app.get("io")?.to(`group:${req.params.groupId}`).emit("message_removed", {
+      groupId: req.params.groupId,
+      messageId: req.params.messageId,
+    });
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -69,6 +83,12 @@ router.post("/:messageId/reactions", validate(reactionSchema), async (req, res, 
     const reaction = await messageService.addReaction(
       req.params.messageId, req.user.id, req.body.emoji,
     );
+    req.app.get("io")?.to(`group:${req.params.groupId}`).emit("reaction_added", {
+      groupId: req.params.groupId,
+      messageId: req.params.messageId,
+      emoji: req.body.emoji,
+      userId: req.user.id,
+    });
     res.status(201).json({ data: reaction });
   } catch (err) {
     next(err);
@@ -81,6 +101,12 @@ router.delete("/:messageId/reactions", validate(reactionSchema), async (req, res
     await messageService.removeReaction(
       req.params.messageId, req.user.id, req.body.emoji,
     );
+    req.app.get("io")?.to(`group:${req.params.groupId}`).emit("reaction_removed", {
+      groupId: req.params.groupId,
+      messageId: req.params.messageId,
+      emoji: req.body.emoji,
+      userId: req.user.id,
+    });
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -106,6 +132,12 @@ router.post("/read", async (req, res, next) => {
     const receipt = await messageService.markAsRead(
       req.params.groupId, req.user.id, last_read_msg_id,
     );
+    req.app.get("io")?.to(`group:${req.params.groupId}`).emit("user_read", {
+      groupId: req.params.groupId,
+      userId: req.user.id,
+      lastReadMsgId: last_read_msg_id,
+      timestamp: Date.now(),
+    });
     res.json({ data: receipt });
   } catch (err) {
     next(err);

@@ -69,7 +69,7 @@ function normalizeProfile(profile) {
   if (typeof user_type === "string") {
     user_type = user_type.toLowerCase();
   }
-  if (user_type !== "founder" && user_type !== "freelancer") {
+  if (user_type !== "founder" && user_type !== "freelancer" && user_type !== "both") {
     user_type = null;
   }
 

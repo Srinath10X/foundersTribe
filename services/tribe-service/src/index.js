@@ -81,6 +81,9 @@ const io = new SocketIOServer(server, {
   maxHttpBufferSize: 1e6,
 });
 
+// Expose io to REST routes so they can emit realtime events after writes.
+app.set("io", io);
+
 // ---------------------------------------------------
 // 🚀 Start Server (Non-Blocking for Cloud Run)
 // ---------------------------------------------------

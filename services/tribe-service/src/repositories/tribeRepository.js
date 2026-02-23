@@ -2,6 +2,33 @@ import { supabase } from "../config/supabase.js";
 import { logger } from "../utils/logger.js";
 
 export class TribeRepository {
+  async getLiveMemberCount(tribeId) {
+    const { count, error } = await supabase
+      .from("tribe_members")
+      .select("id", { count: "exact", head: true })
+      .eq("tribe_id", tribeId)
+      .is("deleted_at", null);
+
+    if (error) {
+      logger.error({ error, tribeId }, "TribeRepository.getLiveMemberCount failed");
+      return 0;
+    }
+    return Number(count || 0);
+  }
+
+  async applyLiveMemberCounts(tribes) {
+    const list = Array.isArray(tribes) ? tribes : [];
+    if (!list.length) return list;
+
+    const withCounts = await Promise.all(
+      list.map(async (tribe) => ({
+        ...tribe,
+        member_count: await this.getLiveMemberCount(tribe.id),
+      })),
+    );
+    return withCounts;
+  }
+
   async create(createdBy, data) {
     const { data: tribe, error } = await supabase
       .from("tribes")
@@ -29,7 +56,10 @@ export class TribeRepository {
       logger.error({ error, tribeId }, "TribeRepository.getById failed");
       throw new Error("Database error fetching tribe");
     }
-    return data;
+    return {
+      ...data,
+      member_count: await this.getLiveMemberCount(tribeId),
+    };
   }
 
   async update(tribeId, updates) {
@@ -78,7 +108,7 @@ export class TribeRepository {
       logger.error({ error }, "TribeRepository.listPublic failed");
       throw new Error("Database error listing tribes");
     }
-    return data || [];
+    return await this.applyLiveMemberCounts(data || []);
   }
 
   async listByUser(userId) {
@@ -93,7 +123,19 @@ export class TribeRepository {
       logger.error({ error, userId }, "TribeRepository.listByUser failed");
       throw new Error("Database error listing user tribes");
     }
-    return data || [];
+    const rows = data || [];
+    const withCounts = await Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        tribes: row.tribes
+          ? {
+              ...row.tribes,
+              member_count: await this.getLiveMemberCount(row.tribes.id),
+            }
+          : row.tribes,
+      })),
+    );
+    return withCounts;
   }
 
   async incrementMemberCount(tribeId, delta) {
@@ -125,7 +167,7 @@ export class TribeRepository {
       logger.error({ error, query }, "TribeRepository.searchPublic failed");
       throw new Error("Database error searching tribes");
     }
-    return data || [];
+    return await this.applyLiveMemberCounts(data || []);
   }
 }
 

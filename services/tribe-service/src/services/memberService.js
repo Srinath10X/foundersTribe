@@ -21,13 +21,14 @@ export async function joinTribe(tribeId, userId) {
   const softDeleted = await tribeMemberRepository.getSoftDeleted(tribeId, userId);
   if (softDeleted) {
     const member = await tribeMemberRepository.resurrect(tribeId, userId);
+    // Resurrect is an UPDATE (not INSERT), so the INSERT trigger does not fire.
     await tribeRepository.incrementMemberCount(tribeId, 1);
     logger.info({ tribeId, userId }, "User re-joined tribe");
     return member;
   }
 
   const member = await tribeMemberRepository.add(tribeId, userId, "member");
-  await tribeRepository.incrementMemberCount(tribeId, 1);
+  // Count is maintained by trg_tribe_member_after_insert trigger.
   logger.info({ tribeId, userId }, "User joined tribe");
   return member;
 }
@@ -41,7 +42,7 @@ export async function leaveTribe(tribeId, userId) {
   }
 
   await tribeMemberRepository.softDelete(tribeId, userId);
-  await tribeRepository.incrementMemberCount(tribeId, -1);
+  // Count is maintained by trg_tribe_member_soft_delete trigger.
   logger.info({ tribeId, userId }, "User left tribe");
 }
 
