@@ -16,8 +16,6 @@ import {
 import { gigService, Gig } from "@/lib/gigService";
 
 const experienceOptions = ["junior", "mid", "senior"] as const;
-const stageOptions = ["idea", "mvp", "revenue", "funded"] as const;
-const statusOptions = ["draft", "open"] as const;
 
 export default function PostGigScreen() {
   const { palette } = useFlowPalette();
@@ -31,8 +29,6 @@ export default function PostGigScreen() {
   const [budgetMin, setBudgetMin] = useState("1200");
   const [budgetMax, setBudgetMax] = useState("2500");
   const [experienceLevel, setExperienceLevel] = useState<(typeof experienceOptions)[number]>("mid");
-  const [startupStage, setStartupStage] = useState<(typeof stageOptions)[number]>("mvp");
-  const [status, setStatus] = useState<(typeof statusOptions)[number]>("open");
   const [isRemote, setIsRemote] = useState(true);
   const [location, setLocation] = useState("");
 
@@ -48,9 +44,6 @@ export default function PostGigScreen() {
           setTitle(gig.title || "");
           setDescription(gig.description || "");
           setBudgetMax((gig.budget || 2500).toString());
-          if (gig.status === "open" || gig.status === "draft") {
-            setStatus(gig.status as any); // Assuming gig has these valid statuses, fallback to open if not
-          }
         } catch (error) {
           console.error("Failed to fetch gig for editing:", error);
           Alert.alert("Error", "Could not load the gig details.");
@@ -93,10 +86,9 @@ export default function PostGigScreen() {
         budget_max: Number(budgetMax),
         budget: Number(budgetMax),
         experience_level: experienceLevel,
-        startup_stage: startupStage,
         is_remote: isRemote,
         location_text: location.trim() || undefined,
-        status: isDraft ? "draft" : (status as Gig["status"]),
+        status: isDraft ? "draft" : "open",
       };
 
       if (isEditing && id) {
@@ -161,7 +153,7 @@ export default function PostGigScreen() {
                 <View style={styles.budgetCol}>
                   <T weight="bold" color={palette.text} style={styles.label}>Minimum</T>
                   <View style={[styles.budgetInputWrap, { backgroundColor: palette.border }]}>
-                    <T weight="semiBold" color={palette.subText} style={styles.currency}>$</T>
+                    <T weight="semiBold" color={palette.subText} style={styles.currency}>₹</T>
                     <TextInput
                       value={budgetMin}
                       onChangeText={setBudgetMin}
@@ -175,7 +167,7 @@ export default function PostGigScreen() {
                 <View style={styles.budgetCol}>
                   <T weight="bold" color={palette.text} style={styles.label}>Maximum</T>
                   <View style={[styles.budgetInputWrap, { backgroundColor: palette.border }]}>
-                    <T weight="semiBold" color={palette.subText} style={styles.currency}>$</T>
+                    <T weight="semiBold" color={palette.subText} style={styles.currency}>₹</T>
                     <TextInput
                       value={budgetMax}
                       onChangeText={setBudgetMax}
@@ -205,32 +197,6 @@ export default function PostGigScreen() {
                     onPress={() => setExperienceLevel(opt)}
                   >
                     <T weight="semiBold" color={opt === experienceLevel ? palette.accent : palette.subText} style={styles.chipText}>{opt}</T>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <T weight="bold" color={palette.text} style={[styles.label, { marginTop: 12 }]}>Startup Stage</T>
-              <View style={styles.chips}>
-                {stageOptions.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.chip, { borderColor: opt === startupStage ? palette.accent : palette.border, backgroundColor: opt === startupStage ? palette.accentSoft : palette.surface }]}
-                    onPress={() => setStartupStage(opt)}
-                  >
-                    <T weight="semiBold" color={opt === startupStage ? palette.accent : palette.subText} style={styles.chipText}>{opt}</T>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <T weight="bold" color={palette.text} style={[styles.label, { marginTop: 12 }]}>Listing Status</T>
-              <View style={styles.chips}>
-                {statusOptions.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.chip, { borderColor: opt === status ? palette.accent : palette.border, backgroundColor: opt === status ? palette.accentSoft : palette.surface }]}
-                    onPress={() => setStatus(opt)}
-                  >
-                    <T weight="semiBold" color={opt === status ? palette.accent : palette.subText} style={styles.chipText}>{opt}</T>
                   </TouchableOpacity>
                 ))}
               </View>
