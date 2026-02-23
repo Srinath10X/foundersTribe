@@ -1,11 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useState, useEffect } from "react";
+import { StyleSheet, TouchableOpacity, View, TextInput, ScrollView, Animated } from "react-native";
 
 import {
   Avatar,
   FlowScreen,
-  PrimaryButton,
   SurfaceCard,
   T,
   people,
@@ -32,284 +31,293 @@ const activeGigs = [
   },
 ];
 
+const popularCategories = [
+  { id: 1, title: "Graphic\nDesigner", icon: "color-palette", color: "#FF7A00", bgLight: "#FFF0E5" },
+  { id: 2, title: "Profile\nMaker", icon: "person", color: "#007AFF", bgLight: "#E5F2FF" },
+  { id: 3, title: "Reel\nEditor", icon: "videocam", color: "#FF2D55", bgLight: "#FFEAEF" },
+  { id: 4, title: "Financial\nPro", icon: "briefcase", color: "#34C759", bgLight: "#EBF9EE" },
+];
+
 export default function FounderDashboardScreen() {
   const { palette, isDark } = useFlowPalette();
   const nav = useFlowNav();
 
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [fadeAnim] = useState(new Animated.Value(1));
+  const placeholders = [
+    "Find your Reels editor...",
+    "Find your Graphic designer...",
+    "Find your Profile maker...",
+    "Find your Financial professional...",
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      ]).start();
+
+      setTimeout(() => {
+        setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
+      }, 400);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <FlowScreen>
-      <View style={[styles.header, { borderBottomColor: palette.border }]}> 
-        <View style={styles.leftRow}>
-          <Avatar source={people.alex} size={42} />
-          <View>
-            <T weight="semiBold" color={palette.subText} style={styles.smallLabel}>
-              Founder Space
-            </T>
-            <T weight="bold" color={palette.text} style={styles.headerTitle}>
-              Dashboard
-            </T>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <TouchableOpacity activeOpacity={0.8} style={[styles.avatarBtn, { borderColor: palette.border }]}>
+            <Avatar source={people.alex} size={38} />
+          </TouchableOpacity>
+          <T weight="medium" color={palette.subText} style={styles.headerTitleSub}>
+            Find Your
+          </T>
+          <T weight="bold" color={palette.text} style={styles.headerTitleMain}>
+            Freelancer
+          </T>
+        </View>
+
+        {/* Search Bar Placeholder */}
+        <View style={styles.searchContainer}>
+          <View style={[styles.searchBox, { backgroundColor: isDark ? palette.surface : "#FFFFFF" }]}>
+            <Ionicons name="search" size={22} color={palette.subText} style={styles.searchIcon} />
+            <Animated.View style={{ flex: 1, opacity: fadeAnim, justifyContent: "center" }}>
+              <TextInput
+                style={[styles.searchInput, { color: palette.text }]}
+                placeholder={placeholders[placeholderIndex]}
+                placeholderTextColor={palette.subText}
+                editable={false}
+              />
+            </Animated.View>
+            <TouchableOpacity style={styles.filterBtn}>
+              <Ionicons name="options" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.bellBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="notifications-outline" size={18} color={palette.subText} />
-        </TouchableOpacity>
-      </View>
 
-      <View style={styles.content}>
-        <T weight="semiBold" color={palette.accent} style={styles.goodMorning}>
-          GOOD MORNING
-        </T>
-        <T weight="bold" color={palette.text} style={styles.hello}>
-          Hello, Alex
-        </T>
-        <T weight="medium" color={palette.subText} style={styles.subtitle}>
-          Manage gigs, review proposals, and track contracts in one place.
-        </T>
-
-        <PrimaryButton
-          label="Post a New Gig"
-          icon="add"
-          onPress={() => nav.push("/freelancer-stack/post-gig")}
-          style={styles.cta}
-        />
-
-        <View style={styles.kpiRow}>
-          <SurfaceCard style={styles.kpiCard}>
-            <View style={styles.kpiHead}>
-              <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>
-                TOTAL SPENT
-              </T>
-              <Ionicons name="wallet-outline" size={16} color={palette.accent} />
-            </View>
-            <T weight="bold" color={palette.text} style={styles.kpiValue}>
-              ₹12,450
-            </T>
-            <View style={styles.chipPositive}>
-              <Ionicons name="trending-up" size={12} color="#1D9A5B" />
-              <T weight="semiBold" color="#1D9A5B" style={styles.chipText}>
-                +12%
-              </T>
-            </View>
-          </SurfaceCard>
-
-          <SurfaceCard style={styles.kpiCard}>
-            <View style={styles.kpiHead}>
-              <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>
-                GIGS COMPLETED
-              </T>
-              <Ionicons name="checkmark-circle-outline" size={16} color={palette.accent} />
-            </View>
-            <T weight="bold" color={palette.text} style={styles.kpiValue}>
-              18
-            </T>
-            <View style={[styles.chipNeutral, { backgroundColor: palette.accentSoft }]}>
-              <Ionicons name="star" size={11} color={palette.accent} />
-              <T weight="semiBold" color={palette.accent} style={styles.chipText}>
-                Top Rated
-              </T>
-            </View>
-          </SurfaceCard>
-        </View>
-
-        <View style={styles.sectionHead}>
+        {/* Most Popular Grid */}
+        <View style={styles.popularSection}>
           <T weight="bold" color={palette.text} style={styles.sectionTitle}>
-            Active Gigs
+            Most Popular
           </T>
-          <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
-            <T weight="bold" color={palette.accent} style={styles.seeAll}>
-              See all
-            </T>
-          </TouchableOpacity>
+          <View style={styles.categoriesGrid}>
+            {popularCategories.map((cat) => (
+              <TouchableOpacity key={cat.id} activeOpacity={0.8} style={styles.gridItemContainer}>
+                <SurfaceCard style={[styles.gridItem, { backgroundColor: isDark ? palette.surface : "#FFFFFF" }]}>
+                  <View style={[styles.iconBox, { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : cat.bgLight }]}>
+                    <Ionicons name={cat.icon as any} size={26} color={isDark ? cat.color : cat.color} />
+                  </View>
+                  <T weight="bold" color={palette.text} style={styles.catTitle}>
+                    {cat.title}
+                  </T>
+                </SurfaceCard>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        {activeGigs.map((gig) => (
-          <SurfaceCard key={gig.title} style={styles.gigCard}>
-            <View style={styles.gigTop}>
-              <View style={{ flex: 1 }}>
-                <T weight="bold" color={palette.text} style={styles.gigTitle}>
-                  {gig.title}
-                </T>
-                <T weight="medium" color={palette.subText} style={styles.gigSub}>
-                  {gig.sub}
-                </T>
-              </View>
-              <View
-                style={[
-                  styles.badge,
-                  {
-                    backgroundColor:
-                      gig.statusTone === "danger"
-                        ? palette.accentSoft
-                        : isDark
-                          ? "rgba(70,130,255,0.18)"
-                          : "rgba(70,130,255,0.12)",
-                  },
-                ]}
-              >
-                <T
-                  weight="semiBold"
-                  color={gig.statusTone === "danger" ? palette.accent : "#2A63F6"}
-                  style={styles.badgeText}
-                >
-                  {gig.status}
-                </T>
-              </View>
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-            <View style={styles.gigBottom}>
-              <View style={styles.avatarRow}>
-                {gig.avatars.map((a, i) => (
-                  <View key={`${a}-${i}`} style={{ marginLeft: i === 0 ? 0 : -8 }}>
-                    <Avatar source={a} size={24} />
-                  </View>
-                ))}
-              </View>
-              <T weight="semiBold" color={palette.subText} style={styles.gigMetric}>
-                {gig.metric}
+        {/* Existing Active Gigs Section */}
+        <View style={styles.activeGigsSection}>
+          <View style={styles.sectionHead}>
+            <T weight="bold" color={palette.text} style={styles.sectionTitle}>
+              Active Gigs
+            </T>
+            <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}>
+              <T weight="bold" color={palette.accent} style={styles.seeAll}>
+                See all
               </T>
-            </View>
-          </SurfaceCard>
-        ))}
+            </TouchableOpacity>
+          </View>
 
-        <T weight="bold" color={palette.text} style={[styles.sectionTitle, { marginTop: 16 }]}> 
-          Recent Activity
-        </T>
-
-        <SurfaceCard style={styles.activityCard}>
-          {[
-            {
-              title: "New proposal from Arjun Patel",
-              time: "2 minutes ago",
-              icon: "document-text-outline" as const,
-              danger: true,
-            },
-            {
-              title: "Contract signed by Sarah J.",
-              time: "1 hour ago",
-              icon: "shield-checkmark-outline" as const,
-              danger: false,
-            },
-          ].map((item, idx) => (
-            <View
-              key={item.title}
-              style={[
-                styles.activityRow,
-                idx === 0 ? { borderBottomWidth: 1, borderBottomColor: palette.border } : null,
-              ]}
-            >
-              <View
-                style={[
-                  styles.activityIcon,
-                  {
-                    backgroundColor: item.danger
-                      ? palette.accentSoft
-                      : isDark
-                        ? "rgba(35,160,88,0.2)"
-                        : "rgba(35,160,88,0.14)",
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={item.icon}
-                  size={16}
-                  color={item.danger ? palette.accent : "#1D9A5B"}
-                />
+          {activeGigs.map((gig) => (
+            <SurfaceCard key={gig.title} style={[styles.gigCard, { backgroundColor: isDark ? palette.surface : "#FFFFFF" }]}>
+              <View style={styles.gigTop}>
+                <View style={{ flex: 1 }}>
+                  <T weight="bold" color={palette.text} style={styles.gigTitle}>
+                    {gig.title}
+                  </T>
+                  <T weight="medium" color={palette.subText} style={styles.gigSub}>
+                    {gig.sub}
+                  </T>
+                </View>
+                <View
+                  style={[
+                    styles.badge,
+                    {
+                      backgroundColor:
+                        gig.statusTone === "danger"
+                          ? "rgba(255, 59, 48, 0.12)"
+                          : "rgba(42, 99, 246, 0.12)",
+                    },
+                  ]}
+                >
+                  <T
+                    weight="bold"
+                    color={gig.statusTone === "danger" ? "#FF3B30" : "#2A63F6"}
+                    style={styles.badgeText}
+                  >
+                    {gig.status}
+                  </T>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <T weight="semiBold" color={palette.text} style={styles.activityTitle}>
-                  {item.title}
-                </T>
-                <T weight="medium" color={palette.subText} style={styles.activityTime}>
-                  {item.time}
+
+              <View style={[styles.divider, { backgroundColor: palette.borderLight || palette.border }]} />
+
+              <View style={styles.gigBottom}>
+                <View style={styles.avatarRow}>
+                  {gig.avatars.map((a, i) => (
+                    <View key={`${a}-${i}`} style={{ marginLeft: i === 0 ? 0 : -10, borderWidth: 2, borderColor: palette.surface, borderRadius: 16 }}>
+                      <Avatar source={a} size={26} />
+                    </View>
+                  ))}
+                </View>
+                <T weight="semiBold" color={palette.subText} style={styles.gigMetric}>
+                  {gig.metric}
                 </T>
               </View>
-            </View>
+            </SurfaceCard>
           ))}
-        </SurfaceCard>
-      </View>
+        </View>
+      </ScrollView>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 54,
-    paddingHorizontal: 18,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    paddingTop: 64,
+    paddingHorizontal: 24,
+    paddingBottom: 20,
   },
-  leftRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  smallLabel: { fontSize: 11, letterSpacing: 0.8 },
-  headerTitle: { fontSize: 20 },
-  bellBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  avatarBtn: {
+    alignSelf: "flex-end",
+    marginBottom: 12,
     borderWidth: 1,
+    borderRadius: 20,
+    padding: 2,
+  },
+  headerTitleSub: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+  },
+  headerTitleMain: {
+    fontSize: 40,
+    lineHeight: 48,
+    letterSpacing: -1,
+  },
+  searchContainer: {
+    paddingHorizontal: 24,
+    marginTop: 4,
+    marginBottom: 32,
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 999,
+    paddingLeft: 20,
+    paddingRight: 6,
+    height: 60,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    fontSize: 16,
+    fontWeight: "500",
+    height: "100%",
+  },
+  filterBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#1C1C1E",
     alignItems: "center",
     justifyContent: "center",
   },
-  content: { paddingHorizontal: 18, paddingTop: 14 },
-  goodMorning: { fontSize: 11, letterSpacing: 1.4 },
-  hello: { fontSize: 27, marginTop: 4 },
-  subtitle: { fontSize: 13, marginTop: 4, lineHeight: 20 },
-  cta: { marginTop: 14 },
-  kpiRow: { flexDirection: "row", gap: 10, marginTop: 14 },
-  kpiCard: { flex: 1, padding: 12 },
-  kpiHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  kpiLabel: { fontSize: 10, letterSpacing: 0.7 },
-  kpiValue: { fontSize: 22, marginTop: 8 },
-  chipPositive: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(29,154,91,0.14)",
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  popularSection: {
+    paddingHorizontal: 24,
   },
-  chipNeutral: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+  categoriesGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  chipText: { fontSize: 11 },
-  sectionHead: {
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     marginTop: 16,
+  },
+  gridItemContainer: {
+    width: "47%",
+    marginBottom: 16,
+  },
+  gridItem: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+    minHeight: 150,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+    borderWidth: 0,
+  },
+  iconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  catTitle: {
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  activeGigsSection: {
+    paddingHorizontal: 24,
+    marginTop: 20,
+  },
+  sectionHead: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 16,
   },
-  sectionTitle: { fontSize: 20 },
-  seeAll: { fontSize: 13 },
-  gigCard: { marginTop: 10, padding: 12 },
-  gigTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  gigTitle: { fontSize: 17, flexShrink: 1 },
-  gigSub: { fontSize: 13, marginTop: 2 },
-  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  badgeText: { fontSize: 10, letterSpacing: 0.7 },
-  divider: { height: 1, marginVertical: 10 },
+  sectionTitle: {
+    fontSize: 22,
+    letterSpacing: -0.5,
+  },
+  seeAll: {
+    fontSize: 15,
+  },
+  gigCard: {
+    marginBottom: 16,
+    padding: 18,
+    borderRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
+    borderWidth: 0,
+  },
+  gigTop: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  gigTitle: { fontSize: 18, flexShrink: 1, letterSpacing: -0.3 },
+  gigSub: { fontSize: 14, marginTop: 4 },
+  badge: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  badgeText: { fontSize: 10, letterSpacing: 0.8 },
+  divider: { height: 1, marginVertical: 16 },
   gigBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   avatarRow: { flexDirection: "row", alignItems: "center" },
-  gigMetric: { fontSize: 13 },
-  activityCard: { marginTop: 10 },
-  activityRow: { flexDirection: "row", gap: 10, padding: 12, alignItems: "center" },
-  activityIcon: { width: 34, height: 34, borderRadius: 17, justifyContent: "center", alignItems: "center" },
-  activityTitle: { fontSize: 14 },
-  activityTime: { fontSize: 12, marginTop: 1 },
+  gigMetric: { fontSize: 14 },
 });
