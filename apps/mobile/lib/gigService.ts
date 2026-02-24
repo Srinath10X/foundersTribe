@@ -47,6 +47,11 @@ export interface Contract {
     updated_at: string;
 }
 
+export interface FreelancerDashboardData {
+    stats: FreelancerStats;
+    activeJobs: Gig[];
+}
+
 export interface ContractMessage {
     id: string;
     contract_id: string;
@@ -128,7 +133,7 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
                 if (errorData.error?.details) {
                     errorMessage += ` - ${JSON.stringify(errorData.error.details)}`;
                 }
-            } catch (e) {
+            } catch {
                 // Response is not JSON
             }
             throw new GigServiceError(errorMessage, response.status);
@@ -154,24 +159,12 @@ export const gigService = {
      * Fetch freelancer dashboard stats
      */
     getStats: async (): Promise<FreelancerStats> => {
-        try {
-            // In a real implementation this would call an endpoint like /api/freelancer/stats
-            // If endpoint doesn't exist yet, we can mock it based on their actual gigs
-            const stats = await fetchWithAuth<any>("/api/gigs/stats");
-            return {
-                earnings_mtd: stats.earnings_mtd || stats.data?.earnings_mtd || 0,
-                active_projects: stats.active_projects || stats.data?.active_projects || 0,
-                earnings_growth_pct: stats.earnings_growth_pct || stats.data?.earnings_growth_pct || 0,
-            };
-        } catch (error) {
-            console.error("Failed to fetch gig stats. Using fallback/mock.", error);
-            // Fallback for development if endpoint is missing to prevent breaking UI
-            return {
-                earnings_mtd: 8450,
-                active_projects: 4,
-                earnings_growth_pct: 12,
-            };
-        }
+        const stats = await fetchWithAuth<any>("/api/gigs/stats");
+        return {
+            earnings_mtd: stats.earnings_mtd || stats.data?.earnings_mtd || 0,
+            active_projects: stats.active_projects || stats.data?.active_projects || 0,
+            earnings_growth_pct: stats.earnings_growth_pct || stats.data?.earnings_growth_pct || 0,
+        };
     },
 
     /**
@@ -300,5 +293,72 @@ export const gigService = {
         await fetchWithAuth(`/api/contracts/${contractId}/messages/read`, {
             method: "POST",
         });
+    },
+
+    /**
+     * Freelancer dashboard payload:
+     * - stats from /api/gigs/stats
+     * - active jobs from /api/contracts?status=active plus /api/gigs/:id
+     */
+    getFreelancerDashboardData: async (limit = 3): Promise<FreelancerDashboardData> => {
+        const [statsResult, contractsResult] = await Promise.allSettled([
+            gigService.getStats(),
+            gigService.getContracts({ status: "active", limit }),
+        ]);
+
+        const stats: FreelancerStats =
+            statsResult.status === "fulfilled"
+                ? statsResult.value
+                : { earnings_mtd: 0, active_projects: 0, earnings_growth_pct: 0 };
+
+        const contracts =
+            contractsResult.status === "fulfilled"
+                ? contractsResult.value.items || []
+                : [];
+
+        const gigIds = Array.from(
+            new Set(
+                contracts
+                    .map((c: any) => c.gig_id)
+                    .filter((id: unknown) => typeof id === "string" && !!id),
+            ),
+        );
+
+        const gigDetailResults = await Promise.all(
+            gigIds.map(async (gigId) => {
+                try {
+                    return await gigService.getGig(gigId);
+                } catch {
+                    return null;
+                }
+            }),
+        );
+
+        const gigMap = new Map<string, Gig>();
+        gigDetailResults.filter(Boolean).forEach((gig) => {
+            if (gig?.id) gigMap.set(gig.id, gig);
+        });
+
+        const activeJobs: Gig[] = contracts
+            .map((contract: any) => {
+                const gig = gigMap.get(contract.gig_id);
+                if (!gig) return null;
+
+                const progress =
+                    contract.status === "completed"
+                        ? 100
+                        : contract.freelancer_marked_complete
+                            ? 90
+                            : 55;
+
+                return {
+                    ...gig,
+                    status: gig.status || "in_progress",
+                    progress,
+                };
+            })
+            .filter(Boolean) as Gig[];
+
+        return { stats, activeJobs };
     },
 };

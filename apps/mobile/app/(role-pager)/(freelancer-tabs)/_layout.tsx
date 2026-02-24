@@ -58,6 +58,30 @@ export default function FreelancerTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="thread/[threadId]"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="gig-details"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="contract-details"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="send-proposal"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",

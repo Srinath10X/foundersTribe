@@ -21,7 +21,9 @@ import Animated, {
 import Svg, { Path, Polyline } from "react-native-svg";
 
 import { useRole } from "@/context/RoleContext";
+import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import * as tribeApi from "@/lib/tribeApi";
 
 // ─── Layout constants ──────────────────────────────────────────
 export const BAR_HEIGHT = 66;
@@ -35,6 +37,16 @@ const ICON_SIZE = 22;
 const ICON_LABEL_GAP = 3;
 const SPRING_CONFIG = { damping: 18, stiffness: 200, mass: 0.8 };
 const PRESS_SPRING = { damping: 15, stiffness: 300 };
+
+type AllowedUserType = "founder" | "freelancer" | "both";
+const parseUserType = (raw: unknown): AllowedUserType | null => {
+  if (typeof raw !== "string") return null;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "founder" || normalized === "freelancer" || normalized === "both") {
+    return normalized;
+  }
+  return null;
+};
 
 // ─── Glass Surface ──────────────────────────────────────────────
 // Subtle vertical luminance overlay that goes ON TOP of BlurView
@@ -463,7 +475,36 @@ export default function LiquidTabBar({
 }: BottomTabBarProps) {
   const { theme, isDark } = useTheme();
   const { role } = useRole();
+  const { session } = useAuth();
   const isFounder = role === "founder";
+  const [canSwitchMode, setCanSwitchMode] = React.useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const resolveUserType = async () => {
+      const metadataType =
+        parseUserType(session?.user?.user_metadata?.user_type) ||
+        parseUserType(session?.user?.user_metadata?.role);
+      let dbType: AllowedUserType | null = null;
+      if (session?.access_token) {
+        try {
+          const profile = await tribeApi.getMyProfile(session.access_token);
+          dbType = parseUserType(profile?.user_type);
+        } catch {
+          // noop
+        }
+      }
+      const resolved = dbType || metadataType || "both";
+      if (!cancelled) setCanSwitchMode(resolved === "both");
+    };
+    resolveUserType();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, session?.access_token]);
+
+  const showSwitchLeft = canSwitchMode && !isFounder;
+  const showSwitchRight = canSwitchMode && isFounder;
 
   const [measuredWidth, setMeasuredWidth] = React.useState(0);
 
@@ -533,7 +574,7 @@ export default function LiquidTabBar({
   return (
     <View style={barStyles.globalContainer} pointerEvents="box-none">
       <View style={barStyles.row}>
-        {!isFounder && <ModeSwitchPill isLeft={true} />}
+        {showSwitchLeft && <ModeSwitchPill isLeft={true} />}
 
         <Animated.View
           layout={LinearTransition.duration(200)}
@@ -548,8 +589,8 @@ export default function LiquidTabBar({
               shadowRadius: isDark ? 24 : 32,
               elevation: 12,
               flex: 1,
-              marginLeft: !isFounder ? 12 : 16,
-              marginRight: isFounder ? 12 : 16,
+              marginLeft: showSwitchLeft ? 12 : 16,
+              marginRight: showSwitchRight ? 12 : 16,
             },
           ]}
         >
@@ -584,7 +625,7 @@ export default function LiquidTabBar({
           </View>
         </Animated.View>
 
-        {isFounder && <ModeSwitchPill isLeft={false} />}
+        {showSwitchRight && <ModeSwitchPill isLeft={false} />}
       </View>
     </View>
   );

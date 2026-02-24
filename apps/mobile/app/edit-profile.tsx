@@ -487,10 +487,7 @@ export default function EditProfileScreen() {
       const normalizedPitchVideoUrls = businessIdeas
         .map((item) => normalizeUrl(item.pitch_url || "") || "")
         .filter(Boolean);
-      if (
-        (userType === "founder" || userType === "both") &&
-        cleanedIdeas.length === 0
-      ) {
+      if (userType === "founder" && cleanedIdeas.length === 0) {
         Alert.alert("Missing info", "Please add at least one business idea.");
         setSaving(false);
         return;
@@ -502,7 +499,7 @@ export default function EditProfileScreen() {
           return;
         }
       }
-      if ((userType === "freelancer" || userType === "both") && !role.trim()) {
+      if (userType === "freelancer" && !role.trim()) {
         Alert.alert("Missing info", "Please enter your freelance role.");
         setSaving(false);
         return;
@@ -511,16 +508,10 @@ export default function EditProfileScreen() {
         userType === "founder" || userType === "both"
           ? normalizedPitchVideoUrls
           : [];
-      const pitchSocialLinks = pitchUrlsForPayload.map((url, idx) => ({
-        platform: PITCH_LINK_PLATFORM,
-        label: `Pitch Video ${idx + 1}`,
-        url,
-      }));
-      const combinedSocialLinks = [...normalizedSocialLinks, ...pitchSocialLinks];
-      if (combinedSocialLinks.length > 10) {
+      if (normalizedSocialLinks.length > 10) {
         Alert.alert(
           "Too many links",
-          "Total links (social + pitch videos) can be at most 10.",
+          "Social links can be at most 10.",
         );
         setSaving(false);
         return;
@@ -539,7 +530,7 @@ export default function EditProfileScreen() {
             ? pitchUrlsForPayload[0] || null
             : null,
         previous_works: normalizedExperience,
-        social_links: combinedSocialLinks,
+        social_links: normalizedSocialLinks,
         user_type: userType,
         contact: contact.trim() || null,
         address: address.trim() || null,
@@ -548,10 +539,12 @@ export default function EditProfileScreen() {
         completed_gigs: completedGigs,
       };
       let profileSaved = false;
+      let profileSaveErrorMsg = "";
       try {
         await tribeApi.updateMyProfile(token, payload);
         profileSaved = true;
       } catch (apiErr: any) {
+        profileSaveErrorMsg = apiErr?.message || "Unknown API error";
         console.warn("[EditProfile] API save failed, using fallback persistence:", apiErr?.message);
       }
       await saveCachedForm({
@@ -572,7 +565,9 @@ export default function EditProfileScreen() {
         await supabase.auth.updateUser({
           data: {
             user_type: userType,
-            role: userType === "both" ? undefined : userType,
+            // Keep top-level role aligned with user_type (including "both")
+            // so role resolvers don't fall back to stale founder/freelancer values.
+            role: userType,
             profile_data: {
               contact: contact.trim(),
               address: address.trim(),
@@ -594,9 +589,15 @@ export default function EditProfileScreen() {
       if (userType === "founder" || userType === "freelancer") {
         switchRole(userType);
       }
-      Alert.alert(profileSaved ? "Success" : "Saved Locally", profileSaved ? "Profile updated!" : "Server save failed, but your data is kept locally and in account metadata.", [
+      Alert.alert(
+        profileSaved ? "Success" : "Saved Locally",
+        profileSaved
+          ? "Profile updated!"
+          : `Server save failed (${profileSaveErrorMsg || "unknown error"}), but your data is kept locally and in account metadata.`,
+        [
         { text: "OK", onPress: () => router.back() },
-      ]);
+        ],
+      );
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save profile");
     } finally {
@@ -727,9 +728,16 @@ export default function EditProfileScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          <Text style={[styles.screenHint, { color: theme.text.tertiary }]}>
+            Keep this profile complete so founders and freelancers can trust your work quickly.
+          </Text>
+
           {/* Photo Picker */}
           <TouchableOpacity
-            style={styles.photoSection}
+            style={[
+              styles.photoSection,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
             onPress={pickPhoto}
             activeOpacity={0.7}
             disabled={uploading}
@@ -760,7 +768,7 @@ export default function EditProfileScreen() {
             <View
               style={[
                 styles.cameraIconBadge,
-                { backgroundColor: theme.brand.primary },
+                { backgroundColor: theme.brand.primary, borderColor: theme.surface },
               ]}
             >
               {uploading ? (
@@ -778,6 +786,9 @@ export default function EditProfileScreen() {
           <View style={[styles.card, { backgroundColor: theme.surface }]}>
             <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
               Basic Info
+            </Text>
+            <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
+              Identity, profile summary, and role preferences.
             </Text>
 
             <Text style={labelStyle}>I am a...</Text>
@@ -981,6 +992,9 @@ export default function EditProfileScreen() {
                   />
                 </TouchableOpacity>
               </View>
+              <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
+                Add ideas with optional pitch links (YouTube).
+              </Text>
 
               {businessIdeas.map((item, index) => (
                 <View
@@ -1028,12 +1042,12 @@ export default function EditProfileScreen() {
             </View>
           )}
 
-          {/* Completed Gigs (Freelancer Only) */}
+          {/* Previous Works (Freelancer Only) */}
           {(userType === "freelancer" || userType === "both") && (
             <View style={[styles.card, { backgroundColor: theme.surface }]}>
               <View style={styles.cardHeader}>
                 <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-                  Completed Gigs
+                  Previous Works
                 </Text>
                 <TouchableOpacity
                   onPress={() =>
@@ -1051,6 +1065,9 @@ export default function EditProfileScreen() {
                   />
                 </TouchableOpacity>
               </View>
+              <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
+                Showcase previous client work and outcomes.
+              </Text>
 
               {completedGigs.map((gig, index) => (
                 <View
@@ -1064,7 +1081,7 @@ export default function EditProfileScreen() {
                         { color: theme.text.muted },
                       ]}
                     >
-                      Gig #{index + 1}
+                      Work #{index + 1}
                     </Text>
                     <TouchableOpacity
                       onPress={() =>
@@ -1088,7 +1105,7 @@ export default function EditProfileScreen() {
                       updated[index] = { ...updated[index], title: v };
                       setCompletedGigs(updated);
                     }}
-                    placeholder="Gig title"
+                    placeholder="Project / Company"
                     placeholderTextColor={theme.text.muted}
                   />
                   <TextInput
@@ -1099,7 +1116,7 @@ export default function EditProfileScreen() {
                       updated[index] = { ...updated[index], description: v };
                       setCompletedGigs(updated);
                     }}
-                    placeholder="Project description or skills used"
+                    placeholder="Role / Work summary / impact"
                     placeholderTextColor={theme.text.muted}
                     multiline
                   />
@@ -1122,6 +1139,9 @@ export default function EditProfileScreen() {
                 />
               </TouchableOpacity>
             </View>
+            <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
+              Add your relevant roles and durations.
+            </Text>
 
             {previousWorks.length === 0 && (
               <Text style={[styles.emptyHint, { color: theme.text.muted }]}>
@@ -1186,6 +1206,9 @@ export default function EditProfileScreen() {
                 />
               </TouchableOpacity>
             </View>
+            <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
+              Public links people can use to verify and connect.
+            </Text>
 
             {socialLinks.length === 0 && (
               <Text style={[styles.emptyHint, { color: theme.text.muted }]}>
@@ -1254,108 +1277,130 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+    paddingTop: Platform.OS === "ios" ? 58 : 36,
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
   },
   backBtn: {
-    padding: 4,
+    padding: 6,
+    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "600",
     fontFamily: Typography.fonts.primary,
   },
   saveBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 70,
+    paddingHorizontal: 16,
+    height: 34,
+    borderRadius: 10,
+    minWidth: 72,
     alignItems: "center",
+    justifyContent: "center",
   },
   saveBtnText: {
     color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
+    fontWeight: "600",
+    fontSize: 13,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 100,
+  },
+  screenHint: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginBottom: 10,
+    paddingHorizontal: 2,
   },
   photoSection: {
     alignItems: "center",
-    marginBottom: 24,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginBottom: 12,
   },
   photoPreview: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    borderWidth: 3,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 2,
   },
   cameraIconBadge: {
     position: "absolute",
-    bottom: 28,
-    right: "33%",
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    bottom: 30,
+    right: "34%",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
     justifyContent: "center",
     alignItems: "center",
   },
   photoHint: {
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 14,
     marginTop: 8,
   },
   card: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 0,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 16,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 10,
     fontFamily: Typography.fonts.primary,
   },
+  cardSubtitle: {
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 11,
+    lineHeight: 14,
+  },
   label: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     marginBottom: 6,
-    marginTop: 12,
+    marginTop: 10,
   },
   input: {
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    lineHeight: 17,
   },
   multiline: {
-    minHeight: 100,
-    paddingTop: 12,
+    minHeight: 92,
+    paddingTop: 10,
   },
   addBtn: {
-    padding: 4,
-    marginBottom: 12,
+    padding: 2,
+    marginBottom: 8,
   },
   emptyHint: {
-    fontSize: 14,
+    fontSize: 11,
+    lineHeight: 14,
     fontStyle: "italic",
     marginBottom: 8,
   },
   dynamicItem: {
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    gap: 8,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    gap: 7,
   },
   dynamicItemHeader: {
     flexDirection: "row",
@@ -1364,12 +1409,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dynamicItemIndex: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "600",
   },
   roleContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -1378,13 +1423,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: 1,
   },
   roleText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
   },
 });

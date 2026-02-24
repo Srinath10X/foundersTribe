@@ -14,11 +14,23 @@ import { BlurView } from "expo-blur";
 import Svg, { Path, Polyline } from "react-native-svg";
 
 import { useRole } from "@/context/RoleContext";
+import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import * as tribeApi from "@/lib/tribeApi";
 
 // ─── Layout constants ──────────────────────────────────────────
 export const BAR_HEIGHT = 64;
 export const BAR_BOTTOM = Platform.OS === "ios" ? 32 : 20;
+
+type AllowedUserType = "founder" | "freelancer" | "both";
+const parseUserType = (raw: unknown): AllowedUserType | null => {
+  if (typeof raw !== "string") return null;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "founder" || normalized === "freelancer" || normalized === "both") {
+    return normalized;
+  }
+  return null;
+};
 
 // ─── The mode switch pill (attached to edge) ────────────────────
 function ModeSwitchPill({ isLeft }: { isLeft: boolean }) {
@@ -272,7 +284,36 @@ export default function CustomTabBar({
 }: BottomTabBarProps) {
   const { theme, isDark } = useTheme();
   const { role } = useRole();
+  const { session } = useAuth();
   const isFounder = role === "founder";
+  const [canSwitchMode, setCanSwitchMode] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const resolveUserType = async () => {
+      const metadataType =
+        parseUserType(session?.user?.user_metadata?.user_type) ||
+        parseUserType(session?.user?.user_metadata?.role);
+      let dbType: AllowedUserType | null = null;
+      if (session?.access_token) {
+        try {
+          const profile = await tribeApi.getMyProfile(session.access_token);
+          dbType = parseUserType(profile?.user_type);
+        } catch {
+          // noop
+        }
+      }
+      const resolved = dbType || metadataType || "both";
+      if (!cancelled) setCanSwitchMode(resolved === "both");
+    };
+    resolveUserType();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, session?.access_token]);
+
+  const showSwitchLeft = canSwitchMode && !isFounder;
+  const showSwitchRight = canSwitchMode && isFounder;
 
   // Filter out hidden routes (expo-router sets href to null for hidden screens)
   const visibleRoutes = state.routes.filter((route) => {
@@ -328,7 +369,7 @@ export default function CustomTabBar({
     <View style={barStyles.globalContainer} pointerEvents="box-none">
       <View style={barStyles.row}>
         {/* Freelancer mode => Mode switch on the Left */}
-        {!isFounder && <ModeSwitchPill isLeft={true} />}
+        {showSwitchLeft && <ModeSwitchPill isLeft={true} />}
 
         <Animated.View
           layout={LinearTransition.duration(200)}
@@ -341,8 +382,8 @@ export default function CustomTabBar({
               shadowRadius: 24,
               elevation: 10,
               flex: 1,
-              marginLeft: !isFounder ? 12 : 16,
-              marginRight: isFounder ? 12 : 16,
+              marginLeft: showSwitchLeft ? 12 : 16,
+              marginRight: showSwitchRight ? 12 : 16,
             },
           ]}
         >
@@ -367,7 +408,7 @@ export default function CustomTabBar({
         </Animated.View>
 
         {/* Founder mode => Mode switch on the Right */}
-        {isFounder && <ModeSwitchPill isLeft={false} />}
+        {showSwitchRight && <ModeSwitchPill isLeft={false} />}
       </View>
     </View>
   );
