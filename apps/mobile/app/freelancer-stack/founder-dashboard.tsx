@@ -1,11 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  StyleSheet,
+  TouchableOpacity,
+  View,
+  TextInput,
+  ScrollView,
+  Animated,
+  Platform,
+} from "react-native";
 
 import {
   Avatar,
   FlowScreen,
-  PrimaryButton,
   SurfaceCard,
   T,
   people,
@@ -13,6 +20,7 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 
+// Data Models
 const activeGigs = [
   {
     title: "Senior React Developer",
@@ -32,284 +40,533 @@ const activeGigs = [
   },
 ];
 
+const popularCategories = [
+  {
+    id: 1,
+    title: "Graphic Designer",
+    icon: "color-palette",
+    color: "#FF7A00",
+    bgLight: "rgba(255, 122, 0, 0.12)",
+  },
+  {
+    id: 2,
+    title: "Profile Maker",
+    icon: "person",
+    color: "#007AFF",
+    bgLight: "rgba(0, 122, 255, 0.12)",
+  },
+  {
+    id: 3,
+    title: "Reel Editor",
+    icon: "videocam",
+    color: "#FF2D55",
+    bgLight: "rgba(255, 45, 85, 0.12)",
+  },
+  {
+    id: 4,
+    title: "Financial Pro",
+    icon: "briefcase",
+    color: "#34C759",
+    bgLight: "rgba(52, 199, 89, 0.12)",
+  },
+];
+
 export default function FounderDashboardScreen() {
   const { palette, isDark } = useFlowPalette();
   const nav = useFlowNav();
 
+  // Search Animation State
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const isFocused = useRef(new Animated.Value(0)).current;
+
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [searchText, setSearchText] = useState("");
+
+  const placeholders = [
+    "Find your Reels editor...",
+    "Find your Graphic designer...",
+    "Find your Marketing manager...",
+    "Find your Financial manager...",
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      setTimeout(() => {
+        setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
+      }, 400);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSearchFocus = () => {
+    setIsInputFocused(true);
+    Animated.spring(isFocused, {
+      toValue: 1,
+      friction: 8,
+      tension: 60,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const handleSearchBlur = () => {
+    setIsInputFocused(false);
+    Animated.spring(isFocused, {
+      toValue: 0,
+      friction: 8,
+      tension: 60,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const dynamicShadowOpacity = isFocused.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.06, 0.12],
+  });
+
   return (
     <FlowScreen>
-      <View style={[styles.header, { borderBottomColor: palette.border }]}> 
-        <View style={styles.leftRow}>
-          <Avatar source={people.alex} size={42} />
-          <View>
-            <T weight="semiBold" color={palette.subText} style={styles.smallLabel}>
-              Founder Space
-            </T>
-            <T weight="bold" color={palette.text} style={styles.headerTitle}>
-              Dashboard
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* --- Header Section --- */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[
+              styles.avatarBtn,
+              { borderColor: palette.borderLight || palette.border },
+            ]}
+          >
+            <Avatar source={people.alex} size={40} />
+          </TouchableOpacity>
+
+          <T
+            weight="medium"
+            color={palette.subText}
+            style={styles.headerTitleSub}
+          >
+            Find Your
+          </T>
+          <T weight="bold" color={palette.text} style={styles.headerTitleMain}>
+            Freelancer
+          </T>
+        </View>
+
+        {/* --- Search Section --- */}
+        <View style={styles.searchSection}>
+          <Animated.View
+            style={[
+              styles.searchBox,
+              {
+                backgroundColor: isDark ? palette.surface : "#FFFFFF",
+                borderColor: isDark ? palette.borderLight : "rgba(0,0,0,0.05)",
+                borderWidth: isDark ? 1 : 1,
+                shadowColor: "#000",
+                shadowOpacity: dynamicShadowOpacity,
+                shadowRadius: 16,
+                shadowOffset: { width: 0, height: 8 },
+                elevation: 4,
+              },
+            ]}
+          >
+            <Ionicons
+              name="search"
+              size={22}
+              color={palette.subText}
+              style={styles.searchIcon}
+            />
+            <View style={{ flex: 1, justifyContent: "center" }}>
+              {!isInputFocused && searchText.length === 0 && (
+                <Animated.View
+                  style={{
+                    flex: 1,
+                    opacity: fadeAnim,
+                    position: "absolute",
+                    width: "100%",
+                  }}
+                  pointerEvents="none"
+                >
+                  <T
+                    weight="medium"
+                    color={palette.subText}
+                    style={styles.placeholderText}
+                  >
+                    {placeholders[placeholderIndex]}
+                  </T>
+                </Animated.View>
+              )}
+              <TextInput
+                style={[styles.searchInput, { color: palette.text }]}
+                onFocus={handleSearchFocus}
+                onBlur={handleSearchBlur}
+                onChangeText={setSearchText}
+                value={searchText}
+                placeholderTextColor="transparent"
+              />
+            </View>
+            <TouchableOpacity activeOpacity={0.7} style={styles.filterBtn}>
+              <Ionicons name="options" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+
+        {/* --- Most Popular Section --- */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <T weight="bold" color={palette.text} style={styles.sectionTitle}>
+              Most Popular
             </T>
           </View>
-        </View>
-        <TouchableOpacity
-          style={[styles.bellBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="notifications-outline" size={18} color={palette.subText} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.content}>
-        <T weight="semiBold" color={palette.accent} style={styles.goodMorning}>
-          GOOD MORNING
-        </T>
-        <T weight="bold" color={palette.text} style={styles.hello}>
-          Hello, Alex
-        </T>
-        <T weight="medium" color={palette.subText} style={styles.subtitle}>
-          Manage gigs, review proposals, and track contracts in one place.
-        </T>
-
-        <PrimaryButton
-          label="Post a New Gig"
-          icon="add"
-          onPress={() => nav.push("/freelancer-stack/post-gig")}
-          style={styles.cta}
-        />
-
-        <View style={styles.kpiRow}>
-          <SurfaceCard style={styles.kpiCard}>
-            <View style={styles.kpiHead}>
-              <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>
-                TOTAL SPENT
-              </T>
-              <Ionicons name="wallet-outline" size={16} color={palette.accent} />
-            </View>
-            <T weight="bold" color={palette.text} style={styles.kpiValue}>
-              ₹12,450
-            </T>
-            <View style={styles.chipPositive}>
-              <Ionicons name="trending-up" size={12} color="#1D9A5B" />
-              <T weight="semiBold" color="#1D9A5B" style={styles.chipText}>
-                +12%
-              </T>
-            </View>
-          </SurfaceCard>
-
-          <SurfaceCard style={styles.kpiCard}>
-            <View style={styles.kpiHead}>
-              <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>
-                GIGS COMPLETED
-              </T>
-              <Ionicons name="checkmark-circle-outline" size={16} color={palette.accent} />
-            </View>
-            <T weight="bold" color={palette.text} style={styles.kpiValue}>
-              18
-            </T>
-            <View style={[styles.chipNeutral, { backgroundColor: palette.accentSoft }]}>
-              <Ionicons name="star" size={11} color={palette.accent} />
-              <T weight="semiBold" color={palette.accent} style={styles.chipText}>
-                Top Rated
-              </T>
-            </View>
-          </SurfaceCard>
-        </View>
-
-        <View style={styles.sectionHead}>
-          <T weight="bold" color={palette.text} style={styles.sectionTitle}>
-            Active Gigs
-          </T>
-          <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
-            <T weight="bold" color={palette.accent} style={styles.seeAll}>
-              See all
-            </T>
-          </TouchableOpacity>
-        </View>
-
-        {activeGigs.map((gig) => (
-          <SurfaceCard key={gig.title} style={styles.gigCard}>
-            <View style={styles.gigTop}>
-              <View style={{ flex: 1 }}>
-                <T weight="bold" color={palette.text} style={styles.gigTitle}>
-                  {gig.title}
-                </T>
-                <T weight="medium" color={palette.subText} style={styles.gigSub}>
-                  {gig.sub}
-                </T>
-              </View>
-              <View
-                style={[
-                  styles.badge,
-                  {
-                    backgroundColor:
-                      gig.statusTone === "danger"
-                        ? palette.accentSoft
-                        : isDark
-                          ? "rgba(70,130,255,0.18)"
-                          : "rgba(70,130,255,0.12)",
-                  },
-                ]}
+          <View style={styles.categoriesGrid}>
+            {popularCategories.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                activeOpacity={0.75}
+                style={styles.gridItemWrapper}
               >
-                <T
-                  weight="semiBold"
-                  color={gig.statusTone === "danger" ? palette.accent : "#2A63F6"}
-                  style={styles.badgeText}
+                <SurfaceCard
+                  style={[
+                    styles.gridItem,
+                    {
+                      backgroundColor: isDark ? palette.surface : "#FFFFFF",
+                      borderColor: palette.borderLight || "transparent",
+                    },
+                  ]}
                 >
-                  {gig.status}
-                </T>
-              </View>
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-            <View style={styles.gigBottom}>
-              <View style={styles.avatarRow}>
-                {gig.avatars.map((a, i) => (
-                  <View key={`${a}-${i}`} style={{ marginLeft: i === 0 ? 0 : -8 }}>
-                    <Avatar source={a} size={24} />
+                  <View
+                    style={[styles.iconBox, { backgroundColor: cat.bgLight }]}
+                  >
+                    <Ionicons
+                      name={cat.icon as any}
+                      size={28}
+                      color={cat.color}
+                    />
                   </View>
-                ))}
-              </View>
-              <T weight="semiBold" color={palette.subText} style={styles.gigMetric}>
-                {gig.metric}
-              </T>
-            </View>
-          </SurfaceCard>
-        ))}
+                  <T
+                    weight="semiBold"
+                    color={palette.text}
+                    style={styles.catTitle}
+                  >
+                    {cat.title}
+                  </T>
+                </SurfaceCard>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
-        <T weight="bold" color={palette.text} style={[styles.sectionTitle, { marginTop: 16 }]}> 
-          Recent Activity
-        </T>
-
-        <SurfaceCard style={styles.activityCard}>
-          {[
-            {
-              title: "New proposal from Arjun Patel",
-              time: "2 minutes ago",
-              icon: "document-text-outline" as const,
-              danger: true,
-            },
-            {
-              title: "Contract signed by Sarah J.",
-              time: "1 hour ago",
-              icon: "shield-checkmark-outline" as const,
-              danger: false,
-            },
-          ].map((item, idx) => (
-            <View
-              key={item.title}
-              style={[
-                styles.activityRow,
-                idx === 0 ? { borderBottomWidth: 1, borderBottomColor: palette.border } : null,
-              ]}
+        {/* --- Active Gigs Section --- */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <T weight="bold" color={palette.text} style={styles.sectionTitle}>
+              Active Gigs
+            </T>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => nav.push("/freelancer-stack/my-gigs")}
             >
-              <View
+              <T weight="bold" color={palette.accent} style={styles.seeAllText}>
+                See All
+              </T>
+            </TouchableOpacity>
+          </View>
+
+          {activeGigs.map((gig, index) => (
+            <TouchableOpacity
+              key={index}
+              activeOpacity={0.8}
+              style={styles.gigCardWrapper}
+            >
+              <SurfaceCard
                 style={[
-                  styles.activityIcon,
+                  styles.gigCard,
                   {
-                    backgroundColor: item.danger
-                      ? palette.accentSoft
-                      : isDark
-                        ? "rgba(35,160,88,0.2)"
-                        : "rgba(35,160,88,0.14)",
+                    backgroundColor: isDark ? palette.surface : "#FFFFFF",
+                    borderColor: palette.borderLight || "transparent",
                   },
                 ]}
               >
-                <Ionicons
-                  name={item.icon}
-                  size={16}
-                  color={item.danger ? palette.accent : "#1D9A5B"}
+                <View style={styles.gigTop}>
+                  <View style={{ flex: 1, paddingRight: 16 }}>
+                    <T
+                      weight="bold"
+                      color={palette.text}
+                      style={styles.gigTitle}
+                    >
+                      {gig.title}
+                    </T>
+                    <T
+                      weight="medium"
+                      color={palette.subText}
+                      style={styles.gigSub}
+                    >
+                      {gig.sub}
+                    </T>
+                  </View>
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        backgroundColor:
+                          gig.statusTone === "danger"
+                            ? "rgba(255, 59, 48, 0.12)"
+                            : "rgba(42, 99, 246, 0.12)",
+                      },
+                    ]}
+                  >
+                    <T
+                      weight="bold"
+                      color={
+                        gig.statusTone === "danger" ? "#FF3B30" : "#2A63F6"
+                      }
+                      style={styles.badgeText}
+                    >
+                      {gig.status}
+                    </T>
+                  </View>
+                </View>
+
+                {/* Styled Divider */}
+                <View
+                  style={[
+                    styles.divider,
+                    {
+                      backgroundColor:
+                        palette.borderLight || "rgba(0,0,0,0.05)",
+                    },
+                  ]}
                 />
-              </View>
-              <View style={{ flex: 1 }}>
-                <T weight="semiBold" color={palette.text} style={styles.activityTitle}>
-                  {item.title}
-                </T>
-                <T weight="medium" color={palette.subText} style={styles.activityTime}>
-                  {item.time}
-                </T>
-              </View>
-            </View>
+
+                <View style={styles.gigBottom}>
+                  <View style={styles.avatarStack}>
+                    {gig.avatars.map((avatar, idx) => (
+                      <View
+                        key={idx}
+                        style={[
+                          styles.avatarRing,
+                          {
+                            marginLeft: idx === 0 ? 0 : -12,
+                            borderColor: isDark ? palette.surface : "#FFFFFF",
+                          },
+                        ]}
+                      >
+                        <Avatar source={avatar} size={28} />
+                      </View>
+                    ))}
+                  </View>
+                  <T
+                    weight="semiBold"
+                    color={palette.subText}
+                    style={styles.gigMetricText}
+                  >
+                    {gig.metric}
+                  </T>
+                </View>
+              </SurfaceCard>
+            </TouchableOpacity>
           ))}
-        </SurfaceCard>
-      </View>
+        </View>
+      </ScrollView>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingTop: 54,
-    paddingHorizontal: 18,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  scrollContent: {
+    paddingBottom: 64, // Space for floating tab bar if added later
   },
-  leftRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  smallLabel: { fontSize: 11, letterSpacing: 0.8 },
-  headerTitle: { fontSize: 20 },
-  bellBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  /* --- Typography & Spacing System (8pt based) --- */
+  header: {
+    paddingTop: 64, // 8 * 8
+    paddingHorizontal: 24, // 8 * 3
+    paddingBottom: 24,
+  },
+  avatarBtn: {
+    alignSelf: "flex-end",
+    marginBottom: 16,
     borderWidth: 1,
+    borderRadius: 22,
+    padding: 2,
+  },
+  headerTitleSub: {
+    fontSize: 24,
+    lineHeight: 32,
+    letterSpacing: -0.4,
+    opacity: 0.8,
+  },
+  headerTitleMain: {
+    fontSize: 40,
+    lineHeight: 48,
+    letterSpacing: -1.2,
+    marginTop: 4,
+  },
+
+  /* --- Search Bar Upgrade --- */
+  searchSection: {
+    paddingHorizontal: 24,
+    marginBottom: 32, // 8 * 4
+  },
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 20, // Better pill shape ratio
+    paddingLeft: 20,
+    paddingRight: 8,
+    height: 64,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
+    fontWeight: "500",
+    height: "100%",
+  },
+  placeholderText: {
+    fontSize: 16,
+  },
+  filterBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16, // Squircle geometry
+    backgroundColor: "#1C1C1E", // Premium dark contrast
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 8,
   },
-  content: { paddingHorizontal: 18, paddingTop: 14 },
-  goodMorning: { fontSize: 11, letterSpacing: 1.4 },
-  hello: { fontSize: 27, marginTop: 4 },
-  subtitle: { fontSize: 13, marginTop: 4, lineHeight: 20 },
-  cta: { marginTop: 14 },
-  kpiRow: { flexDirection: "row", gap: 10, marginTop: 14 },
-  kpiCard: { flex: 1, padding: 12 },
-  kpiHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  kpiLabel: { fontSize: 10, letterSpacing: 0.7 },
-  kpiValue: { fontSize: 22, marginTop: 8 },
-  chipPositive: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(29,154,91,0.14)",
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+
+  /* --- Section Headers --- */
+  sectionContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
+  },
+  sectionHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 4,
+    marginBottom: 20,
   },
-  chipNeutral: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
+  sectionTitle: {
+    fontSize: 22,
+    letterSpacing: -0.6,
+  },
+  seeAllText: {
+    fontSize: 15,
+  },
+
+  /* --- Most Popular Grid --- */
+  categoriesGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: 16, // 8 * 2
   },
-  chipText: { fontSize: 11 },
-  sectionHead: {
-    marginTop: 16,
+  gridItemWrapper: {
+    width: "47%",
+  },
+  gridItem: {
+    padding: 24,
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    borderRadius: 24,
+    minHeight: 160,
+    // Soft standard shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 2,
+    borderWidth: 1, // Will be overridden if light mode
+  },
+  iconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: 20, // Squircle
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  catTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.3,
+  },
+
+  /* --- Active Gigs Section --- */
+  gigCardWrapper: {
+    marginBottom: 16,
+  },
+  gigCard: {
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  gigTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+  },
+  gigTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    letterSpacing: -0.5,
+  },
+  gigSub: {
+    fontSize: 14,
+    marginTop: 6, // 8pt related spacing
+    opacity: 0.7,
+  },
+  badge: {
+    borderRadius: 12, // Improved badge pill
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  divider: {
+    height: 1,
+    marginVertical: 20,
+    borderRadius: 1,
+  },
+  gigBottom: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  sectionTitle: { fontSize: 20 },
-  seeAll: { fontSize: 13 },
-  gigCard: { marginTop: 10, padding: 12 },
-  gigTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  gigTitle: { fontSize: 17, flexShrink: 1 },
-  gigSub: { fontSize: 13, marginTop: 2 },
-  badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  badgeText: { fontSize: 10, letterSpacing: 0.7 },
-  divider: { height: 1, marginVertical: 10 },
-  gigBottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  avatarRow: { flexDirection: "row", alignItems: "center" },
-  gigMetric: { fontSize: 13 },
-  activityCard: { marginTop: 10 },
-  activityRow: { flexDirection: "row", gap: 10, padding: 12, alignItems: "center" },
-  activityIcon: { width: 34, height: 34, borderRadius: 17, justifyContent: "center", alignItems: "center" },
-  activityTitle: { fontSize: 14 },
-  activityTime: { fontSize: 12, marginTop: 1 },
+  avatarStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatarRing: {
+    borderWidth: 2,
+    borderRadius: 20,
+  },
+  gigMetricText: {
+    fontSize: 14,
+  },
 });

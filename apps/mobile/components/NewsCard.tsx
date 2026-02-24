@@ -18,29 +18,29 @@ export function NewsCard({ image, category, title, source, time, isFeatured = fa
   return (
     <View style={[styles.container, isFeatured && styles.featuredContainer]}>
       <Image source={{ uri: image }} style={styles.image} contentFit="cover" transition={1000} />
-      
+
       <LinearGradient
         colors={['transparent', 'rgba(2, 6, 23, 0.8)', Colors.background]}
         style={styles.gradient}
       >
         <View style={styles.content}>
           <View style={styles.badgeContainer}>
-             <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{category}</Text>
-             </View>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{category}</Text>
+            </View>
           </View>
-          
+
           <Text style={[styles.title, isFeatured && styles.featuredTitle]} numberOfLines={isFeatured ? 3 : 2}>
             {title}
           </Text>
-          
+
           <View style={styles.metaContainer}>
             <View style={styles.sourceContainer}>
-               <Image 
-                 source={{ uri: 'https://ui-avatars.com/api/?name=' + source + '&background=random' }} 
-                 style={styles.sourceIcon} 
-               />
-               <Text style={styles.sourceText}>{source}</Text>
+              <Image
+                source={{ uri: 'https://ui-avatars.com/api/?name=' + source + '&background=random' }}
+                style={styles.sourceIcon}
+              />
+              <Text style={styles.sourceText}>{source}</Text>
             </View>
             <View style={styles.dot} />
             <Text style={styles.timeText}>{time}</Text>
