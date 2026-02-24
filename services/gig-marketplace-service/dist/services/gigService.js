@@ -6,7 +6,10 @@ export async function createGig(db, founderId, payload) {
     try {
         const { tags, ...gigData } = payload;
         const repo = new GigRepository(db);
-        const result = await repo.createGig({ ...gigData, founder_id: founderId });
+        // Ensure user_profiles row exists (FK requirement) — no-op if already present
+        await db.from("user_profiles").upsert({ id: founderId }, { onConflict: "id", ignoreDuplicates: true });
+        const publishedAt = gigData.status === "open" ? new Date().toISOString() : null;
+        const result = await repo.createGig({ ...gigData, founder_id: founderId, ...(publishedAt ? { published_at: publishedAt } : {}) });
         if (tags && Array.isArray(tags) && tags.length > 0) {
             await repo.addTagsToGig(result.id, tags);
         }
@@ -46,6 +49,10 @@ export async function updateGig(db, id, founderId, patch) {
             throw new AppError("Unauthorized", 403, "forbidden");
         let result = gig;
         if (Object.keys(gigData).length > 0) {
+            // Set published_at when transitioning to open for the first time
+            if (gigData.status === "open" && !gig.published_at) {
+                gigData.published_at = new Date().toISOString();
+            }
             result = await repo.updateGig(id, gigData);
         }
         if (tags && Array.isArray(tags)) {

@@ -169,7 +169,7 @@ async function searchArticles(query: string): Promise<SearchArticle[]> {
   return data || [];
 }
 
-function searchAccounts(query: string): SearchAccount[] {
+export function searchAccounts(query: string): SearchAccount[] {
   const q = query.toLowerCase();
   return MOCK_ACCOUNTS.filter(
     (a) =>

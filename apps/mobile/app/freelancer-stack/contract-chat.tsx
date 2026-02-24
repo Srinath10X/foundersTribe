@@ -7,164 +7,171 @@ import {
     FlowScreen,
     FlowTopBar,
     T,
-    people,
     useFlowNav,
     useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { EmptyState } from "@/components/freelancer/EmptyState";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { ErrorState } from "@/components/freelancer/ErrorState";
 import { SectionHeader } from "@/components/freelancer/SectionHeader";
-import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
-
-// ─── Dummy Chat Threads ────────────────────────────────────────
-const chatThreads = [
-    {
-        id: "c1",
-        name: "Arjun Patel",
-        role: "React Native Developer",
-        avatar: people.alex,
-        lastMessage: "I've pushed the latest build. Please review the dashboard screens.",
-        time: "10:42 AM",
-        unread: 3,
-        online: true,
-        contractTitle: "Fintech App Development",
-    },
-    {
-        id: "c2",
-        name: "Priya Sharma",
-        role: "UI/UX Designer",
-        avatar: people.sarah,
-        lastMessage: "The updated Figma prototypes are ready for review.",
-        time: "Yesterday",
-        unread: 0,
-        online: true,
-        contractTitle: "Dashboard Redesign",
-    },
-    {
-        id: "c3",
-        name: "Rahul Kumar",
-        role: "Backend Engineer",
-        avatar: people.jordan,
-        lastMessage: "API endpoints are deployed to staging. Running load tests now.",
-        time: "Yesterday",
-        unread: 1,
-        online: false,
-        contractTitle: "API Development",
-    },
-    {
-        id: "c4",
-        name: "Sneha Gupta",
-        role: "Brand Designer",
-        avatar: people.female1,
-        lastMessage: "Shared the final brand guidelines document. Let me know your thoughts!",
-        time: "Mon",
-        unread: 0,
-        online: false,
-        contractTitle: "Brand Identity Package",
-    },
-    {
-        id: "c5",
-        name: "Vikram Singh",
-        role: "Content Strategist",
-        avatar: people.marcus,
-        lastMessage: "Here's the content calendar for March. Happy to hop on a call to discuss.",
-        time: "Sun",
-        unread: 0,
-        online: false,
-        contractTitle: "Content Strategy",
-    },
-];
+import { SP, RADIUS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
+import { useContracts } from "@/hooks/useGig";
+import type { Contract } from "@/types/gig";
 
 export default function ContractChatScreen() {
     const { palette } = useFlowPalette();
     const nav = useFlowNav();
 
+    const { data, isLoading, error, refetch } = useContracts();
+
+    const contracts = data?.items ?? [];
+
+    // Derive the other party's info from the contract
+    const getOtherParty = (contract: Contract) => {
+        // In the founder flow, the "other party" is the freelancer
+        const freelancer = contract.freelancer;
+        return {
+            name: freelancer?.full_name || freelancer?.handle || "Freelancer",
+            avatar: freelancer?.avatar_url || undefined,
+            role: freelancer?.bio?.substring(0, 30) || "Freelancer",
+        };
+    };
+
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) {
+            return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+        } else if (diffDays === 1) {
+            return "Yesterday";
+        } else if (diffDays < 7) {
+            return date.toLocaleDateString("en-IN", { weekday: "short" });
+        }
+        return date.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    };
+
+    if (isLoading) {
+        return (
+            <FlowScreen>
+                <FlowTopBar title="Chat" showLeft={false} right="create-outline" onRightPress={() => {}} />
+                <View style={styles.content}>
+                    <LoadingState rows={4} />
+                </View>
+            </FlowScreen>
+        );
+    }
+
+    if (error) {
+        return (
+            <FlowScreen>
+                <FlowTopBar title="Chat" showLeft={false} right="create-outline" onRightPress={() => {}} />
+                <View style={styles.content}>
+                    <ErrorState
+                        title="Failed to load conversations"
+                        message={error.message}
+                        onRetry={() => refetch()}
+                    />
+                </View>
+            </FlowScreen>
+        );
+    }
+
     return (
         <FlowScreen>
-            <FlowTopBar title="Chat" showLeft={false} right="create-outline" onRightPress={() => { }} />
+            <FlowTopBar title="Chat" showLeft={false} right="create-outline" onRightPress={() => {}} />
 
             <View style={styles.content}>
-                {/* Active Contracts Section */}
                 <SectionHeader title="Conversations" />
 
-                {chatThreads.length === 0 ? (
+                {contracts.length === 0 ? (
                     <EmptyState
                         icon="chatbubble-outline"
                         title="No Conversations"
                         subtitle="Start a contract with a freelancer to begin chatting."
                     />
                 ) : (
-                    chatThreads.map((thread) => (
-                        <TouchableOpacity
-                            key={thread.id}
-                            onPress={() =>
-                                nav.push(
-                                    `/freelancer-stack/contract-chat-thread?title=${encodeURIComponent(thread.name)}`
-                                )
-                            }
-                            activeOpacity={1}
-                        >
-                            <View
-                                style={[
-                                    styles.card,
-                                    {
-                                        backgroundColor: palette.surface,
-                                        borderColor: thread.unread > 0 ? palette.accent + "22" : palette.borderLight,
-                                    },
-                                ]}
-                            >
-                                <View style={styles.row}>
-                                    {/* Avatar + online indicator */}
-                                    <View style={styles.avatarWrap}>
-                                        <Avatar source={thread.avatar} size={52} />
-                                        {thread.online && (
-                                            <View style={[styles.onlineDot, { borderColor: palette.surface }]} />
-                                        )}
-                                    </View>
+                    contracts.map((contract) => {
+                        const other = getOtherParty(contract);
+                        const gigTitle = contract.gig?.title || "Contract";
+                        const isActive = contract.status === "active";
 
-                                    {/* Text content */}
-                                    <View style={styles.textWrap}>
-                                        <View style={styles.nameRow}>
-                                            <T
-                                                weight={thread.unread > 0 ? "bold" : "semiBold"}
-                                                color={palette.text}
-                                                style={styles.name}
-                                                numberOfLines={1}
-                                            >
-                                                {thread.name}
-                                            </T>
-                                            <T weight="medium" color={palette.mutedText} style={styles.time}>
-                                                {thread.time}
-                                            </T>
+                        return (
+                            <TouchableOpacity
+                                key={contract.id}
+                                onPress={() =>
+                                    nav.push(
+                                        `/freelancer-stack/contract-chat-thread?contractId=${contract.id}&title=${encodeURIComponent(other.name)}`
+                                    )
+                                }
+                                activeOpacity={1}
+                            >
+                                <View
+                                    style={[
+                                        styles.card,
+                                        {
+                                            backgroundColor: palette.surface,
+                                            borderColor: isActive ? palette.accent + "22" : palette.borderLight,
+                                        },
+                                    ]}
+                                >
+                                    <View style={styles.row}>
+                                        {/* Avatar + online indicator */}
+                                        <View style={styles.avatarWrap}>
+                                            <Avatar source={other.avatar ? { uri: other.avatar } : undefined} size={52} />
+                                            {isActive && (
+                                                <View style={[styles.onlineDot, { borderColor: palette.surface }]} />
+                                            )}
                                         </View>
 
-                                        {/* Contract title */}
-                                        <T weight="medium" color={palette.accent} style={styles.contractLabel} numberOfLines={1}>
-                                            {thread.contractTitle}
-                                        </T>
+                                        {/* Text content */}
+                                        <View style={styles.textWrap}>
+                                            <View style={styles.nameRow}>
+                                                <T
+                                                    weight={isActive ? "bold" : "semiBold"}
+                                                    color={palette.text}
+                                                    style={styles.name}
+                                                    numberOfLines={1}
+                                                >
+                                                    {other.name}
+                                                </T>
+                                                <T weight="medium" color={palette.mutedText} style={styles.time}>
+                                                    {formatDate(contract.updated_at)}
+                                                </T>
+                                            </View>
 
-                                        {/* Last message */}
-                                        <View style={styles.msgRow}>
-                                            <T
-                                                weight={thread.unread > 0 ? "medium" : "regular"}
-                                                color={thread.unread > 0 ? palette.text : palette.subText}
-                                                style={styles.msg}
-                                                numberOfLines={1}
-                                            >
-                                                {thread.lastMessage}
+                                            {/* Contract/gig title */}
+                                            <T weight="medium" color={palette.accent} style={styles.contractLabel} numberOfLines={1}>
+                                                {gigTitle}
                                             </T>
-                                            {thread.unread > 0 && (
-                                                <View style={[styles.badge, { backgroundColor: palette.accent }]}>
-                                                    <T weight="bold" color="#fff" style={styles.badgeTxt}>
-                                                        {thread.unread}
-                                                    </T>
-                                                </View>
-                                            )}
+
+                                            {/* Status row */}
+                                            <View style={styles.msgRow}>
+                                                <T
+                                                    weight="regular"
+                                                    color={palette.subText}
+                                                    style={styles.msg}
+                                                    numberOfLines={1}
+                                                >
+                                                    {contract.status === "active"
+                                                        ? "Contract in progress"
+                                                        : contract.status === "completed"
+                                                            ? "Contract completed"
+                                                            : `Contract ${contract.status}`}
+                                                </T>
+                                                {isActive && (
+                                                    <View style={[styles.badge, { backgroundColor: palette.accent }]}>
+                                                        <Ionicons name="chatbubble" size={10} color="#fff" />
+                                                    </View>
+                                                )}
+                                            </View>
                                         </View>
                                     </View>
                                 </View>
-                            </View>
-                        </TouchableOpacity>
-                    ))
+                            </TouchableOpacity>
+                        );
+                    })
                 )}
             </View>
         </FlowScreen>

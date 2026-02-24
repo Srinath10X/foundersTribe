@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from "react-native";
+import React from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import {
@@ -13,39 +13,17 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { SectionHeader } from "@/components/freelancer/SectionHeader";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { ErrorState } from "@/components/freelancer/ErrorState";
 import { SP, RADIUS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
-import { gigService, Gig } from "@/lib/gigService";
+import { useGig } from "@/hooks/useGig";
 
 export default function GigDetailsScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
-  const [gig, setGig] = useState<Gig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!id) {
-      setError("No gig ID provided.");
-      setLoading(false);
-      return;
-    }
-    const fetchGig = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await gigService.getGig(id);
-        setGig(data);
-      } catch (err: any) {
-        console.error("Failed to load gig details:", err);
-        setError(err.message || "Failed to load gig details.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchGig();
-  }, [id]);
+  const { data: gig, isLoading: loading, error, refetch } = useGig(id);
 
   // Extract tags from gig_tags join
   const tags = gig?.gig_tags?.map((gt) => gt.tags?.label).filter(Boolean) ?? [];
@@ -79,15 +57,22 @@ export default function GigDetailsScreen() {
     })()
     : "";
 
+  // ─── No ID state ───
+  if (!id) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Gig Details" onLeftPress={nav.back} />
+        <ErrorState title="No gig ID" message="No gig ID was provided." onRetry={nav.back} />
+      </FlowScreen>
+    );
+  }
+
   // ─── Loading state ───
   if (loading) {
     return (
       <FlowScreen>
         <FlowTopBar title="Gig Details" onLeftPress={nav.back} />
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={palette.accent} />
-          <T color={palette.subText} style={{ marginTop: SP._16 }}>Loading gig details…</T>
-        </View>
+        <LoadingState rows={5} />
       </FlowScreen>
     );
   }
@@ -97,19 +82,11 @@ export default function GigDetailsScreen() {
     return (
       <FlowScreen>
         <FlowTopBar title="Gig Details" onLeftPress={nav.back} />
-        <View style={styles.center}>
-          <Ionicons name="alert-circle-outline" size={48} color={palette.subText} />
-          <T weight="semiBold" color={palette.text} style={{ marginTop: SP._16, fontSize: 16 }}>
-            {error || "Gig not found"}
-          </T>
-          <TouchableOpacity
-            style={[styles.retryBtn, { borderColor: palette.accent }]}
-            onPress={() => id && (setLoading(true), gigService.getGig(id).then(setGig).catch(() => { }).finally(() => setLoading(false)))}
-            activeOpacity={0.8}
-          >
-            <T weight="bold" color={palette.accent} style={{ fontSize: 14 }}>Retry</T>
-          </TouchableOpacity>
-        </View>
+        <ErrorState
+          title="Failed to load gig"
+          message={error?.message || "Gig not found"}
+          onRetry={() => refetch()}
+        />
       </FlowScreen>
     );
   }
@@ -224,7 +201,7 @@ export default function GigDetailsScreen() {
       <View style={styles.ctaWrap}>
         <PrimaryButton
           label="View Proposals"
-          onPress={() => nav.push("/freelancer-stack/gig-proposals")}
+          onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
         />
       </View>
     </FlowScreen>
@@ -232,19 +209,6 @@ export default function GigDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: SCREEN_PADDING,
-  },
-  retryBtn: {
-    marginTop: SP._20,
-    borderWidth: 1.5,
-    borderRadius: RADIUS.lg,
-    paddingVertical: SP._12,
-    paddingHorizontal: SP._24,
-  },
   titleSection: {
     paddingHorizontal: SCREEN_PADDING,
     paddingTop: SP._20,

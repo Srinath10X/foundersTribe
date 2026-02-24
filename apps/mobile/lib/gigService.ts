@@ -1,341 +1,544 @@
+/**
+ * ============================================================
+ * GIG SERVICE - API Client for Gig Marketplace
+ * ============================================================
+ * 
+ * This service provides a clean interface to the gig marketplace API.
+ * All methods use proper authentication and error handling.
+ * 
+ * Architecture:
+ * - Types are defined in @/types/gig
+ * - This service handles all API communication
+ * - Hooks (in @/hooks) should be used for data fetching in components
+ * 
+ * Backend endpoints covered:
+ * - /api/gigs            - CRUD for gigs
+ * - /api/gigs/:id/proposals - Proposals on a gig
+ * - /api/proposals       - Freelancer's own proposals
+ * - /api/contracts       - Contracts between founders and freelancers
+ * - /api/contracts/:id/messages - Contract messaging
+ * - /api/contracts/:id/rate - Ratings
+ * - /api/notifications   - User notifications
+ * - /api/users/me        - User profile
+ * ============================================================
+ */
+
 import { supabase } from "./supabase";
+import type {
+  Gig,
+  GigCreateInput,
+  GigUpdateInput,
+  GigFilters,
+  PaginatedGigs,
+  FreelancerStats,
+  Contract,
+  ContractFilters,
+  ContractMessage,
+  MessageCreateInput,
+  MessageListParams,
+  PaginatedContracts,
+  PaginatedMessages,
+  Proposal,
+  ProposalCreateInput,
+  ProposalFilters,
+  PaginatedProposals,
+  Rating,
+  RatingCreateInput,
+  Notification,
+  NotificationFilters,
+  PaginatedNotifications,
+  UserProfile,
+  UserProfileUpsertInput,
+} from "@/types/gig";
+
+// ============================================================
+// CONFIGURATION
+// ============================================================
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_GIG_SERVICE_URL;
 
-export interface GigFounder {
-    id: string;
-    full_name: string | null;
-    avatar_url: string | null;
-    handle: string | null;
+if (!API_BASE_URL) {
+  console.warn("EXPO_PUBLIC_GIG_SERVICE_URL is not set. API calls will fail.");
 }
 
-export interface GigTag {
-    tag_id: string;
-    tags: { id: string; slug: string; label: string };
+// ============================================================
+// ERROR HANDLING
+// ============================================================
+
+export class GigServiceError extends Error {
+  constructor(
+    public message: string,
+    public status?: number,
+    public code?: string
+  ) {
+    super(message);
+    this.name = "GigServiceError";
+  }
 }
 
-export interface Gig {
-    id: string;
-    founder_id: string;
-    title: string;
-    description: string;
-    budget_type: "fixed" | "hourly";
-    budget_min: number;
-    budget_max: number;
-    experience_level: "junior" | "mid" | "senior";
-    startup_stage?: "idea" | "mvp" | "revenue" | "funded";
-    is_remote: boolean;
-    location_text?: string;
-    status: "draft" | "open" | "in_progress" | "completed" | "cancelled";
-    proposals_count: number;
-    published_at?: string;
-    created_at: string;
-    updated_at: string;
-    // Joined fields from GET /gigs/:id
-    founder?: GigFounder;
-    gig_tags?: GigTag[];
-    // Legacy / UI convenience
-    budget?: number;
-    deadline?: string;
-    progress?: number;
-}
+// ============================================================
+// AUTH HELPERS
+// ============================================================
 
-export interface FreelancerStats {
-    earnings_mtd: number;
-    active_projects: number;
-    earnings_growth_pct?: number;
-}
-
-export interface Contract {
-    id: string;
-    gig_id: string;
-    proposal_id: string;
-    founder_id: string;
-    freelancer_id: string;
-    status: "active" | "completed" | "cancelled" | "disputed";
-    freelancer_marked_complete: boolean;
-    founder_approved: boolean;
-    started_at: string;
-    completed_at: string | null;
-    created_at: string;
-    updated_at: string;
-}
-
-export interface ContractMessage {
-    id: string;
-    contract_id: string;
-    sender_id: string;
-    recipient_id: string | null;
-    message_type: "text" | "file" | "system";
-    body: string | null;
-    file_url: string | null;
-    metadata: Record<string, unknown> | null;
-    read_at: string | null;
-    created_at: string;
-    updated_at?: string;
-}
-
-export interface GigFilters {
-    status?: "draft" | "open" | "in_progress" | "completed" | "cancelled";
-    budget_type?: "fixed" | "hourly";
-    experience_level?: "junior" | "mid" | "senior";
-    startup_stage?: "idea" | "mvp" | "revenue" | "funded";
-    tag?: string;
-    budget_min?: string;
-    budget_max?: string;
-    limit?: number;
-    cursor?: string;
-}
-
-export interface PaginatedGigs {
-    items: Gig[];
-    next_cursor: string | null;
-}
-
-export interface ContractFilters {
-    status?: "active" | "completed" | "cancelled" | "disputed";
-    limit?: number;
-    cursor?: string;
-}
-
-export interface MessageListParams {
-    limit?: number;
-    cursor?: string;
-}
-
-class GigServiceError extends Error {
-    constructor(public message: string, public status?: number) {
-        super(message);
-        this.name = 'GigServiceError';
-    }
-}
-
-/**
- * Helper to get the auth token from Supabase session
- */
 async function getAuthToken(): Promise<string> {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error || !session) {
-        throw new GigServiceError("Not authenticated", 401);
-    }
-    return session.access_token;
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session) {
+    throw new GigServiceError("Not authenticated", 401, "UNAUTHENTICATED");
+  }
+  return session.access_token;
 }
 
-/**
- * Standardized fetch wrapper with auth header and error handling
- */
-async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    if (!API_BASE_URL) {
-        throw new GigServiceError("Gig service URL is not configured", 500);
+// ============================================================
+// API FETCH WRAPPER
+// ============================================================
+
+async function fetchWithAuth<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new GigServiceError("Gig service URL is not configured", 500, "CONFIG_ERROR");
+  }
+
+  const token = await getAuthToken();
+
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+    ...options.headers,
+  };
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    // Handle non-2xx responses
+    if (!response.ok) {
+      let errorMessage = `API Error: ${response.statusText}`;
+      let errorCode = "API_ERROR";
+
+      try {
+        const errorData = await response.json();
+        const details = errorData.error?.details;
+        
+        if (Array.isArray(details) && details.length > 0) {
+          // Zod validation error
+          const firstError = details[0];
+          const field = firstError?.path?.join(".") || "field";
+          errorMessage = `${firstError?.message || "Validation failed"} (${field})`;
+          errorCode = "VALIDATION_ERROR";
+        } else {
+          errorMessage = errorData.error?.message || errorData.message || errorMessage;
+          errorCode = errorData.error?.code || errorData.code || errorCode;
+        }
+      } catch {
+        // Response is not JSON
+      }
+
+      throw new GigServiceError(errorMessage, response.status, errorCode);
     }
 
-    const token = await getAuthToken();
-
-    const headers = {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-        ...options.headers,
-    };
-
-    try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            ...options,
-            headers,
-        });
-
-        if (!response.ok) {
-            let errorMessage = `API Error: ${response.statusText}`;
-            try {
-                const errorData = await response.json();
-                const details = errorData.error?.details;
-                if (Array.isArray(details) && details.length > 0) {
-                    // Zod validation error — show the first field error
-                    const firstError = details[0];
-                    const field = firstError?.path?.join(".") || "field";
-                    errorMessage = `${firstError?.message || "Validation failed"} (${field})`;
-                } else {
-                    errorMessage = errorData.error?.message || errorData.message || errorMessage;
-                }
-            } catch (e) {
-                // Response is not JSON
-            }
-            throw new GigServiceError(errorMessage, response.status);
-        }
-
-        // Check if response has content before parsing
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-            return await response.json();
-        }
-
-        return {} as T;
-    } catch (error) {
-        if (error instanceof GigServiceError) {
-            throw error;
-        }
-        throw new GigServiceError(`Network request failed: ${error instanceof Error ? error.message : String(error)}`, 503);
+    // Handle empty responses (e.g., 204 No Content)
+    const contentType = response.headers.get("content-type");
+    if (response.status === 204 || !contentType || !contentType.includes("application/json")) {
+      return {} as T;
     }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof GigServiceError) {
+      throw error;
+    }
+    throw new GigServiceError(
+      `Network request failed: ${error instanceof Error ? error.message : String(error)}`,
+      503,
+      "NETWORK_ERROR"
+    );
+  }
 }
 
-// --- LOCAL DUMMY STATE ---
-let dummyGigs: Gig[] = [];
+// ============================================================
+// URL PARAMS HELPER
+// ============================================================
+
+function buildQueryString(params?: Record<string, unknown>): string {
+  if (!params) return "";
+  
+  const searchParams = new URLSearchParams();
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      searchParams.append(key, String(value));
+    }
+  });
+  
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
+// ============================================================
+// GIG SERVICE METHODS
+// ============================================================
 
 export const gigService = {
-    /**
-     * Fetch freelancer dashboard stats
-     */
-    getStats: async (): Promise<FreelancerStats> => {
-        try {
-            // In a real implementation this would call an endpoint like /api/freelancer/stats
-            // If endpoint doesn't exist yet, we can mock it based on their actual gigs
-            const stats = await fetchWithAuth<any>("/api/gigs/stats");
-            return {
-                earnings_mtd: stats.earnings_mtd || stats.data?.earnings_mtd || 0,
-                active_projects: stats.active_projects || stats.data?.active_projects || 0,
-                earnings_growth_pct: stats.earnings_growth_pct || stats.data?.earnings_growth_pct || 0,
-            };
-        } catch (error) {
-            console.error("Failed to fetch gig stats. Using fallback/mock.", error);
-            // Fallback for development if endpoint is missing to prevent breaking UI
-            return {
-                earnings_mtd: 8450,
-                active_projects: 4,
-                earnings_growth_pct: 12,
-            };
-        }
-    },
+  // ------------------------------------------
+  // GIGS
+  // ------------------------------------------
 
-    /**
-     * Fetch a list of gigs with optional filters
-     */
-    getGigs: async (filters?: GigFilters): Promise<PaginatedGigs> => {
-        // Dummy implementation
-        let items = [...dummyGigs];
-        if (filters?.status) items = items.filter(g => g.status === filters.status);
-        if (filters?.experience_level) items = items.filter(g => g.experience_level === filters.experience_level);
-        return { items, next_cursor: null };
-    },
+  /**
+   * Fetch a list of gigs with optional filters
+   * GET /api/gigs
+   */
+  getGigs: async (filters?: GigFilters): Promise<PaginatedGigs> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: Gig[]; next_cursor: string | null }>(
+      `/api/gigs${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
 
-    /**
-     * Fetch only the current user's gigs (calls /api/gigs/me)
-     */
-    getMyGigs: async (filters?: GigFilters): Promise<PaginatedGigs> => {
-        let items = [...dummyGigs];
-        if (filters?.status) items = items.filter(g => g.status === filters.status);
-        // sort by newest
-        items = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        return { items, next_cursor: null };
-    },
+  /**
+   * Fetch only the current user's gigs (founder)
+   * GET /api/gigs/me
+   */
+  getMyGigs: async (filters?: GigFilters): Promise<PaginatedGigs> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: Gig[]; next_cursor: string | null }>(
+      `/api/gigs/me${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
 
-    /**
-     * Fetch a single gig by ID
-     */
-    getGig: async (id: string): Promise<Gig> => {
-        const gig = dummyGigs.find(g => g.id === id);
-        if (!gig) throw new Error("Gig not found");
-        return gig;
-    },
+  /**
+   * Fetch a single gig by ID
+   * GET /api/gigs/:id
+   */
+  getGig: async (id: string): Promise<Gig> => {
+    const response = await fetchWithAuth<{ data: Gig }>(`/api/gigs/${id}`);
+    if (!response.data) {
+      throw new GigServiceError("Gig not found", 404, "NOT_FOUND");
+    }
+    return response.data;
+  },
 
-    /**
-     * Create a new gig
-     */
-    createGig: async (gigData: Partial<Gig>): Promise<Gig> => {
-        const newGig: Gig = {
-            id: Math.random().toString(36).substring(7),
-            founder_id: "dummy-user",
-            ...gigData,
-            proposals_count: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        } as Gig;
-        dummyGigs.push(newGig);
-        return newGig;
-    },
+  /**
+   * Create a new gig
+   * POST /api/gigs
+   */
+  createGig: async (gigData: GigCreateInput): Promise<Gig> => {
+    const response = await fetchWithAuth<{ data: Gig }>("/api/gigs", {
+      method: "POST",
+      body: JSON.stringify(gigData),
+    });
+    return response.data!;
+  },
 
-    /**
-     * Update an existing gig
-     */
-    updateGig: async (id: string, gigData: Partial<Gig>): Promise<Gig> => {
-        const idx = dummyGigs.findIndex(g => g.id === id);
-        if (idx === -1) throw new Error("Gig not found");
-        dummyGigs[idx] = { ...dummyGigs[idx], ...gigData, updated_at: new Date().toISOString() };
-        return dummyGigs[idx];
-    },
+  /**
+   * Update an existing gig
+   * PATCH /api/gigs/:id
+   */
+  updateGig: async (id: string, gigData: GigUpdateInput): Promise<Gig> => {
+    const response = await fetchWithAuth<{ data: Gig }>(`/api/gigs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(gigData),
+    });
+    return response.data!;
+  },
 
-    /**
-     * Delete a gig
-     */
-    deleteGig: async (id: string): Promise<void> => {
-        await fetchWithAuth<void>(`/api/gigs/${id}`, {
-            method: "DELETE",
-        });
-    },
+  /**
+   * Delete a gig
+   * DELETE /api/gigs/:id
+   */
+  deleteGig: async (id: string): Promise<void> => {
+    await fetchWithAuth(`/api/gigs/${id}`, {
+      method: "DELETE",
+    });
+  },
 
-    /**
-     * Fetch contracts for the current authenticated user.
-     */
-    getContracts: async (filters?: ContractFilters): Promise<{ items: Contract[]; next_cursor: string | null }> => {
-        const params = new URLSearchParams();
-        if (filters?.status) params.append("status", filters.status);
-        if (filters?.limit) params.append("limit", filters.limit.toString());
-        if (filters?.cursor) params.append("cursor", filters.cursor);
-        const query = params.toString();
+  // ------------------------------------------
+  // STATS
+  // ------------------------------------------
 
-        const response = await fetchWithAuth<any>(`/api/contracts${query ? `?${query}` : ""}`);
-        return {
-            items: response.items || response.data || [],
-            next_cursor: response.next_cursor ?? null,
-        };
-    },
+  /**
+   * Fetch freelancer dashboard stats
+   * GET /api/gigs/stats
+   */
+  getStats: async (): Promise<FreelancerStats> => {
+    try {
+      const response = await fetchWithAuth<any>("/api/gigs/stats");
+      return {
+        earnings_mtd: response.earnings_mtd ?? response.data?.earnings_mtd ?? 0,
+        active_projects: response.active_projects ?? response.data?.active_projects ?? 0,
+        earnings_growth_pct: response.earnings_growth_pct ?? response.data?.earnings_growth_pct ?? 0,
+        total_earnings: response.total_earnings ?? response.data?.total_earnings,
+        completed_projects: response.completed_projects ?? response.data?.completed_projects,
+        rating: response.rating ?? response.data?.rating,
+      };
+    } catch (error) {
+      // Return safe defaults if endpoint fails
+      console.warn("Failed to fetch stats, using defaults:", error);
+      return {
+        earnings_mtd: 0,
+        active_projects: 0,
+        earnings_growth_pct: 0,
+      };
+    }
+  },
 
-    /**
-     * Fetch contract messages.
-     */
-    getContractMessages: async (
-        contractId: string,
-        params?: MessageListParams,
-    ): Promise<{ items: ContractMessage[]; next_cursor: string | null }> => {
-        const q = new URLSearchParams();
-        if (params?.limit) q.append("limit", params.limit.toString());
-        if (params?.cursor) q.append("cursor", params.cursor);
-        const query = q.toString();
+  // ------------------------------------------
+  // PROPOSALS
+  // ------------------------------------------
 
-        const response = await fetchWithAuth<any>(
-            `/api/contracts/${contractId}/messages${query ? `?${query}` : ""}`,
-        );
+  /**
+   * Submit a proposal for a gig
+   * POST /api/gigs/:gigId/proposals
+   */
+  submitProposal: async (gigId: string, data: ProposalCreateInput): Promise<Proposal> => {
+    const response = await fetchWithAuth<{ data: Proposal }>(
+      `/api/gigs/${gigId}/proposals`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+    return response.data!;
+  },
 
-        return {
-            items: response.items || response.data || [],
-            next_cursor: response.next_cursor ?? null,
-        };
-    },
+  /**
+   * List proposals for a specific gig (founder/owner view)
+   * GET /api/gigs/:gigId/proposals
+   */
+  getGigProposals: async (gigId: string, filters?: ProposalFilters): Promise<PaginatedProposals> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: Proposal[]; next_cursor: string | null }>(
+      `/api/gigs/${gigId}/proposals${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
 
-    /**
-     * Send a contract message.
-     */
-    sendContractMessage: async (
-        contractId: string,
-        payload: {
-            recipient_id?: string;
-            message_type: "text" | "file" | "system";
-            body?: string;
-            file_url?: string;
-            metadata?: Record<string, unknown>;
-        },
-    ): Promise<ContractMessage> => {
-        const response = await fetchWithAuth<any>(`/api/contracts/${contractId}/messages`, {
-            method: "POST",
-            body: JSON.stringify(payload),
-        });
-        return response.data || response;
-    },
+  /**
+   * List current user's own proposals (freelancer view)
+   * GET /api/proposals/me
+   */
+  getMyProposals: async (filters?: ProposalFilters): Promise<PaginatedProposals> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: Proposal[]; next_cursor: string | null }>(
+      `/api/proposals/me${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
 
-    /**
-     * Mark unread messages as read for a contract.
-     */
-    markContractMessagesRead: async (contractId: string): Promise<void> => {
-        await fetchWithAuth(`/api/contracts/${contractId}/messages/read`, {
-            method: "POST",
-        });
-    },
+  /**
+   * Accept a proposal (founder action - creates a contract)
+   * POST /api/proposals/:proposalId/accept
+   * Returns { contract_id: string }
+   */
+  acceptProposal: async (proposalId: string): Promise<{ contract_id: string }> => {
+    const response = await fetchWithAuth<{ data: { contract_id: string } }>(
+      `/api/proposals/${proposalId}/accept`,
+      { method: "POST" }
+    );
+    return response.data!;
+  },
+
+  /**
+   * Reject a proposal (founder action)
+   * POST /api/proposals/:proposalId/reject
+   */
+  rejectProposal: async (proposalId: string): Promise<void> => {
+    await fetchWithAuth(`/api/proposals/${proposalId}/reject`, {
+      method: "POST",
+    });
+  },
+
+  // ------------------------------------------
+  // CONTRACTS
+  // ------------------------------------------
+
+  /**
+   * Fetch contracts for the current user
+   * GET /api/contracts
+   */
+  getContracts: async (filters?: ContractFilters): Promise<PaginatedContracts> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: Contract[]; next_cursor: string | null }>(
+      `/api/contracts${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
+
+  /**
+   * Fetch a single contract by ID
+   * GET /api/contracts/:id
+   */
+  getContract: async (id: string): Promise<Contract> => {
+    const response = await fetchWithAuth<{ data: Contract }>(`/api/contracts/${id}`);
+    if (!response.data) {
+      throw new GigServiceError("Contract not found", 404, "NOT_FOUND");
+    }
+    return response.data;
+  },
+
+  /**
+   * Mark contract as complete (freelancer action)
+   * POST /api/contracts/:id/complete
+   */
+  completeContract: async (id: string): Promise<Contract> => {
+    const response = await fetchWithAuth<{ data: Contract }>(
+      `/api/contracts/${id}/complete`,
+      { method: "POST" }
+    );
+    return response.data!;
+  },
+
+  /**
+   * Approve a completed contract (founder action)
+   * POST /api/contracts/:id/approve
+   */
+  approveContract: async (id: string): Promise<Contract> => {
+    const response = await fetchWithAuth<{ data: Contract }>(
+      `/api/contracts/${id}/approve`,
+      { method: "POST" }
+    );
+    return response.data!;
+  },
+
+  // ------------------------------------------
+  // MESSAGES
+  // ------------------------------------------
+
+  /**
+   * Fetch contract messages
+   * GET /api/contracts/:contractId/messages
+   */
+  getContractMessages: async (
+    contractId: string,
+    params?: MessageListParams
+  ): Promise<PaginatedMessages> => {
+    const query = buildQueryString(params);
+    const response = await fetchWithAuth<{ items: ContractMessage[]; next_cursor: string | null }>(
+      `/api/contracts/${contractId}/messages${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
+
+  /**
+   * Send a contract message
+   * POST /api/contracts/:contractId/messages
+   */
+  sendContractMessage: async (
+    contractId: string,
+    payload: MessageCreateInput
+  ): Promise<ContractMessage> => {
+    const response = await fetchWithAuth<{ data: ContractMessage }>(
+      `/api/contracts/${contractId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    return response.data!;
+  },
+
+  /**
+   * Mark unread messages as read
+   * POST /api/contracts/:contractId/messages/read
+   */
+  markContractMessagesRead: async (contractId: string): Promise<void> => {
+    await fetchWithAuth(`/api/contracts/${contractId}/messages/read`, {
+      method: "POST",
+    });
+  },
+
+  // ------------------------------------------
+  // RATINGS
+  // ------------------------------------------
+
+  /**
+   * Submit a rating for a contract
+   * POST /api/contracts/:contractId/rate
+   */
+  submitRating: async (contractId: string, data: RatingCreateInput): Promise<Rating> => {
+    const response = await fetchWithAuth<{ data: Rating }>(
+      `/api/contracts/${contractId}/rate`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
+    return response.data!;
+  },
+
+  // ------------------------------------------
+  // NOTIFICATIONS
+  // ------------------------------------------
+
+  /**
+   * List user notifications
+   * GET /api/notifications
+   */
+  getNotifications: async (filters?: NotificationFilters): Promise<PaginatedNotifications> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: Notification[]; next_cursor: string | null }>(
+      `/api/notifications${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
+
+  // ------------------------------------------
+  // USER PROFILE
+  // ------------------------------------------
+
+  /**
+   * Get current user's profile
+   * GET /api/users/me
+   */
+  getMyProfile: async (): Promise<UserProfile> => {
+    const response = await fetchWithAuth<{ data: UserProfile }>("/api/users/me");
+    if (!response.data) {
+      throw new GigServiceError("Profile not found", 404, "NOT_FOUND");
+    }
+    return response.data;
+  },
+
+  /**
+   * Update/upsert current user's profile
+   * PUT /api/users/me
+   */
+  updateMyProfile: async (data: UserProfileUpsertInput): Promise<UserProfile> => {
+    const response = await fetchWithAuth<{ data: UserProfile }>("/api/users/me", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+    return response.data!;
+  },
 };
+
+// ============================================================
+// EXPORT DEFAULT
+// ============================================================
+
+export default gigService;

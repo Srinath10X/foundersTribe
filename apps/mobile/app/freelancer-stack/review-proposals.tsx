@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 
 import {
   Avatar,
@@ -8,111 +9,186 @@ import {
   FlowTopBar,
   SurfaceCard,
   T,
-  people,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-
-const proposals = [
-  {
-    name: "Arjun Patel",
-    rating: "4.9",
-    reviews: "128 reviews",
-    price: "₹1,200",
-    timeline: "14 days",
-    description: "I have extensive experience in fintech UI design and can start immediately on your project.",
-    image: people.alex,
-  },
-  {
-    name: "Priya Sharma",
-    rating: "5.0",
-    reviews: "84 reviews",
-    price: "₹1,550",
-    timeline: "10 days",
-    description: "Senior Product Designer with a background in Neo-banking. I can deliver a full prototype.",
-    image: people.sarah,
-  },
-  {
-    name: "Rahul Kumar",
-    rating: "4.7",
-    reviews: "42 reviews",
-    price: "₹950",
-    timeline: "21 days",
-    description: "Budget-friendly option without compromising quality. I specialize in minimal clean designs.",
-    image: people.jordan,
-  },
-];
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { ErrorState } from "@/components/freelancer/ErrorState";
+import { EmptyState } from "@/components/freelancer/EmptyState";
+import { useGig, useGigProposals, useAcceptProposal, useRejectProposal } from "@/hooks/useGig";
+import type { Proposal } from "@/types/gig";
 
 export default function ReviewProposalsScreen() {
   const { palette, isDark } = useFlowPalette();
   const nav = useFlowNav();
+  const { gigId } = useLocalSearchParams<{ gigId?: string }>();
+  const [sortBy, setSortBy] = useState<"lowest" | "highest">("lowest");
+
+  const { data: gig } = useGig(gigId);
+  const { data, isLoading, error, refetch } = useGigProposals(gigId);
+  const acceptMutation = useAcceptProposal();
+  const rejectMutation = useRejectProposal();
+
+  const proposals = [...(data?.items ?? [])].sort((a, b) => {
+    const amountA = parseFloat(a.proposed_amount);
+    const amountB = parseFloat(b.proposed_amount);
+    return sortBy === "lowest" ? amountA - amountB : amountB - amountA;
+  });
+
+  const handleAccept = async (proposal: Proposal) => {
+    if (!gigId) return;
+    try {
+      const result = await acceptMutation.mutateAsync({
+        proposalId: proposal.id,
+        gigId,
+      });
+      nav.push(`/freelancer-stack/contract-details?contractId=${result.contract_id}`);
+    } catch (err) {
+      console.error("Failed to accept proposal:", err);
+    }
+  };
+
+  const formatAmount = (amount: string | number) => {
+    const num = typeof amount === "string" ? parseFloat(amount) : amount;
+    return `₹${num.toLocaleString()}`;
+  };
+
+  if (isLoading) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Review Proposals" onLeftPress={nav.back} />
+        <View style={{ paddingHorizontal: 20, paddingTop: 14 }}>
+          <LoadingState rows={3} />
+        </View>
+      </FlowScreen>
+    );
+  }
+
+  if (error) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Review Proposals" onLeftPress={nav.back} />
+        <View style={{ paddingHorizontal: 20, paddingTop: 14 }}>
+          <ErrorState
+            title="Failed to load proposals"
+            message={error.message}
+            onRetry={() => refetch()}
+          />
+        </View>
+      </FlowScreen>
+    );
+  }
 
   return (
     <FlowScreen>
       <FlowTopBar title="Review Proposals" onLeftPress={nav.back} right="ellipsis-horizontal" onRightPress={() => {}} />
 
-      <View style={[styles.top, { borderBottomColor: palette.border }]}> 
+      <View style={[styles.top, { borderBottomColor: palette.border }]}>
         <T weight="semiBold" color={palette.subText} style={styles.projectLabel}>PROJECT</T>
-        <T weight="bold" color={palette.accent} style={styles.projectTitle}>UI/UX Designer for Fintech App</T>
+        <T weight="bold" color={palette.accent} style={styles.projectTitle}>
+          {gig?.title || "Loading..."}
+        </T>
       </View>
 
       <View style={styles.filters}>
-        <TouchableOpacity style={[styles.sortBtn, { backgroundColor: palette.card }]}>
-          <T weight="semiBold" color={palette.text} style={{ fontSize: 15 }}>Sort by: Lowest Price</T>
+        <TouchableOpacity
+          style={[styles.sortBtn, { backgroundColor: palette.card }]}
+          onPress={() => setSortBy(sortBy === "lowest" ? "highest" : "lowest")}
+        >
+          <T weight="semiBold" color={palette.text} style={{ fontSize: 15 }}>
+            Sort by: {sortBy === "lowest" ? "Lowest Price" : "Highest Price"}
+          </T>
           <Ionicons name="chevron-down" size={16} color={palette.subText} />
         </TouchableOpacity>
-        <T weight="medium" color={palette.subText} style={{ fontSize: 13 }}>12 Proposals</T>
+        <T weight="medium" color={palette.subText} style={{ fontSize: 13 }}>
+          {proposals.length} Proposal{proposals.length !== 1 ? "s" : ""}
+        </T>
       </View>
 
       <View style={styles.list}>
-        {proposals.map((p) => (
-          <SurfaceCard key={p.name} style={[styles.card, isDark ? null : { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 }]}> 
-            <View style={styles.personRow}>
-              <Avatar source={p.image} size={50} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T weight="bold" color={palette.text} style={{ fontSize: 18 }} numberOfLines={1}>
-                  {p.name}
-                </T>
-                <View style={styles.rating}>
-                  <Ionicons name="star" size={14} color="#F4C430" />
-                  <T weight="semiBold" color={palette.text} style={{ fontSize: 14 }}>{p.rating}</T>
-                  <T weight="medium" color={palette.subText} style={{ fontSize: 13 }} numberOfLines={1}>
-                    ({p.reviews})
+        {proposals.length === 0 ? (
+          <EmptyState
+            icon="document-text-outline"
+            title="No Proposals"
+            subtitle="No freelancers have submitted proposals yet."
+          />
+        ) : (
+          proposals.map((p) => (
+            <SurfaceCard
+              key={p.id}
+              style={[
+                styles.card,
+                isDark ? null : { shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
+              ]}
+            >
+              <View style={styles.personRow}>
+                <Avatar
+                  source={p.freelancer?.avatar_url ? { uri: p.freelancer.avatar_url } : undefined}
+                  size={50}
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T weight="bold" color={palette.text} style={{ fontSize: 18 }} numberOfLines={1}>
+                    {p.freelancer?.full_name || p.freelancer?.handle || "Freelancer"}
+                  </T>
+                  <View style={styles.rating}>
+                    <View style={[styles.statusChip, {
+                      backgroundColor: p.status === "pending" ? "rgba(255,159,10,0.12)" :
+                        p.status === "accepted" ? "rgba(52,199,89,0.12)" :
+                        "rgba(142,142,147,0.12)"
+                    }]}>
+                      <T weight="semiBold" color={
+                        p.status === "pending" ? "#FF9F0A" :
+                        p.status === "accepted" ? "#34C759" :
+                        palette.subText
+                      } style={{ fontSize: 11 }}>{p.status.toUpperCase()}</T>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.kpis}>
+                <View style={[styles.kpiItem, { backgroundColor: palette.surface }]}>
+                  <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>PROPOSED PRICE</T>
+                  <T weight="bold" color={palette.text} style={styles.kpiValue}>
+                    {formatAmount(p.proposed_amount)}
+                  </T>
+                </View>
+                <View style={[styles.kpiItem, { backgroundColor: palette.surface }]}>
+                  <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>TIMELINE</T>
+                  <T weight="bold" color={palette.text} style={styles.kpiValue}>
+                    {p.estimated_days ? `${p.estimated_days} days` : "Flexible"}
                   </T>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.kpis}>
-              <View style={[styles.kpiItem, { backgroundColor: palette.surface }]}> 
-                <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>PROPOSED PRICE</T>
-                <T weight="bold" color={palette.text} style={styles.kpiValue}>{p.price}</T>
-              </View>
-              <View style={[styles.kpiItem, { backgroundColor: palette.surface }]}> 
-                <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>TIMELINE</T>
-                <T weight="bold" color={palette.text} style={styles.kpiValue}>{p.timeline}</T>
-              </View>
-            </View>
+              <T color={palette.subText} style={styles.desc} numberOfLines={3}>{p.cover_letter}</T>
 
-            <T color={palette.subText} style={styles.desc}>{p.description}</T>
-
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.secondary, { backgroundColor: palette.surface }]}
-                onPress={() => nav.push("/freelancer-stack/freelancer-profile")}
-              >
-                <T weight="bold" color={palette.text} style={styles.btnTxt}>View Profile</T>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.primary, { backgroundColor: palette.accent }]}
-                onPress={() => nav.push("/freelancer-stack/contract-chat")}
-              >
-                <T weight="bold" color="#fff" style={styles.btnTxt}>Accept</T>
-              </TouchableOpacity>
-            </View>
-          </SurfaceCard>
-        ))}
-      </View>    </FlowScreen>
+              {p.status === "pending" && (
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.secondary, { backgroundColor: palette.surface }]}
+                    onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${p.freelancer_id}`)}
+                  >
+                    <T weight="bold" color={palette.text} style={styles.btnTxt}>View Profile</T>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.primary, { backgroundColor: palette.accent }]}
+                    onPress={() => handleAccept(p)}
+                    disabled={acceptMutation.isPending}
+                  >
+                    {acceptMutation.isPending ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <T weight="bold" color="#fff" style={styles.btnTxt}>Accept</T>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </SurfaceCard>
+          ))
+        )}
+      </View>
+    </FlowScreen>
   );
 }
 
@@ -134,6 +210,7 @@ const styles = StyleSheet.create({
   card: { padding: 14 },
   personRow: { flexDirection: "row", gap: 12, alignItems: "center" },
   rating: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
+  statusChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   kpis: { flexDirection: "row", gap: 10, marginTop: 14 },
   kpiItem: { flex: 1, borderRadius: 12, padding: 11 },
   kpiLabel: { fontSize: 11, letterSpacing: 0.6 },

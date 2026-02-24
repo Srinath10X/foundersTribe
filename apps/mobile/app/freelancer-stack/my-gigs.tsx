@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { StyleSheet, TouchableOpacity, View, FlatList, ActivityIndicator, Alert, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -16,7 +16,8 @@ import { SectionHeader } from "@/components/freelancer/SectionHeader";
 import { EmptyState } from "@/components/freelancer/EmptyState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
-import { gigService, Gig } from "@/lib/gigService";
+import { useMyGigs, useDeleteGig } from "@/hooks/useGig";
+import type { Gig } from "@/types/gig";
 
 
 export default function MyGigsScreen() {
@@ -24,33 +25,18 @@ export default function MyGigsScreen() {
   const nav = useFlowNav();
   const router = useRouter();
 
-  const [gigs, setGigs] = useState<Gig[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: gigsData, isLoading: loading, refetch } = useMyGigs();
+  const deleteGigMutation = useDeleteGig();
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchMyGigs = async () => {
-    try {
-      const response = await gigService.getMyGigs();
-      setGigs(response.items);
-    } catch (err: any) {
-      console.error("Failed to load my gigs:", err);
-      Alert.alert("Error", err.message || "Failed to load gigs.");
-      setGigs([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const gigs = gigsData?.items ?? [];
 
-  useEffect(() => {
-    fetchMyGigs();
-  }, []);
-
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    fetchMyGigs();
-  }, []);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
 
   const handleDelete = (gigId: string, gigTitle: string) => {
     Alert.alert(
@@ -64,8 +50,7 @@ export default function MyGigsScreen() {
           onPress: async () => {
             try {
               setDeletingId(gigId);
-              await gigService.deleteGig(gigId);
-              setGigs((prev) => prev.filter((g) => g.id !== gigId));
+              await deleteGigMutation.mutateAsync(gigId);
             } catch (err: any) {
               Alert.alert("Error", err.message || "Failed to delete gig.");
             } finally {
@@ -79,7 +64,6 @@ export default function MyGigsScreen() {
 
   const activeCount = gigs.filter((g) => g.status === "in_progress" || g.status === "open").length;
   const completedCount = gigs.filter((g) => g.status === "completed").length;
-  const draftCount = gigs.filter((g) => g.status === "draft").length;
 
   const renderHeader = () => (
     <View style={styles.statsRow}>
@@ -164,7 +148,7 @@ export default function MyGigsScreen() {
             </View>
 
             <TouchableOpacity
-              onPress={() => nav.push("/freelancer-stack/gig-proposals")}
+              onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
               activeOpacity={0.8}
               style={styles.proposalsBtn}
             >

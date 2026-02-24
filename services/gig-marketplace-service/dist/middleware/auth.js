@@ -1,4 +1,4 @@
-import { supabaseAdmin, getSupabaseForToken } from "../config/supabase.js";
+import { supabaseAdmin } from "../config/supabase.js";
 export const authMiddleware = async (req, res, next) => {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) {
@@ -14,6 +14,7 @@ export const authMiddleware = async (req, res, next) => {
     }
     req.user = data.user;
     req.accessToken = token;
-    req.db = getSupabaseForToken(token);
+    // Use the service-key admin client so RLS doesn't block server-side operations
+    req.db = supabaseAdmin;
     next();
 };

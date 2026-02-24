@@ -12,7 +12,9 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
-import { gigService, Gig } from "@/lib/gigService";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { useGig, useCreateGig, useUpdateGig } from "@/hooks/useGig";
+import type { GigCreateInput, GigUpdateInput } from "@/types/gig";
 
 const experienceOptions = ["junior", "mid", "senior"] as const;
 
@@ -23,6 +25,10 @@ export default function PostGigScreen() {
 
   const isEditing = !!id;
 
+  const { data: existingGig, isLoading: isFetching } = useGig(id);
+  const createGigMutation = useCreateGig();
+  const updateGigMutation = useUpdateGig();
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [budgetMin, setBudgetMin] = useState("1200");
@@ -31,38 +37,26 @@ export default function PostGigScreen() {
   const [isRemote, setIsRemote] = useState(true);
   const [location, setLocation] = useState("");
   const [tagsInput, setTagsInput] = useState("");
+  const [formInitialized, setFormInitialized] = useState(!isEditing);
 
-  const [isFetching, setIsFetching] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const isSaving = createGigMutation.isPending || updateGigMutation.isPending;
 
+  // Pre-fill form when editing and gig data arrives
   useEffect(() => {
-    if (isEditing && id) {
-      const fetchGig = async () => {
-        setIsFetching(true);
-        try {
-          const gig = await gigService.getGig(id);
-          setTitle(gig.title || "");
-          setDescription(gig.description || "");
-          setBudgetMin(String(gig.budget_min ?? 0));
-          setBudgetMax(String(gig.budget_max ?? 0));
-          setExperienceLevel(gig.experience_level || "mid");
-          setIsRemote(gig.is_remote ?? true);
-          setLocation(gig.location_text || "");
-
-          if (gig.gig_tags && gig.gig_tags.length > 0) {
-            setTagsInput(gig.gig_tags.map(gt => gt.tags?.label).join(", "));
-          }
-        } catch (error) {
-          console.error("Failed to fetch gig for editing:", error);
-          Alert.alert("Error", "Could not load the gig details.");
-          nav.back();
-        } finally {
-          setIsFetching(false);
-        }
-      };
-      fetchGig();
+    if (isEditing && existingGig && !formInitialized) {
+      setTitle(existingGig.title || "");
+      setDescription(existingGig.description || "");
+      setBudgetMin(String(existingGig.budget_min ?? 0));
+      setBudgetMax(String(existingGig.budget_max ?? 0));
+      setExperienceLevel(existingGig.experience_level || "mid");
+      setIsRemote(existingGig.is_remote ?? true);
+      setLocation(existingGig.location_text || "");
+      if (existingGig.gig_tags && existingGig.gig_tags.length > 0) {
+        setTagsInput(existingGig.gig_tags.map(gt => gt.tags?.label).filter(Boolean).join(", "));
+      }
+      setFormInitialized(true);
     }
-  }, [id, isEditing]);
+  }, [existingGig, isEditing, formInitialized]);
 
   const budgetError = useMemo(() => {
     const min = Number(budgetMin);
@@ -82,30 +76,40 @@ export default function PostGigScreen() {
   const handleSave = async (isDraft = false) => {
     if (!canPost && !isDraft) return;
     try {
-      setIsSaving(true);
-      const payload: Partial<Gig> & { tags?: string[] } = {
-        title: title.trim(),
-        description: description.trim(),
-        budget_type: "fixed",
-        budget_min: Number(budgetMin),
-        budget_max: Number(budgetMax),
-        experience_level: experienceLevel,
-        is_remote: isRemote,
-        location_text: location.trim() || undefined,
-        status: isDraft ? "draft" : "open",
-        tags: tagsInput.split(",").map(t => t.trim()).filter(Boolean),
-      };
+      const tags = tagsInput.split(",").map(t => t.trim()).filter(Boolean);
       if (isEditing && id) {
-        await gigService.updateGig(id, payload);
+        const payload: GigUpdateInput & { tags?: string[] } = {
+          title: title.trim(),
+          description: description.trim(),
+          budget_type: "fixed",
+          budget_min: Number(budgetMin),
+          budget_max: Number(budgetMax),
+          experience_level: experienceLevel,
+          is_remote: isRemote,
+          location_text: location.trim() || undefined,
+          status: isDraft ? "draft" : "open",
+          tags,
+        };
+        await updateGigMutation.mutateAsync({ id, data: payload });
       } else {
-        await gigService.createGig(payload);
+        const payload: GigCreateInput & { tags?: string[] } = {
+          title: title.trim(),
+          description: description.trim(),
+          budget_type: "fixed",
+          budget_min: Number(budgetMin),
+          budget_max: Number(budgetMax),
+          experience_level: experienceLevel,
+          is_remote: isRemote,
+          location_text: location.trim() || undefined,
+          status: isDraft ? "draft" : "open",
+          tags,
+        };
+        await createGigMutation.mutateAsync(payload);
       }
       nav.replace("/freelancer-stack/my-gigs");
     } catch (error: any) {
       console.error("Save gig error:", error);
       Alert.alert("Save Failed", error?.message || "Something went wrong while saving the gig.");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -118,10 +122,7 @@ export default function PostGigScreen() {
       />
 
       {isFetching ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={palette.accent} />
-          <T color={palette.subText} style={{ marginTop: SP._16 }}>Loading gig details...</T>
-        </View>
+        <LoadingState rows={4} />
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>

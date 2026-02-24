@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View, ScrollView, FlatList, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -14,7 +14,8 @@ import { SearchBar } from "@/components/freelancer/SearchBar";
 import { SectionHeader } from "@/components/freelancer/SectionHeader";
 import { CategoryCard } from "@/components/freelancer/CategoryCard";
 import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
-import { gigService, Gig } from "@/lib/gigService";
+import { useMyGigs } from "@/hooks/useGig";
+import type { Gig } from "@/types/gig";
 import { searchAll, SearchAccount } from "@/lib/searchService";
 
 
@@ -32,8 +33,12 @@ export default function FounderDashboardScreen() {
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<SearchAccount[]>([]);
   const [searching, setSearching] = useState(false);
-  const [activeGigs, setActiveGigs] = useState<Gig[]>([]);
-  const [gigsLoading, setGigsLoading] = useState(true);
+
+  const { data: gigsData, isLoading: gigsLoading } = useMyGigs({ limit: 3 });
+  const activeGigs = useMemo(
+    () => (gigsData?.items ?? []).filter((g) => g.status === "open" || g.status === "in_progress"),
+    [gigsData]
+  );
 
   const isSearching = searchText.trim().length > 0;
 
@@ -59,20 +64,6 @@ export default function FounderDashboardScreen() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchText, handleSearch]);
-
-  useEffect(() => {
-    const fetch = async () => {
-      try {
-        const response = await gigService.getMyGigs({ limit: 3 });
-        setActiveGigs(response.items.filter((g) => g.status === "open" || g.status === "in_progress"));
-      } catch (err) {
-        console.error("Dashboard gigs load failed:", err);
-      } finally {
-        setGigsLoading(false);
-      }
-    };
-    fetch();
-  }, []);
 
   const renderFreelancer = ({ item }: { item: SearchAccount }) => (
     <TouchableOpacity
@@ -385,7 +376,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: SP._60,
+    paddingTop: SP._64,
     paddingHorizontal: SCREEN_PADDING,
   },
   noResultsText: {

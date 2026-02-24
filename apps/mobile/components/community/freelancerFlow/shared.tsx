@@ -495,12 +495,13 @@ export function Avatar({
   source,
   size = 48,
 }: {
-  source: string;
+  source?: string | { uri: string };
   size?: number;
 }) {
+  const uri = typeof source === "string" ? source : source?.uri;
   return (
     <Image
-      source={{ uri: source }}
+      source={uri ? { uri } : undefined}
       style={{ width: size, height: size, borderRadius: size / 2 }}
       contentFit="cover"
     />
