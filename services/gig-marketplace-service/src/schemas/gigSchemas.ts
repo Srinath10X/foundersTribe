@@ -12,6 +12,7 @@ const baseGigBody = z.object({
   is_remote: z.boolean().optional(),
   location_text: z.string().max(120).optional(),
   status: gigStatusEnum.optional(),
+  tags: z.array(z.string()).max(10).optional(),
 });
 
 const createGigBody = baseGigBody.refine((data) => data.budget_max >= data.budget_min, {

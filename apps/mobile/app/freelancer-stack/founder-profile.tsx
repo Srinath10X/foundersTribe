@@ -8,96 +8,153 @@ import {
   FlowTopBar,
   SurfaceCard,
   T,
-  people,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-
-const highlights = [
-  { label: "Startup", value: "ShopHub" },
-  { label: "Industry", value: "Commerce SaaS" },
-  { label: "Stage", value: "Seed" },
-  { label: "Team", value: "12 members" },
-  { label: "HQ", value: "Austin, TX" },
-  { label: "Since", value: "2021" },
-];
-
-const metrics = [
-  { label: "Gigs Posted", value: "24" },
-  { label: "Contracts", value: "8" },
-  { label: "Hire Rate", value: "83%" },
-  { label: "Avg Rating", value: "4.8" },
-];
-const metricRows = [
-  [metrics[0], metrics[1]],
-  [metrics[2], metrics[3]],
-];
-
-const postings = [
-  {
-    title: "Senior UI Designer",
-    meta: "Posted 2 days ago • ₹80-120/hr",
-    tags: ["Mobile", "Figma", "Fintech"],
-  },
-  {
-    title: "React Developer",
-    meta: "Posted 1 week ago • Project Based",
-    tags: ["Node.js", "PostgreSQL"],
-  },
-];
+import { StatCard } from "@/components/freelancer/StatCard";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { ErrorState } from "@/components/freelancer/ErrorState";
+import { SP, RADIUS } from "@/components/freelancer/designTokens";
+import { useMyProfile, useMyGigs, useContracts } from "@/hooks/useGig";
 
 export default function FounderProfileScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
 
+  const { data: profile, isLoading: profileLoading, error: profileError, refetch: refetchProfile } = useMyProfile();
+  const { data: gigsData, isLoading: gigsLoading } = useMyGigs({ limit: 3, status: "open" });
+  const { data: contractsData } = useContracts();
+
+  const isLoading = profileLoading;
+
+  if (isLoading) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Founder Profile" showLeft={false} />
+        <View style={{ paddingHorizontal: SP._16, paddingTop: SP._16 }}>
+          <LoadingState rows={4} />
+        </View>
+      </FlowScreen>
+    );
+  }
+
+  if (profileError || !profile) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Founder Profile" showLeft={false} />
+        <View style={{ paddingHorizontal: SP._16, paddingTop: SP._16 }}>
+          <ErrorState
+            title="Failed to load profile"
+            message={profileError?.message || "Profile not found"}
+            onRetry={() => refetchProfile()}
+          />
+        </View>
+      </FlowScreen>
+    );
+  }
+
+  const fullName = profile.full_name || profile.handle || "Founder";
+  const avatarUrl = profile.avatar_url;
+  const bio = profile.bio || "";
+  const city = profile.city;
+  const state = profile.state;
+  const country = profile.country;
+  const locationStr = [city, state, country].filter(Boolean).join(", ") || "Location not set";
+  const startupStage = profile.startup_stage
+    ? profile.startup_stage.charAt(0).toUpperCase() + profile.startup_stage.slice(1)
+    : "—";
+
+  const allGigs = gigsData?.items ?? [];
+  const contracts = contractsData?.items ?? [];
+  const activeGigs = allGigs.filter((g) => g.status === "open" || g.status === "in_progress");
+
+  // Derive metrics
+  const totalGigsPosted = allGigs.length;
+  const totalContracts = contracts.length;
+  const completedContracts = contracts.filter((c) => c.status === "completed").length;
+  const hireRate = totalGigsPosted > 0
+    ? Math.round((totalContracts / totalGigsPosted) * 100)
+    : 0;
+
+  // Profile details
+  const highlights = [
+    { label: "Role", value: profile.role === "founder" ? "Founder" : profile.role === "both" ? "Founder & Freelancer" : profile.role },
+    { label: "Stage", value: startupStage },
+    { label: "Location", value: locationStr },
+    { label: "Timezone", value: profile.timezone || "—" },
+    ...(profile.linkedin_url ? [{ label: "LinkedIn", value: "Connected" }] : []),
+    ...(profile.portfolio_url ? [{ label: "Portfolio", value: "Available" }] : []),
+  ];
+
+  const metrics = [
+    { label: "Gigs Posted", value: String(totalGigsPosted) },
+    { label: "Contracts", value: String(totalContracts) },
+    { label: "Completed", value: String(completedContracts) },
+    { label: "Hire Rate", value: `${hireRate}%` },
+  ];
+  const metricRows = [
+    [metrics[0], metrics[1]],
+    [metrics[2], metrics[3]],
+  ];
+
+  const formatAmount = (amount: number | undefined) => {
+    if (!amount) return "";
+    return `₹${amount.toLocaleString()}`;
+  };
+
   return (
     <FlowScreen>
       <FlowTopBar title="Founder Profile" showLeft={false} />
 
+      {/* Hero Card */}
       <SurfaceCard style={styles.heroCard}>
         <View style={styles.headerWrap}>
           <View style={styles.avatarWrap}>
-            <Avatar source={people.marcus} size={88} />
+            <Avatar source={avatarUrl ? { uri: avatarUrl } : undefined} size={88} />
             <View style={[styles.verify, { backgroundColor: palette.accent }]}>
               <Ionicons name="checkmark" size={14} color="#fff" />
             </View>
           </View>
-          <T weight="bold" color={palette.text} style={styles.name}>Marcus Thorne</T>
-          <T weight="semiBold" color={palette.text} style={styles.role}>Founder & CEO • ShopHub</T>
-          <T weight="medium" color={palette.subText} style={styles.bio}>
-            Building tools that help early-stage teams launch faster. Focused on fintech onboarding and growth UX.
+          <T weight="bold" color={palette.text} style={styles.name}>{fullName}</T>
+          <T weight="semiBold" color={palette.text} style={styles.role}>
+            {profile.role === "founder" ? "Founder" : "Founder & Freelancer"}
+            {profile.startup_stage ? ` • ${startupStage} Stage` : ""}
           </T>
+          {bio ? (
+            <T weight="medium" color={palette.subText} style={styles.bio}>
+              {bio}
+            </T>
+          ) : null}
 
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
               <Ionicons name="location-outline" size={14} color={palette.subText} />
-              <T weight="medium" color={palette.subText} style={styles.metaText}>Austin, TX</T>
+              <T weight="medium" color={palette.subText} style={styles.metaText}>{locationStr}</T>
             </View>
-            <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={14} color={palette.subText} />
-              <T weight="medium" color={palette.subText} style={styles.metaText}>Replies in ~2h</T>
-            </View>
+            {profile.timezone && (
+              <View style={styles.metaItem}>
+                <Ionicons name="time-outline" size={14} color={palette.subText} />
+                <T weight="medium" color={palette.subText} style={styles.metaText}>{profile.timezone}</T>
+              </View>
+            )}
           </View>
         </View>
       </SurfaceCard>
 
+      {/* Metrics Grid */}
       <View style={styles.metricsGrid}>
         {metricRows.map((row, rowIdx) => (
           <View key={`row-${rowIdx}`} style={styles.metricRow}>
             {row.map((m) => (
-              <SurfaceCard key={m.label} style={styles.metricCard}>
-                <T weight="semiBold" color={palette.subText} style={styles.metricLabel} numberOfLines={1}>
-                  {m.label.toUpperCase()}
-                </T>
-                <T weight="bold" color={palette.text} style={styles.metricValue}>{m.value}</T>
-              </SurfaceCard>
+              <StatCard key={m.label} label={m.label} value={m.value} />
             ))}
           </View>
         ))}
       </View>
 
+      {/* Profile Details */}
       <SurfaceCard style={styles.card}>
-        <T weight="bold" color={palette.text} style={styles.cardTitle}>Startup Details</T>
+        <T weight="bold" color={palette.text} style={styles.cardTitle}>Profile Details</T>
         <View style={styles.detailsGrid}>
           {highlights.map((h) => (
             <View key={h.label} style={styles.detailCell}>
@@ -108,108 +165,129 @@ export default function FounderProfileScreen() {
         </View>
       </SurfaceCard>
 
+      {/* Contact Info */}
       <SurfaceCard style={styles.card}>
-        <T weight="bold" color={palette.text} style={styles.cardTitle}>Funding & Traction</T>
-        <View style={styles.row}><Ionicons name="cash-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>Raised: ₹1.2M (Seed)</T></View>
-        <View style={styles.row}><Ionicons name="people-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>12,000+ active users across client products</T></View>
-        <View style={styles.row}><Ionicons name="rocket-outline" size={15} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.rowText}>Launching v2 onboarding automation this quarter</T></View>
+        <T weight="bold" color={palette.text} style={styles.cardTitle}>Contact</T>
+        {profile.email && (
+          <View style={styles.row}>
+            <Ionicons name="mail-outline" size={15} color={palette.subText} />
+            <T weight="medium" color={palette.subText} style={styles.rowText}>{profile.email}</T>
+          </View>
+        )}
+        {profile.phone && (
+          <View style={styles.row}>
+            <Ionicons name="call-outline" size={15} color={palette.subText} />
+            <T weight="medium" color={palette.subText} style={styles.rowText}>{profile.phone}</T>
+          </View>
+        )}
+        {profile.linkedin_url && (
+          <View style={styles.row}>
+            <Ionicons name="logo-linkedin" size={15} color={palette.subText} />
+            <T weight="medium" color={palette.subText} style={styles.rowText} numberOfLines={1}>{profile.linkedin_url}</T>
+          </View>
+        )}
+        {profile.portfolio_url && (
+          <View style={styles.row}>
+            <Ionicons name="globe-outline" size={15} color={palette.subText} />
+            <T weight="medium" color={palette.subText} style={styles.rowText} numberOfLines={1}>{profile.portfolio_url}</T>
+          </View>
+        )}
+        {!profile.email && !profile.phone && !profile.linkedin_url && !profile.portfolio_url && (
+          <T weight="medium" color={palette.subText} style={{ fontSize: 14, marginTop: SP._8 }}>
+            No contact information set.
+          </T>
+        )}
       </SurfaceCard>
 
+      {/* Active Postings */}
       <View style={styles.sectionHead}>
         <T weight="bold" color={palette.text} style={styles.sectionTitle}>Active Postings</T>
-        <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
+        <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}>
           <T weight="bold" color={palette.accent} style={styles.link}>See All</T>
         </TouchableOpacity>
       </View>
 
       <View style={styles.listWrap}>
-        {postings.map((p) => (
-          <SurfaceCard key={p.title} style={styles.postCard}>
-            <T weight="bold" color={palette.text} style={styles.postTitle}>{p.title}</T>
-            <T weight="medium" color={palette.subText} style={styles.postMeta}>{p.meta}</T>
-            <View style={styles.tags}>
-              {p.tags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: palette.border }]}>
-                  <T weight="medium" color={palette.subText} style={styles.tagTxt}>{tag}</T>
-                </View>
-              ))}
-            </View>
-          </SurfaceCard>
-        ))}
-      </View>
-
-      <T weight="bold" color={palette.text} style={[styles.sectionTitle, { marginHorizontal: 18, marginTop: 12 }]}>Recent Reviews</T>
-      <View style={styles.listWrap}>
-        {[{ n: "Sarah Jenkins", r: "Product Designer", d: people.female1, t: "Clear communicator, fast decisions, and organized collaboration." }, { n: "David Chen", r: "Full Stack Engineer", d: people.david, t: "Great product sense and very respectful founder to work with." }].map((r) => (
-          <SurfaceCard key={r.n} style={styles.reviewCard}>
-            <View style={styles.revTop}>
-              <Avatar source={r.d} size={34} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T weight="bold" color={palette.text} style={styles.revName}>{r.n}</T>
-                <T weight="medium" color={palette.subText} style={styles.revRole}>{r.r}</T>
-              </View>
-              <T weight="bold" color={palette.warning} style={styles.star}>★★★★★</T>
-            </View>
-            <T color={palette.text} style={styles.revBody}>"{r.t}"</T>
-          </SurfaceCard>
-        ))}
+        {gigsLoading ? (
+          <LoadingState rows={2} />
+        ) : activeGigs.length === 0 ? (
+          <T weight="medium" color={palette.subText} style={{ fontSize: 14, textAlign: "center", paddingVertical: SP._16 }}>
+            No active postings.
+          </T>
+        ) : (
+          activeGigs.map((gig) => (
+            <TouchableOpacity
+              key={gig.id}
+              activeOpacity={0.8}
+              onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
+            >
+              <SurfaceCard style={styles.postCard}>
+                <T weight="bold" color={palette.text} style={styles.postTitle}>{gig.title}</T>
+                <T weight="medium" color={palette.subText} style={styles.postMeta}>
+                  {formatAmount(gig.budget_min)} – {formatAmount(gig.budget_max)} • {gig.budget_type === "hourly" ? "Hourly" : "Fixed"}
+                </T>
+                {gig.gig_tags && gig.gig_tags.length > 0 && (
+                  <View style={styles.tags}>
+                    {gig.gig_tags.slice(0, 3).map((gt) => (
+                      <View key={gt.tag_id} style={[styles.tag, { backgroundColor: palette.border }]}>
+                        <T weight="medium" color={palette.subText} style={styles.tagTxt}>{gt.tags?.label || gt.tag_id}</T>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </SurfaceCard>
+            </TouchableOpacity>
+          ))
+        )}
       </View>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: { marginHorizontal: 18, marginTop: 10, padding: 14 },
+  heroCard: { marginHorizontal: SP._16, marginTop: SP._16, padding: SP._16 },
   headerWrap: { alignItems: "center" },
   avatarWrap: { position: "relative" },
   verify: {
     position: "absolute",
     right: 2,
     bottom: 2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
   },
-  name: { fontSize: 24, marginTop: 8 },
-  role: { fontSize: 14, marginTop: 2 },
-  bio: { fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 8, maxWidth: 330 },
-  metaRow: { flexDirection: "row", gap: 14, marginTop: 10, flexWrap: "wrap", justifyContent: "center" },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaText: { fontSize: 12 },
+  name: { fontSize: 24, marginTop: SP._12, letterSpacing: -0.4 },
+  role: { fontSize: 14, marginTop: SP._2 },
+  bio: { fontSize: 14, lineHeight: 22, textAlign: "center", marginTop: SP._12, maxWidth: 330 },
+  metaRow: { flexDirection: "row", gap: SP._16, marginTop: SP._12, flexWrap: "wrap", justifyContent: "center" },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: SP._8 },
+  metaText: { fontSize: 13 },
 
-  metricsGrid: { gap: 8, paddingHorizontal: 18, marginTop: 10 },
-  metricRow: { flexDirection: "row", gap: 8 },
-  metricCard: { flex: 1, minHeight: 78, justifyContent: "center", alignItems: "center", paddingVertical: 10, paddingHorizontal: 8 },
-  metricLabel: { fontSize: 10, letterSpacing: 0.7 },
-  metricValue: { fontSize: 18, marginTop: 4 },
+  metricsGrid: { gap: SP._16, paddingHorizontal: SP._16, marginTop: SP._16 },
+  metricRow: { flexDirection: "row", gap: SP._16 },
 
-  card: { marginHorizontal: 18, marginTop: 10, padding: 12 },
-  cardTitle: { fontSize: 16 },
-  detailsGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 10, rowGap: 10 },
-  detailCell: { width: "50%", paddingRight: 8 },
-  detailLabel: { fontSize: 11 },
-  detailValue: { fontSize: 13, marginTop: 2 },
-  row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 8 },
-  rowText: { fontSize: 13, flex: 1 },
+  card: { marginHorizontal: SP._16, marginTop: SP._16, padding: SP._16 },
+  cardTitle: { fontSize: 16, letterSpacing: -0.2 },
+  detailsGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: SP._16, rowGap: SP._16 },
+  detailCell: { width: "50%", paddingRight: SP._8 },
+  detailLabel: { fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase" },
+  detailValue: { fontSize: 14, marginTop: SP._4 },
+  row: { flexDirection: "row", alignItems: "center", gap: SP._8, marginTop: SP._12 },
+  rowText: { fontSize: 14, flex: 1, lineHeight: 20 },
 
-  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingHorizontal: 18 },
-  sectionTitle: { fontSize: 18 },
-  link: { fontSize: 13 },
+  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: SP._24, paddingHorizontal: SP._16 },
+  sectionTitle: { fontSize: 18, letterSpacing: -0.2 },
+  link: { fontSize: 14 },
 
-  listWrap: { paddingHorizontal: 18, marginTop: 8, gap: 8 },
-  postCard: { padding: 12 },
-  postTitle: { fontSize: 16, flexShrink: 1 },
-  postMeta: { fontSize: 12, marginTop: 3 },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  tag: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  listWrap: { paddingHorizontal: SP._16, marginTop: SP._12, gap: SP._12 },
+  postCard: { padding: SP._16, borderRadius: RADIUS.lg },
+  postTitle: { fontSize: 15, flexShrink: 1, letterSpacing: -0.2 },
+  postMeta: { fontSize: 13, marginTop: SP._4 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: SP._8, marginTop: SP._12 },
+  tag: { borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 5 },
   tagTxt: { fontSize: 11 },
-
-  reviewCard: { padding: 12 },
-  revTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  revName: { fontSize: 14 },
-  revRole: { fontSize: 11 },
-  star: { fontSize: 12 },
-  revBody: { marginTop: 8, fontSize: 13, lineHeight: 18 },
 });

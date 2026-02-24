@@ -282,6 +282,52 @@ async function resolveAvatarUrl(
   return `${signedData.signedUrl}&t=${Date.now()}`;
 }
 
+// ─── Temporary Dummy Data ──────────────────────────────────────
+const DUMMY_STATS: FreelancerStats = {
+  earnings_mtd: 124500,
+  active_projects: 3,
+  earnings_growth_pct: 12,
+};
+
+const DUMMY_ACTIVE_JOBS: Gig[] = [
+  {
+    id: "dj-1",
+    title: "Mobile Banking App — React Native",
+    description: "Cross-platform fintech mobile app.",
+    budget: 85000,
+    status: "in_progress",
+    progress: 72,
+    deadline: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "PayFlex Finance",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "dj-2",
+    title: "E-Commerce Dashboard Redesign",
+    description: "Analytics dashboard UI overhaul.",
+    budget: 25000,
+    status: "in_progress",
+    progress: 45,
+    deadline: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "ShopEasy",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "dj-3",
+    title: "API Integration — Payment Gateway",
+    description: "Stripe + Razorpay integration.",
+    budget: 35000,
+    status: "in_progress",
+    progress: 20,
+    deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "GreenCart",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
 export default function TalentDashboardScreen() {
   const { palette } = useFlowPalette();
   const router = useRouter();
@@ -503,6 +549,7 @@ export default function TalentDashboardScreen() {
               color={palette.subText}
             />
           </TouchableOpacity>
+          <Avatar source={people.alex} size={48} />
         </View>
       </View>
 

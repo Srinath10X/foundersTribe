@@ -1,5 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { ReactNode } from "react";
 import {
@@ -14,10 +16,12 @@ import {
   TouchableOpacity,
   View,
   ViewStyle,
+  ActivityIndicator,
 } from "react-native";
 
 import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
+import { SP, RADIUS, SHADOWS } from "@/components/freelancer/designTokens";
 
 export type FlowPalette = {
   bg: string;
@@ -60,9 +64,9 @@ export function useFlowPalette(): { palette: FlowPalette; isDark: boolean } {
 
 export const poppins = {
   regular: "Poppins_400Regular",
-  medium: "Poppins_500Medium",
-  semiBold: "Poppins_600SemiBold",
-  bold: "Poppins_700Bold",
+  medium: "Poppins_400Regular",
+  semiBold: "Poppins_500Medium",
+  bold: "Poppins_600SemiBold",
 };
 
 export function T({
@@ -211,11 +215,11 @@ export function SurfaceCard({
     <View
       style={[
         {
-          backgroundColor: palette.card,
+          backgroundColor: palette.surface,
           borderColor: palette.borderLight,
           borderWidth: 1,
-          borderRadius: Layout.radius.lg,
-          ...Layout.shadows.sm,
+          borderRadius: RADIUS.lg,
+          padding: SP._16,
         },
         style,
       ]}
@@ -300,11 +304,15 @@ export function PrimaryButton({
   label,
   onPress,
   icon,
+  loading = false,
+  disabled = false,
   style,
 }: {
   label: string;
   onPress?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  loading?: boolean;
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const { palette } = useFlowPalette();
@@ -312,25 +320,38 @@ export function PrimaryButton({
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.9}
+      activeOpacity={0.85}
+      disabled={disabled || loading || !onPress}
       style={[
         {
           backgroundColor: palette.accent,
-          borderRadius: Layout.radius.md,
+          borderRadius: RADIUS.md,
           paddingVertical: 14,
           justifyContent: "center",
           alignItems: "center",
           flexDirection: "row",
           gap: 8,
+          opacity: disabled || !onPress ? 0.55 : 1,
         },
         Layout.shadows.lg,
         style,
       ]}
     >
-      <T weight="bold" color="#FFFFFF" style={{ fontSize: 16 }}>
-        {label}
-      </T>
-      {icon ? <Ionicons name={icon} size={18} color="#FFFFFF" /> : null}
+      {loading ? (
+        <React.Fragment>
+          <ActivityIndicator color="#FFFFFF" size="small" />
+          <T weight="bold" color="#FFFFFF" style={{ fontSize: 16 }}>
+            {label}
+          </T>
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
+          <T weight="bold" color="#FFFFFF" style={{ fontSize: 16 }}>
+            {label}
+          </T>
+          {icon ? <Ionicons name={icon} size={18} color="#FFFFFF" /> : null}
+        </React.Fragment>
+      )}
     </TouchableOpacity>
   );
 }
@@ -339,52 +360,88 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs"
   const { palette, isDark } = useFlowPalette();
   const router = useRouter();
   type NavKey = "home" | "my gigs" | "create" | "chat" | "profile";
-  type NavItem = { key: NavKey; icon: keyof typeof Ionicons.glyphMap; label: string; route: string };
+  type NavItem = { key: NavKey; icon: keyof typeof Ionicons.glyphMap; label: string; route: string; isCenter?: boolean };
 
   const navItems: NavItem[] = [
     { key: "home", icon: "home", label: "Home", route: "/freelancer-stack" },
     { key: "my gigs", icon: "briefcase", label: "My Gigs", route: "/freelancer-stack/my-gigs" },
-    { key: "create", icon: "add", label: "Post", route: "/freelancer-stack/post-gig" },
+    { key: "create", icon: "add-circle", label: "Post", route: "/freelancer-stack/post-gig", isCenter: true },
     { key: "chat", icon: "chatbubble", label: "Chat", route: "/freelancer-stack/contract-chat" },
     { key: "profile", icon: "person-circle", label: "Profile", route: "/freelancer-stack/founder-profile" },
   ];
 
+  const glassBackground = isDark
+    ? "rgba(18, 18, 22, 0.65)"
+    : "rgba(255, 255, 255, 0.62)";
+
+  const barBottom = Platform.OS === "ios" ? 28 : 18;
+
   return (
-    <View style={[styles.bottomNav, { backgroundColor: palette.navBg, borderTopColor: palette.borderLight }]}>
-      <View style={styles.navTopDivider} />
-      {navItems.map((item) => {
-        const active = item.key === activeLabel;
-        return (
-          <TouchableOpacity
-            key={item.label}
-            style={styles.navItem}
-            activeOpacity={0.8}
-            onPress={() => router.replace(item.route as never)}
-          >
-            {item.key === "create" ? (
-              <>
-                <View style={[styles.createPill, { backgroundColor: palette.accent, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 4 }]}>
-                  <Ionicons name="add" size={24} color="#fff" />
-                </View>
-                <T weight="semiBold" color={palette.accent} style={{ fontSize: 11, marginTop: 2 }}>
-                  {item.label}
-                </T>
-              </>
-            ) : (
-              <>
-                <Ionicons name={item.icon} size={22} color={active ? palette.accent : palette.mutedText} />
+    <View style={[styles.bottomNavContainer, { bottom: barBottom }]}>
+      <View
+        style={[
+          styles.bottomNavGlass,
+          {
+            shadowColor: isDark ? "#000" : "rgba(0,0,0,0.35)",
+            shadowOffset: { width: 0, height: isDark ? 8 : 12 },
+            shadowOpacity: isDark ? 0.4 : 1,
+            shadowRadius: isDark ? 24 : 32,
+            elevation: 12,
+            borderColor: isDark ? "rgba(255,255,255,0.10)" : "transparent",
+          },
+        ]}
+      >
+        <BlurView
+          intensity={Platform.OS === "ios" ? 80 : 100}
+          tint={isDark ? "dark" : "light"}
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: glassBackground, borderRadius: 40 }]}
+        />
+        <LinearGradient
+          colors={
+            isDark
+              ? ["rgba(255,255,255,0.06)", "rgba(255,255,255,0.01)", "rgba(0,0,0,0.0)", "rgba(0,0,0,0.06)"]
+              : ["rgba(255,255,255,0.45)", "rgba(255,255,255,0.10)", "rgba(0,0,0,0.0)", "rgba(0,0,0,0.05)"]
+          }
+          locations={[0, 0.25, 0.55, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        />
+        <View style={styles.bottomNav}>
+          {navItems.map((item) => {
+            const active = item.key === activeLabel;
+            const isCenter = item.isCenter;
+
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={styles.navItem}
+                activeOpacity={0.85}
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                onPress={() => router.replace(item.route as never)}
+              >
+                {isCenter ? (
+                  <View style={styles.centerItemContainer}>
+                    <View style={[styles.centerIconBg, { backgroundColor: palette.accent }]}>
+                      <Ionicons name="add" size={22} color="#fff" />
+                    </View>
+                  </View>
+                ) : (
+                  <Ionicons name={item.icon} size={22} color={active ? palette.accent : palette.mutedText} />
+                )}
                 <T
                   weight={active ? "semiBold" : "medium"}
-                  color={active ? palette.accent : palette.mutedText}
-                  style={{ fontSize: 11, marginTop: 4 }}
+                  color={isCenter ? palette.mutedText : (active ? palette.accent : palette.mutedText)}
+                  style={{ fontSize: 9, marginTop: 4 }}
                 >
                   {item.label}
                 </T>
-              </>
-            )}
-          </TouchableOpacity>
-        );
-      })}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
     </View>
   );
 }
@@ -415,7 +472,8 @@ export function BottomTalentNav({
           <TouchableOpacity
             key={item.label}
             style={styles.navItem}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             onPress={() => router.replace(item.route as never)}
           >
             <Ionicons name={item.icon} size={21} color={active ? palette.accent : palette.mutedText} />
@@ -437,12 +495,13 @@ export function Avatar({
   source,
   size = 48,
 }: {
-  source: string;
+  source?: string | { uri: string };
   size?: number;
 }) {
+  const uri = typeof source === "string" ? source : source?.uri;
   return (
     <Image
-      source={{ uri: source }}
+      source={uri ? { uri } : undefined}
       style={{ width: size, height: size, borderRadius: size / 2 }}
       contentFit="cover"
     />
@@ -492,16 +551,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   bottomNav: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingTop: 10,
+    paddingBottom: Platform.OS === "ios" ? 22 : 14,
+  },
+  bottomNavContainer: {
     position: "absolute",
-    bottom: 0,
     left: 0,
     right: 0,
-    borderTopWidth: 1,
-    paddingHorizontal: Spacing.sm,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === "ios" ? 28 : 18,
-    flexDirection: "row",
-    justifyContent: "space-between",
+    height: 94,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    zIndex: 50,
+  },
+  bottomNavGlass: {
+    width: "92%",
+    height: 78,
+    borderRadius: 40,
+    overflow: "hidden",
+    borderWidth: StyleSheet.hairlineWidth,
+    zIndex: 1,
   },
   navTopDivider: {
     position: "absolute",
@@ -516,12 +588,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  createPill: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  centerItemContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -16,
+  },
+  centerIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

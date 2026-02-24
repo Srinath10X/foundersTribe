@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 
 import {
   Avatar,
@@ -8,21 +9,57 @@ import {
   FlowTopBar,
   SurfaceCard,
   T,
-  people,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-
-const skills = ["React Native", "Node.js", "PostgreSQL", "WebSockets", "TypeScript"];
-const outcomes = [
-  "Launched 14 production apps",
-  "Reduced API latency by 35%",
-  "Improved retention by 22%",
-];
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { ErrorState } from "@/components/freelancer/ErrorState";
+import { EmptyState } from "@/components/freelancer/EmptyState";
+import { SearchAccount, searchAccounts } from "@/lib/searchService";
 
 export default function FreelancerProfileScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const [freelancer, setFreelancer] = useState<SearchAccount | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (id) {
+      const results = searchAccounts("");
+      const found = results.find((f) => f.id === id);
+      setFreelancer(found || null);
+    } else {
+      setFreelancer(null);
+    }
+    setLoading(false);
+  }, [id]);
+
+  if (loading) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Profile" onLeftPress={nav.back} />
+        <LoadingState rows={4} />
+      </FlowScreen>
+    );
+  }
+
+  if (!freelancer) {
+    return (
+      <FlowScreen>
+        <FlowTopBar title="Profile" onLeftPress={nav.back} />
+        <ErrorState
+          title="Freelancer not found"
+          message="The profile you're looking for doesn't exist or couldn't be loaded."
+          onRetry={nav.back}
+        />
+      </FlowScreen>
+    );
+  }
+
+  const skills = freelancer.skills ?? [];
+  const ratingDisplay = freelancer.rating ? `${freelancer.rating} / 5` : "N/A";
+  const rateDisplay = freelancer.hourly_rate ? `₹${freelancer.hourly_rate}/hr` : "N/A";
 
   return (
     <FlowScreen>
@@ -32,65 +69,55 @@ export default function FreelancerProfileScreen() {
         <SurfaceCard style={styles.heroCard}>
           <View style={styles.head}>
             <View style={styles.avatarWrap}>
-              <Avatar source={people.alex} size={92} />
+              <Avatar source={freelancer.avatar_url ? { uri: freelancer.avatar_url } : undefined} size={92} />
               <View style={[styles.online, { borderColor: palette.bg }]} />
             </View>
             <View style={styles.headText}>
-              <T weight="bold" color={palette.text} style={styles.name}>Alex Rivers</T>
-              <T weight="semiBold" color={palette.accent} style={styles.role}>Senior Full Stack Developer</T>
-              <View style={styles.location}><Ionicons name="location" size={14} color={palette.subText} /><T weight="medium" color={palette.subText} style={styles.locationText}>Bengaluru, KA</T></View>
+              <T weight="bold" color={palette.text} style={styles.name}>{freelancer.display_name}</T>
+              {freelancer.bio && (
+                <T weight="semiBold" color={palette.accent} style={styles.role}>{freelancer.bio}</T>
+              )}
+              <View style={styles.location}>
+                <Ionicons name="person-circle-outline" size={14} color={palette.subText} />
+                <T weight="medium" color={palette.subText} style={styles.locationText}>@{freelancer.username}</T>
+              </View>
             </View>
           </View>
-
         </SurfaceCard>
 
         <View style={styles.stats}>
           <SurfaceCard style={styles.statCard}>
             <T weight="semiBold" color={palette.subText} style={styles.statLabel}>RATING</T>
-            <T weight="bold" color={palette.text} style={styles.statValue}>4.9 / 5</T>
-            <T weight="medium" color={palette.subText} style={styles.statSub}>48 completed gigs</T>
+            <T weight="bold" color={palette.text} style={styles.statValue}>{ratingDisplay}</T>
           </SurfaceCard>
           <SurfaceCard style={styles.statCard}>
             <T weight="semiBold" color={palette.subText} style={styles.statLabel}>HOURLY RATE</T>
-            <T weight="bold" color={palette.text} style={styles.statValue}>₹85/hr</T>
-            <T weight="medium" color={palette.subText} style={styles.statSub}>Available this week</T>
+            <T weight="bold" color={palette.text} style={styles.statValue}>{rateDisplay}</T>
           </SurfaceCard>
         </View>
 
-        <SurfaceCard style={styles.card}>
-          <T weight="bold" color={palette.text} style={styles.cardTitle}>Top Skills</T>
-          <View style={styles.tags}>
-            {skills.map((skill) => (
-              <View key={skill} style={[styles.tag, { backgroundColor: palette.border }]}>
-                <T weight="semiBold" color={palette.subText} style={styles.tagText}>{skill}</T>
-              </View>
-            ))}
-          </View>
-        </SurfaceCard>
-
-        <SurfaceCard style={styles.card}>
-          <T weight="bold" color={palette.text} style={styles.cardTitle}>Recent Outcomes</T>
-          {outcomes.map((item) => (
-            <View key={item} style={styles.row}>
-              <Ionicons name="checkmark-circle" size={16} color={palette.accent} />
-              <T weight="medium" color={palette.subText} style={styles.rowText}>{item}</T>
+        {skills.length > 0 && (
+          <SurfaceCard style={styles.card}>
+            <T weight="bold" color={palette.text} style={styles.cardTitle}>Top Skills</T>
+            <View style={styles.tags}>
+              {skills.map((skill) => (
+                <View key={skill} style={[styles.tag, { backgroundColor: palette.border }]}>
+                  <T weight="semiBold" color={palette.subText} style={styles.tagText}>{skill}</T>
+                </View>
+              ))}
             </View>
-          ))}
-        </SurfaceCard>
+          </SurfaceCard>
+        )}
 
-        <SurfaceCard style={styles.card}>
-          <View style={styles.reviewHead}>
-            <T weight="bold" color={palette.text} style={styles.cardTitle}>Client Review</T>
-            <T weight="bold" color={palette.accent} style={styles.stars}>★★★★★</T>
-          </View>
-          <T color={palette.text} style={styles.reviewText}>
-            "Alex delivered exceptional architecture and clean implementation. Communication was consistent and execution was fast."
-          </T>
-          <View style={styles.clientRow}>
-            <Avatar source={people.marcus} size={28} />
-            <T weight="medium" color={palette.subText} style={styles.clientName}>Marcus Thorne, Founder at ShopHub</T>
-          </View>
-        </SurfaceCard>
+        {skills.length === 0 && (
+          <SurfaceCard style={styles.card}>
+            <EmptyState
+              icon="construct-outline"
+              title="No skills listed"
+              subtitle="This freelancer hasn't added skills to their profile yet."
+            />
+          </SurfaceCard>
+        )}
       </View>
     </FlowScreen>
   );
@@ -121,20 +148,10 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, padding: 12 },
   statLabel: { fontSize: 10, letterSpacing: 0.8 },
   statValue: { fontSize: 17, marginTop: 3 },
-  statSub: { fontSize: 11, marginTop: 2 },
 
   card: { padding: 12 },
   cardTitle: { fontSize: 16 },
   tags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   tag: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   tagText: { fontSize: 11 },
-
-  row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 8 },
-  rowText: { fontSize: 13, flex: 1 },
-
-  reviewHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  stars: { fontSize: 12 },
-  reviewText: { marginTop: 8, fontSize: 13, lineHeight: 19 },
-  clientRow: { marginTop: 9, flexDirection: "row", alignItems: "center", gap: 8 },
-  clientName: { fontSize: 12 },
 });

@@ -51,35 +51,46 @@ export class GigRepository {
 
     const { data: completedContracts, error: completedErr } = await this.db
       .from("contracts")
-      .select("proposal_id")
+      .select("proposals(proposed_amount)")
       .eq("freelancer_id", userId)
       .eq("status", "completed")
       .gte("updated_at", startOfMonth.toISOString());
-    if (completedErr) throw completedErr;
+    if (earningsErr) throw earningsErr;
 
-    const proposalIds = (completedContracts || [])
-      .map((c: any) => c.proposal_id)
-      .filter(Boolean);
-
-    let earningsMtd = 0;
-    if (proposalIds.length > 0) {
-      const { data: proposalRows, error: proposalErr } = await this.db
-        .from("proposals")
-        .select("proposed_amount")
-        .in("id", proposalIds);
-      if (proposalErr) throw proposalErr;
-
-      earningsMtd = (proposalRows || []).reduce(
-        (sum: number, row: any) => sum + (Number(row.proposed_amount) || 0),
-        0,
-      );
-    }
+    const earningsMtd = (earningsData || []).reduce(
+      (sum: number, c: any) => sum + (Number(c.proposals?.proposed_amount) || 0),
+      0,
+    );
 
     return {
       earnings_mtd: earningsMtd,
       active_projects: activeProjects || 0,
       earnings_growth_pct: 0,
     };
+  }
+
+  async addTagsToGig(gigId: string, tagLabels: string[]) {
+    if (!tagLabels || tagLabels.length === 0) return;
+
+    // Convert to lowercase slugs
+    const slugs = tagLabels.map((l) => l.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""));
+
+    // Upsert tags to ensure they exist
+    for (let i = 0; i < slugs.length; i++) {
+      const { error } = await this.db.from("tags").upsert({ slug: slugs[i], label: tagLabels[i] }, { onConflict: "slug" });
+      if (error) console.error("Error upserting tag:", error);
+    }
+
+    // Get the tag IDs
+    const { data: dbTags } = await this.db.from("tags").select("id, slug").in("slug", slugs);
+    if (!dbTags || dbTags.length === 0) return;
+
+    // Replace existing tags for this gig
+    await this.db.from("gig_tags").delete().eq("gig_id", gigId);
+
+    const gigTags = dbTags.map((t) => ({ gig_id: gigId, tag_id: t.id }));
+    const { error: insertErr } = await this.db.from("gig_tags").insert(gigTags);
+    if (insertErr) throw insertErr;
   }
 
   async listGigs(filters: Record<string, any>, limit: number, cursorParts: { createdAt: string, id: string } | null) {

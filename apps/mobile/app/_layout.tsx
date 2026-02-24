@@ -51,8 +51,23 @@ import {
   Poppins_700Bold,
   useFonts as usePoppinsFonts,
 } from "@expo-google-fonts/poppins";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60, // 1 minute
+      gcTime: 1000 * 60 * 5, // 5 minutes (formerly cacheTime)
+      retry: 2,
+      refetchOnWindowFocus: false, // not relevant for mobile but explicit
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+});
 
 SplashScreen.preventAutoHideAsync();
 
@@ -232,12 +247,14 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <RoleProvider>
-          <RootLayoutNav />
-        </RoleProvider>
-      </ThemeProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <ThemeProvider>
+          <RoleProvider>
+            <RootLayoutNav />
+          </RoleProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
