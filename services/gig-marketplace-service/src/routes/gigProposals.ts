@@ -7,7 +7,13 @@ const router = Router({ mergeParams: true });
 
 router.post("/", validate(createProposalSchema), async (req, res, next) => {
   try {
-    const data = await proposalService.createProposal(req.db, req.params.id as string, req.user.id, req.body);
+    const data = await proposalService.createProposal(
+      req.db,
+      req.params.id as string,
+      req.user.id,
+      req.body,
+      (req.user.user_metadata || {}) as any,
+    );
     res.status(201).json({ data });
   } catch (err) {
     next(err);

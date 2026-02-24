@@ -4,71 +4,18 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ChatMessage } from "@/hooks/useContractRealtimeChat";
+import { useContractRealtimeChat } from "@/hooks/useContractRealtimeChat";
 
 import { Avatar, FlowScreen, FlowTopBar, T, people, useFlowNav, useFlowPalette } from "./shared";
 
-type LocalMessage = ChatMessage & {
-  sender_name: string;
-};
-
 type ChatRow =
   | { type: "date"; key: string; label: string }
-  | { type: "message"; key: string; message: LocalMessage; showAvatar: boolean };
+  | { type: "message"; key: string; message: any; showAvatar: boolean };
 
 type ThreadScreenProps = {
   threadId?: string;
   title?: string;
   avatar?: string;
-};
-
-type ThreadSeed = {
-  participantName: string;
-  participantAvatar: string;
-  subtitle: string;
-  messages: LocalMessage[];
-};
-
-const DEMO_ME = "demo-me";
-
-const THREADS: Record<string, ThreadSeed> = {
-  m1: {
-    participantName: "Arjun Patel",
-    participantAvatar: people.alex,
-    subtitle: "Dashboard Revamp",
-    messages: [
-      { id: "m1-1", contract_id: "local", sender_id: "client-1", recipient_id: DEMO_ME, message_type: "text", body: "Can you send the updated dashboard UI today?", file_url: null, metadata: null, read_at: null, created_at: "2026-02-24T09:52:00+05:30", sender_name: "Arjun" },
-      { id: "m1-2", contract_id: "local", sender_id: DEMO_ME, recipient_id: "client-1", message_type: "text", body: "Yes. I will share v2 by 6 PM.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-24T10:02:00+05:30", sender_name: "You" },
-      { id: "m1-3", contract_id: "local", sender_id: "client-1", recipient_id: DEMO_ME, message_type: "text", body: "Perfect. Please include mobile spacing fixes too.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-24T10:06:00+05:30", sender_name: "Arjun" },
-      { id: "m1-4", contract_id: "local", sender_id: DEMO_ME, recipient_id: "client-1", message_type: "text", body: "Done. I’ll push both light and dark variants.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-24T10:12:00+05:30", sender_name: "You" },
-    ],
-  },
-  m2: {
-    participantName: "Priya Sharma",
-    participantAvatar: people.sarah,
-    subtitle: "Mobile QA Pass",
-    messages: [
-      { id: "m2-1", contract_id: "local", sender_id: "client-2", recipient_id: DEMO_ME, message_type: "text", body: "Looks good. Let’s freeze and ship this build.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-24T09:18:00+05:30", sender_name: "Priya" },
-      { id: "m2-2", contract_id: "local", sender_id: DEMO_ME, recipient_id: "client-2", message_type: "text", body: "Acknowledged. I’ll send the release note in 20 mins.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-24T09:20:00+05:30", sender_name: "You" },
-    ],
-  },
-  m3: {
-    participantName: "Nova Labs Team",
-    participantAvatar: people.jordan,
-    subtitle: "Milestone Phase 2",
-    messages: [
-      { id: "m3-1", contract_id: "local", sender_id: "team-1", recipient_id: DEMO_ME, message_type: "text", body: "Milestone approved. Start next phase and share ETA.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-23T18:30:00+05:30", sender_name: "Nova Team" },
-      { id: "m3-2", contract_id: "local", sender_id: DEMO_ME, recipient_id: "team-1", message_type: "text", body: "Confirmed. ETA by tonight.", file_url: null, metadata: null, read_at: null, created_at: "2026-02-23T18:45:00+05:30", sender_name: "You" },
-    ],
-  },
-  m4: {
-    participantName: "Helio Commerce",
-    participantAvatar: people.david,
-    subtitle: "Timeline Realignment",
-    messages: [
-      { id: "m4-1", contract_id: "local", sender_id: "client-3", recipient_id: DEMO_ME, message_type: "text", body: "Can we do a quick call about timeline changes?", file_url: null, metadata: null, read_at: null, created_at: "2026-02-22T11:05:00+05:30", sender_name: "Helio" },
-    ],
-  },
 };
 
 function formatDayLabel(dateInput: string): string {
@@ -82,7 +29,7 @@ function formatDayLabel(dateInput: string): string {
   return d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function buildRows(messages: LocalMessage[]): ChatRow[] {
+function buildRows(messages: any[]): ChatRow[] {
   const rows: ChatRow[] = [];
   let prevDayKey: string | null = null;
 
@@ -121,13 +68,20 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
   const [draft, setDraft] = useState("");
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
-  const seed = THREADS[threadId ?? ""];
-  const participantName = title || seed?.participantName || "Conversation";
-  const participantAvatar = avatar || seed?.participantAvatar || people.alex;
+  const {
+    currentUserId,
+    messages,
+    loading,
+    sending,
+    error,
+    sendTextMessage,
+    retryFailedMessage,
+  } = useContractRealtimeChat({ contractId: threadId });
 
-  const [messages, setMessages] = useState<LocalMessage[]>(seed?.messages || []);
+  const participantName = title || "Conversation";
+  const participantAvatar = avatar || people.alex;
 
-  const rows = useMemo(() => buildRows(messages), [messages]);
+  const rows = useMemo(() => buildRows(messages || []), [messages]);
   const resolvedTabBarSpace = Math.max(tabBarHeight - 30, 0 + insets.bottom);
   const footerBottom = keyboardOpen ? 8 : resolvedTabBarSpace + 2;
   const listBottomPadding = keyboardOpen ? 88 : resolvedTabBarSpace + 50;
@@ -148,26 +102,11 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     return () => clearTimeout(timer);
   }, [rows.length]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const body = draft.trim();
     if (!body) return;
-
-    const next: LocalMessage = {
-      id: `local-${Date.now()}`,
-      contract_id: "local",
-      sender_id: DEMO_ME,
-      recipient_id: "peer",
-      message_type: "text",
-      body,
-      file_url: null,
-      metadata: null,
-      read_at: null,
-      created_at: new Date().toISOString(),
-      sender_name: "You",
-    };
-
     setDraft("");
-    setMessages((prev) => [...prev, next]);
+    await sendTextMessage(body);
   };
 
   return (
@@ -181,6 +120,14 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
         <FlowTopBar title={participantName} onLeftPress={nav.back} right="ellipsis-horizontal" onRightPress={() => {}} />
 
         <View style={[styles.body, { backgroundColor: palette.bg }]}> 
+          {error ? (
+            <View style={[styles.errorPill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}> 
+              <T weight="regular" color={palette.accent} style={styles.errorText}>
+                {error}
+              </T>
+            </View>
+          ) : null}
+
           <FlatList
             ref={listRef}
             data={rows}
@@ -202,7 +149,7 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
               }
 
               const { message, showAvatar } = item;
-              const isMine = message.sender_id === DEMO_ME;
+              const isMine = message.sender_id === currentUserId;
               const timeLabel = new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
               return (
@@ -216,23 +163,32 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                   <View style={[styles.bubbleWrap, isMine ? styles.bubbleWrapMine : styles.bubbleWrapPeer]}>
                     {!isMine && showAvatar ? (
                       <T weight="medium" color={palette.subText} style={styles.senderName} numberOfLines={1}>
-                        {message.sender_name}
+                        {participantName}
                       </T>
                     ) : null}
-                    <View
-                      style={[
-                        styles.bubble,
-                        isMine
-                          ? { backgroundColor: palette.accent, borderColor: palette.accent }
-                          : { backgroundColor: palette.surface, borderColor: palette.borderLight },
-                      ]}
+                    <TouchableOpacity
+                      activeOpacity={message.failed ? 0.7 : 1}
+                      disabled={!message.failed}
+                      onPress={() => retryFailedMessage(message)}
                     >
-                      <T weight="regular" color={isMine ? "#fff" : palette.text} style={styles.bubbleText}>
-                        {message.body || "Message"}
-                      </T>
-                    </View>
+                      <View
+                        style={[
+                          styles.bubble,
+                          isMine
+                            ? { backgroundColor: palette.accent, borderColor: palette.accent }
+                            : { backgroundColor: palette.surface, borderColor: palette.borderLight },
+                          message.pending || message.failed ? { opacity: 0.7 } : null,
+                        ]}
+                      >
+                        <T weight="regular" color={isMine ? "#fff" : palette.text} style={styles.bubbleText}>
+                          {message.body || "Message"}
+                        </T>
+                      </View>
+                    </TouchableOpacity>
                     <T weight="regular" color={palette.subText} style={[styles.time, { textAlign: isMine ? "right" : "left" }]}> 
                       {timeLabel}
+                      {message.pending ? " • sending" : ""}
+                      {message.failed ? " • failed" : ""}
                     </T>
                   </View>
                 </View>
@@ -241,7 +197,7 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
                 <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                  No messages yet
+                  {loading ? "Loading messages..." : "No messages yet"}
                 </T>
               </View>
             }
@@ -263,9 +219,9 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
               maxLength={1200}
             />
             <TouchableOpacity
-              style={[styles.sendBtn, { backgroundColor: palette.accent, opacity: draft.trim() ? 1 : 0.5 }]}
+              style={[styles.sendBtn, { backgroundColor: palette.accent, opacity: draft.trim() && !sending ? 1 : 0.5 }]}
               onPress={handleSend}
-              disabled={!draft.trim()}
+              disabled={!draft.trim() || sending}
             >
               <Ionicons name="arrow-up" size={18} color="#fff" />
             </TouchableOpacity>
@@ -278,6 +234,15 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
 
 const styles = StyleSheet.create({
   body: { flex: 1, paddingHorizontal: 14, paddingTop: 10 },
+  errorPill: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  errorText: { fontSize: 10, lineHeight: 13 },
   chatContent: { paddingBottom: 16 },
   dateWrap: { alignItems: "center", marginVertical: 8 },
   datePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },

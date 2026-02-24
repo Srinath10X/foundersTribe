@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "../config/supabase.js";
+import { getSupabaseForToken, supabaseAdmin } from "../config/supabase.js";
 export const authMiddleware = async (req, res, next) => {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) {
@@ -14,7 +14,7 @@ export const authMiddleware = async (req, res, next) => {
     }
     req.user = data.user;
     req.accessToken = token;
-    // Use the service-key admin client so RLS doesn't block server-side operations
-    req.db = supabaseAdmin;
+    // Use a user-scoped client for request operations so auth.uid() inside RPC works.
+    req.db = getSupabaseForToken(token);
     next();
 };

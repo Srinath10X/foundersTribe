@@ -55,9 +55,9 @@ export class GigRepository {
       .eq("freelancer_id", userId)
       .eq("status", "completed")
       .gte("updated_at", startOfMonth.toISOString());
-    if (earningsErr) throw earningsErr;
+    if (completedErr) throw completedErr;
 
-    const earningsMtd = (earningsData || []).reduce(
+    const earningsMtd = (completedContracts || []).reduce(
       (sum: number, c: any) => sum + (Number(c.proposals?.proposed_amount) || 0),
       0,
     );

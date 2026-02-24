@@ -1,28 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import { FlowScreen, SurfaceCard, T, useFlowPalette } from "@/components/community/freelancerFlow/shared";
-
-type GigStatus = "open" | "in_progress" | "completed";
-type GigLevel = "entry" | "intermediate" | "expert";
-
-type GigItem = {
-  id: string;
-  title: string;
-  company: string;
-  budget: string;
-  timeline: string;
-  status: GigStatus;
-  level: GigLevel;
-  remote: boolean;
-};
-
-const PROPOSAL_STATUS_KEY = "freelancer_proposal_status_v1";
+import { useGigs, useMyProposals } from "@/hooks/useGig";
+import type { Gig, GigStatus } from "@/types/gig";
 
 const FILTERS: { label: string; value: "all" | GigStatus }[] = [
   { label: "All", value: "all" },
@@ -31,72 +16,43 @@ const FILTERS: { label: string; value: "all" | GigStatus }[] = [
   { label: "Completed", value: "completed" },
 ];
 
-const DUMMY_GIGS: GigItem[] = [
-  {
-    id: "gig-1",
-    title: "React Native UI Polish",
-    company: "Nova Labs",
-    budget: "₹25,000",
-    timeline: "2 weeks",
-    status: "open",
-    level: "intermediate",
-    remote: true,
-  },
-  {
-    id: "gig-2",
-    title: "Founder Community App QA",
-    company: "TribeBase",
-    budget: "₹18,000",
-    timeline: "10 days",
-    status: "open",
-    level: "entry",
-    remote: true,
-  },
-  {
-    id: "gig-3",
-    title: "Payments Integration (Node + Stripe)",
-    company: "Helio Commerce",
-    budget: "₹42,000",
-    timeline: "3 weeks",
-    status: "in_progress",
-    level: "expert",
-    remote: true,
-  },
-  {
-    id: "gig-4",
-    title: "Landing Page Performance Audit",
-    company: "Raymond Studio",
-    budget: "₹12,000",
-    timeline: "1 week",
-    status: "completed",
-    level: "intermediate",
-    remote: false,
-  },
-];
-
 function statusLabel(status: GigStatus) {
-  if (status === "in_progress") return "Active";
-  if (status === "completed") return "Completed";
+  if (status === "in_progress" || status === "completed" || status === "cancelled") return "Closed";
   return "Open";
 }
 
-function GigCard({ item, proposalPending }: { item: GigItem; proposalPending: boolean }) {
+function levelFromExperience(level?: string | null) {
+  if (!level) return "mid";
+  if (level === "junior") return "entry";
+  if (level === "senior") return "expert";
+  return "intermediate";
+}
+
+function timelineFromGig(gig: Gig) {
+  if (gig.published_at) {
+    const d = new Date(gig.published_at);
+    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
+  }
+  return "Flexible";
+}
+
+function budgetFromGig(gig: Gig) {
+  return `₹${Number(gig.budget_min || 0).toLocaleString()} - ₹${Number(gig.budget_max || 0).toLocaleString()}`;
+}
+
+function GigCard({ item, proposalSubmitted }: { item: Gig; proposalSubmitted: boolean }) {
   const { palette } = useFlowPalette();
   const router = useRouter();
+  const isClosed = item.status !== "open";
 
   const tone =
-    item.status === "completed" ? palette.subText : item.status === "in_progress" ? "#F59E0B" : palette.accent;
+    isClosed ? palette.subText : palette.accent;
   const toneBg =
-    item.status === "completed"
-      ? palette.borderLight
-      : item.status === "in_progress"
-        ? "rgba(245,158,11,0.15)"
-        : palette.accentSoft;
+    isClosed ? palette.borderLight : palette.accentSoft;
 
   return (
     <TouchableOpacity
       activeOpacity={0.86}
-      disabled={proposalPending}
       onPress={() => router.push(`/(role-pager)/(freelancer-tabs)/gig-details?id=${item.id}` as any)}
     >
       <SurfaceCard style={styles.gigCard}>
@@ -108,7 +64,7 @@ function GigCard({ item, proposalPending }: { item: GigItem; proposalPending: bo
           </View>
           <View style={[styles.levelPill, { backgroundColor: palette.borderLight }]}>
             <T weight="regular" color={palette.subText} style={styles.levelText}>
-              {item.level}
+              {levelFromExperience(item.experience_level)}
             </T>
           </View>
         </View>
@@ -117,46 +73,46 @@ function GigCard({ item, proposalPending }: { item: GigItem; proposalPending: bo
           {item.title}
         </T>
         <T weight="regular" color={palette.subText} style={styles.gigCompany} numberOfLines={1}>
-          {item.company}
+          {item.founder?.full_name || "Founder"}
         </T>
 
         <View style={styles.metaRow}>
           <View style={styles.metaItem}>
             <Ionicons name="cash-outline" size={13} color={palette.subText} />
             <T weight="regular" color={palette.subText} style={styles.metaText}>
-              {item.budget}
+              {budgetFromGig(item)}
             </T>
           </View>
           <View style={styles.metaItem}>
             <Ionicons name="time-outline" size={13} color={palette.subText} />
             <T weight="regular" color={palette.subText} style={styles.metaText}>
-              {item.timeline}
+              {timelineFromGig(item)}
             </T>
           </View>
           <View style={styles.metaItem}>
-            <Ionicons name={item.remote ? "globe-outline" : "business-outline"} size={13} color={palette.subText} />
+            <Ionicons name={item.is_remote ? "globe-outline" : "business-outline"} size={13} color={palette.subText} />
             <T weight="regular" color={palette.subText} style={styles.metaText}>
-              {item.remote ? "Remote" : "On-site"}
+              {item.is_remote ? "Remote" : item.location_text || "On-site"}
             </T>
           </View>
         </View>
 
         <View style={styles.cardFooter}>
           <T weight="regular" color={palette.subText} style={styles.footerHint}>
-            {proposalPending ? "Proposal submitted" : "Updated recently"}
+            {proposalSubmitted ? "Proposal submitted" : isClosed ? "No longer accepting proposals" : `${item.proposals_count || 0} proposals`}
           </T>
           <View
             style={[
               styles.viewBtn,
-              { backgroundColor: proposalPending ? palette.borderLight : palette.accent },
+              { backgroundColor: proposalSubmitted || isClosed ? palette.borderLight : palette.accent },
             ]}
           >
             <T
               weight="medium"
-              color={proposalPending ? palette.subText : "#fff"}
+              color={proposalSubmitted || isClosed ? palette.subText : "#fff"}
               style={styles.viewBtnText}
             >
-              {proposalPending ? "Pending Approval" : "View"}
+              {proposalSubmitted ? "Already Submitted" : isClosed ? "Closed" : "View"}
             </T>
           </View>
         </View>
@@ -168,54 +124,47 @@ function GigCard({ item, proposalPending }: { item: GigItem; proposalPending: bo
 export default function BrowseGigsScreen() {
   const { palette } = useFlowPalette();
   const tabBarHeight = useBottomTabBarHeight();
-  const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | GigStatus>("all");
-  const [proposalStatusMap, setProposalStatusMap] = useState<Record<string, { status?: string }>>({});
 
-  const loadProposalStatus = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(PROPOSAL_STATUS_KEY);
-      if (!raw) {
-        setProposalStatusMap({});
-        return;
+  const { data: gigsData, isLoading, refetch, isRefetching } = useGigs({
+    status: activeFilter === "all" ? undefined : activeFilter,
+    limit: 50,
+  });
+  const { data: myProposalsData, refetch: refetchProposals } = useMyProposals({ limit: 100 });
+
+  const proposalSubmittedMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    (myProposalsData?.items || []).forEach((p) => {
+      if (p.gig_id) {
+        map[p.gig_id] = true;
       }
-      const parsed = JSON.parse(raw);
-      setProposalStatusMap(parsed && typeof parsed === "object" ? parsed : {});
-    } catch {
-      setProposalStatusMap({});
-    }
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadProposalStatus();
-    }, [loadProposalStatus]),
-  );
+    });
+    return map;
+  }, [myProposalsData?.items]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return DUMMY_GIGS.filter((gig) => {
-      const filterMatch = activeFilter === "all" || gig.status === activeFilter;
-      const searchMatch =
-        !q ||
+    const items = gigsData?.items || [];
+    if (!q) return items;
+
+    return items.filter((gig) => {
+      return (
         gig.title.toLowerCase().includes(q) ||
-        gig.company.toLowerCase().includes(q) ||
-        gig.level.toLowerCase().includes(q);
-      return filterMatch && searchMatch;
+        (gig.description || "").toLowerCase().includes(q) ||
+        (gig.founder?.full_name || "").toLowerCase().includes(q) ||
+        (gig.experience_level || "").toLowerCase().includes(q)
+      );
     });
-  }, [activeFilter, query]);
+  }, [gigsData?.items, query]);
 
   const onRefresh = () => {
-    setRefreshing(true);
-    loadProposalStatus().finally(() => {
-      setTimeout(() => setRefreshing(false), 500);
-    });
+    Promise.allSettled([refetch(), refetchProposals()]);
   };
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
         <T weight="medium" color={palette.text} style={styles.pageTitle}>
           Browse Gigs
         </T>
@@ -226,7 +175,7 @@ export default function BrowseGigsScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={palette.accent} />}
       >
         <View style={styles.content}>
           <LinearGradient
@@ -240,7 +189,7 @@ export default function BrowseGigsScreen() {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Search by title, company, level"
+                placeholder="Search by title, founder, skill"
                 placeholderTextColor={palette.subText}
                 style={[styles.input, { color: palette.text }]}
               />
@@ -290,12 +239,12 @@ export default function BrowseGigsScreen() {
               <GigCard
                 key={gig.id}
                 item={gig}
-                proposalPending={proposalStatusMap[gig.id]?.status === "pending"}
+                proposalSubmitted={!!proposalSubmittedMap[gig.id]}
               />
             ))}
           </View>
 
-          {filtered.length === 0 ? (
+          {!isLoading && filtered.length === 0 ? (
             <SurfaceCard style={styles.emptyCard}>
               <Ionicons name="briefcase-outline" size={30} color={palette.subText} />
               <T weight="medium" color={palette.text} style={styles.emptyTitle}>
@@ -360,17 +309,17 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     gap: 8,
-    paddingRight: 6,
+    paddingRight: 4,
   },
   filterPill: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
   },
   filterText: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
   },
   sectionHead: {
     flexDirection: "row",
@@ -379,8 +328,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 14,
-    lineHeight: 18,
-    letterSpacing: -0.2,
+    lineHeight: 19,
   },
   countText: {
     fontSize: 11,
@@ -390,18 +338,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   gigCard: {
-    borderRadius: 12,
     padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
   },
   gigTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
   },
   statusPill: {
     borderRadius: 999,
@@ -429,62 +371,61 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   gigCompany: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 11,
     lineHeight: 14,
   },
   metaRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+    marginTop: 9,
+    gap: 5,
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
   },
   metaText: {
+    flex: 1,
     fontSize: 11,
     lineHeight: 14,
   },
   cardFooter: {
-    marginTop: 12,
+    marginTop: 10,
+    paddingTop: 9,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(127,127,127,0.35)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 8,
   },
   footerHint: {
+    flex: 1,
     fontSize: 10,
     lineHeight: 13,
   },
   viewBtn: {
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   viewBtnText: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
   },
   emptyCard: {
-    marginTop: 8,
     borderRadius: 12,
     padding: 22,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.08,
-    shadowRadius: 7,
-    elevation: 2,
+    marginTop: 2,
   },
   emptyTitle: {
-    marginTop: 10,
+    marginTop: 9,
     fontSize: 13,
     lineHeight: 17,
   },
   emptySubtitle: {
-    marginTop: 4,
+    marginTop: 3,
     fontSize: 11,
     lineHeight: 14,
   },

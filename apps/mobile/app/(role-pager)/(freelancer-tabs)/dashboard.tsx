@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -20,6 +20,7 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { useAuth } from "@/context/AuthContext";
+import { useContracts, useFreelancerStats, useMyProposals } from "@/hooks/useGig";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -282,52 +283,6 @@ async function resolveAvatarUrl(
   return `${signedData.signedUrl}&t=${Date.now()}`;
 }
 
-// ─── Temporary Dummy Data ──────────────────────────────────────
-const DUMMY_STATS: FreelancerStats = {
-  earnings_mtd: 124500,
-  active_projects: 3,
-  earnings_growth_pct: 12,
-};
-
-const DUMMY_ACTIVE_JOBS: Gig[] = [
-  {
-    id: "dj-1",
-    title: "Mobile Banking App — React Native",
-    description: "Cross-platform fintech mobile app.",
-    budget: 85000,
-    status: "in_progress",
-    progress: 72,
-    deadline: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
-    client_company: "PayFlex Finance",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "dj-2",
-    title: "E-Commerce Dashboard Redesign",
-    description: "Analytics dashboard UI overhaul.",
-    budget: 25000,
-    status: "in_progress",
-    progress: 45,
-    deadline: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
-    client_company: "ShopEasy",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "dj-3",
-    title: "API Integration — Payment Gateway",
-    description: "Stripe + Razorpay integration.",
-    budget: 35000,
-    status: "in_progress",
-    progress: 20,
-    deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-    client_company: "GreenCart",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
 export default function TalentDashboardScreen() {
   const { palette } = useFlowPalette();
   const router = useRouter();
@@ -338,6 +293,9 @@ export default function TalentDashboardScreen() {
   const [headerRole, setHeaderRole] = useState("Freelancer");
   const [headerAvatar, setHeaderAvatar] = useState<string>(people.alex);
   const [headerBio, setHeaderBio] = useState("");
+  const { data: statsData, refetch: refetchStats } = useFreelancerStats();
+  const { data: contractsData, refetch: refetchContracts } = useContracts({ status: "active", limit: 20 });
+  const { data: myProposalsData, refetch: refetchMyProposals } = useMyProposals({ limit: 50 });
 
   useEffect(() => {
     let cancelled = false;
@@ -437,78 +395,84 @@ export default function TalentDashboardScreen() {
     session?.user?.user_metadata,
   ]);
 
+  const activeContracts = contractsData?.items || [];
+  const proposalItems = myProposalsData?.items || [];
+  const pendingProposals = proposalItems.filter((p) => p.status === "pending" || p.status === "shortlisted");
+
   const metrics: Metric[] = [
     {
       id: "m1",
       label: "This Month",
-      value: "₹48,600",
-      note: "+12.4% vs last month",
+      value: `₹${Number(statsData?.earnings_mtd || 0).toLocaleString()}`,
+      note: `${statsData?.earnings_growth_pct ?? 0}% vs last month`,
       icon: "trending-up-outline",
     },
     {
       id: "m2",
       label: "Active Jobs",
-      value: "4",
-      note: "2 near deadline",
+      value: String(statsData?.active_projects ?? activeContracts.length),
+      note: `${activeContracts.length} contracts in progress`,
       icon: "briefcase-outline",
     },
   ];
 
-  const activeJobs: JobItem[] = [
-    {
-      id: "gig-1",
-      title: "Mobile App UI Revamp",
-      client: "Nova Labs",
-      due: "in 2 days",
-      progress: 82,
-      priority: "high",
-    },
-    {
-      id: "gig-2",
-      title: "Payment API Integration",
-      client: "Helio Commerce",
-      due: "in 5 days",
-      progress: 56,
-      priority: "medium",
-    },
-    {
-      id: "gig-3",
-      title: "Landing Page Performance",
-      client: "Raymond Studio",
-      due: "in 1 week",
-      progress: 38,
-      priority: "low",
-    },
-  ];
+  const activeJobs: JobItem[] = activeContracts.slice(0, 3).map((contract) => {
+    const startedAt = new Date(contract.started_at).getTime();
+    const elapsedDays = Math.max(1, Math.floor((Date.now() - startedAt) / (1000 * 60 * 60 * 24)));
+    const progress = contract.status === "completed"
+      ? 100
+      : contract.founder_approved
+        ? 95
+        : contract.freelancer_marked_complete
+          ? 80
+          : Math.min(70, 20 + elapsedDays * 3);
+
+    const priority: JobItem["priority"] = progress < 35 ? "high" : progress < 70 ? "medium" : "low";
+    const client = contract.founder?.full_name || contract.gig?.founder?.full_name || "Founder";
+    const due = contract.status === "completed" ? "completed" : `started ${new Date(contract.started_at).toLocaleDateString()}`;
+
+    return {
+      id: contract.id,
+      title: contract.gig?.title || "Contract Work",
+      client,
+      due,
+      progress,
+      priority,
+    };
+  });
 
   const insights: InsightItem[] = [
     {
       id: "i1",
-      title: "2 proposals are awaiting",
-      subtitle: "Reply within 12h for better ranking",
+      title: `${pendingProposals.length} proposals awaiting response`,
+      subtitle: "Follow up quickly to improve conversion",
       icon: "time-outline",
     },
     {
       id: "i2",
-      title: "1 contract needs milestone update",
-      subtitle: "Keep clients informed",
+      title: `${activeContracts.length} active contract${activeContracts.length === 1 ? "" : "s"}`,
+      subtitle: "Keep milestones and communication updated",
       icon: "checkmark-done-outline",
     },
     {
       id: "i3",
-      title: "Your profile is trending",
-      subtitle: "14 founder views this week",
+      title: "Profile visibility improves with fresh activity",
+      subtitle: "Update portfolio and submit more proposals",
       icon: "flame-outline",
     },
   ];
   const metricRows = chunkIntoRows(metrics, 2);
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => {
+    Promise.allSettled([
+      refetchStats(),
+      refetchContracts(),
+      refetchMyProposals(),
+    ]).finally(() => {
       setRefreshing(false);
-    }, 650);
-  };
+    });
+  }, [refetchContracts, refetchMyProposals, refetchStats]);
 
   return (
     <FlowScreen scroll={false}>
@@ -549,7 +513,6 @@ export default function TalentDashboardScreen() {
               color={palette.subText}
             />
           </TouchableOpacity>
-          <Avatar source={people.alex} size={48} />
         </View>
       </View>
 
@@ -609,7 +572,9 @@ export default function TalentDashboardScreen() {
                   <QuickAction
                     icon="document-text-outline"
                     label="Contracts"
-                    onPress={() => router.push("/talent-stack/contracts")}
+                    onPress={() =>
+                      router.push("/(role-pager)/(freelancer-tabs)/messages" as any)
+                    }
                   />
                   <QuickAction
                     icon="compass-outline"
@@ -640,7 +605,7 @@ export default function TalentDashboardScreen() {
               Active Jobs
             </T>
             <TouchableOpacity
-              onPress={() => router.push("/talent-stack/contracts")}
+              onPress={() => router.push("/(role-pager)/(freelancer-tabs)/messages")}
             >
               <T
                 weight="medium"
@@ -653,13 +618,19 @@ export default function TalentDashboardScreen() {
           </View>
 
           <View style={styles.jobsStack}>
-            {activeJobs.map((job) => (
+            {activeJobs.length === 0 ? (
+              <SurfaceCard style={styles.emptyStateCard}>
+                <T weight="regular" color={palette.subText} style={styles.emptyStateText}>
+                  No active contracts yet
+                </T>
+              </SurfaceCard>
+            ) : activeJobs.map((job) => (
               <JobCard
                 key={job.id}
                 item={job}
                 onPress={() =>
                   router.push(
-                    `/(role-pager)/(freelancer-tabs)/contract-details?id=${encodeURIComponent(job.id)}&title=${encodeURIComponent(job.title)}&client=${encodeURIComponent(job.client)}&due=${encodeURIComponent(job.due)}&progress=${job.progress}` as any,
+                    `/(role-pager)/(freelancer-tabs)/contract-details?id=${encodeURIComponent(job.id)}` as any,
                   )
                 }
               />
@@ -843,6 +814,14 @@ const styles = StyleSheet.create({
   },
   jobsStack: {
     gap: 8,
+  },
+  emptyStateCard: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  emptyStateText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   jobCard: {
     padding: 13,

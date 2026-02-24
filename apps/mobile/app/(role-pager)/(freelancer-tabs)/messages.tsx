@@ -4,86 +4,62 @@ import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
-import { Avatar, FlowScreen, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
+import { Avatar, FlowScreen, T, useFlowPalette } from "@/components/community/freelancerFlow/shared";
+import { useContracts } from "@/hooks/useGig";
 
-type Thread = {
-  id: string;
-  name: string;
-  message: string;
-  time: string;
-  lastMessageAt: string;
-  unread: number;
-  avatar?: string;
-};
-
-const THREADS: Thread[] = [
-  {
-    id: "m1",
-    name: "Arjun Patel",
-    message: "Perfect. Send v2 today, I’ll review by 7 PM.",
-    time: "10:42 AM",
-    lastMessageAt: "2026-02-24T10:42:00+05:30",
-    unread: 2,
-    avatar: people.alex,
-  },
-  {
-    id: "m2",
-    name: "Priya Sharma",
-    message: "Yes, this works. Let’s freeze and ship this build.",
-    time: "9:18 AM",
-    lastMessageAt: "2026-02-24T09:18:00+05:30",
-    unread: 0,
-    avatar: people.sarah,
-  },
-  {
-    id: "m3",
-    name: "Nova Labs Team",
-    message: "Milestone approved. Start next phase and share ETA.",
-    time: "Yesterday",
-    lastMessageAt: "2026-02-23T18:30:00+05:30",
-    unread: 1,
-    avatar: people.jordan,
-  },
-  {
-    id: "m4",
-    name: "Helio Commerce",
-    message: "Can we do a quick call about timeline changes?",
-    time: "Mon",
-    lastMessageAt: "2026-02-22T11:05:00+05:30",
-    unread: 0,
-    avatar: people.david,
-  },
-];
+function formatTimeLabel(value: string) {
+  const d = new Date(value);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString([], { weekday: "short" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
 
 export default function TalentMessagesScreen() {
   const { palette } = useFlowPalette();
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
-  const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
+
+  const { data, isRefetching, refetch } = useContracts({ limit: 100 });
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const base = !q
-      ? THREADS
-      : THREADS.filter(
-      (thread) =>
-        thread.name.toLowerCase().includes(q) ||
-        thread.message.toLowerCase().includes(q),
-    );
-    return [...base].sort(
-      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
-    );
-  }, [query]);
+    const list = (data?.items || []).map((contract) => {
+      const participantName = contract.founder?.full_name || "Founder";
+      const message = contract.gig?.title || "Contract conversation";
+      return {
+        id: contract.id,
+        name: participantName,
+        message,
+        time: formatTimeLabel(contract.updated_at),
+        lastMessageAt: contract.updated_at,
+        avatar: contract.founder?.avatar_url || undefined,
+      };
+    });
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 450);
-  };
+    const searched = !q
+      ? list
+      : list.filter(
+          (thread) =>
+            thread.name.toLowerCase().includes(q) ||
+            thread.message.toLowerCase().includes(q),
+        );
+
+    return searched.sort(
+      (a, b) =>
+        new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+    );
+  }, [data?.items, query]);
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
         <T weight="medium" color={palette.text} style={styles.pageTitle}>
           Messages
         </T>
@@ -94,10 +70,10 @@ export default function TalentMessagesScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={palette.accent} />}
       >
         <View style={styles.content}>
-          <View style={[styles.search, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
+          <View style={[styles.search, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}> 
             <Ionicons name="search" size={15} color={palette.subText} />
             <TextInput
               value={query}
@@ -107,7 +83,7 @@ export default function TalentMessagesScreen() {
               style={[styles.searchInput, { color: palette.text }]}
             />
             {query.length > 0 ? (
-              <TouchableOpacity onPress={() => setQuery("")}>
+              <TouchableOpacity onPress={() => setQuery("")}> 
                 <Ionicons name="close-circle" size={16} color={palette.subText} />
               </TouchableOpacity>
             ) : null}
@@ -121,12 +97,12 @@ export default function TalentMessagesScreen() {
                 activeOpacity={0.88}
                 onPress={() =>
                   router.push(
-                    `/(role-pager)/(freelancer-tabs)/thread/${encodeURIComponent(thread.id)}?title=${encodeURIComponent(thread.name)}&avatar=${encodeURIComponent(thread.avatar || people.alex)}`,
+                    `/(role-pager)/(freelancer-tabs)/thread/${encodeURIComponent(thread.id)}?title=${encodeURIComponent(thread.name)}&avatar=${encodeURIComponent(thread.avatar || "")}`,
                   )
                 }
               >
                 <View style={styles.row}>
-                  <Avatar source={thread.avatar || people.alex} size={42} />
+                  <Avatar source={thread.avatar || undefined} size={42} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
                       {thread.name}
@@ -139,15 +115,6 @@ export default function TalentMessagesScreen() {
                     <T weight="regular" color={palette.subText} style={styles.time} numberOfLines={1}>
                       {thread.time}
                     </T>
-                    {thread.unread > 0 ? (
-                      <View style={[styles.badge, { backgroundColor: palette.accent }]}>
-                        <T weight="medium" color="#fff" style={styles.badgeText}>
-                          {thread.unread}
-                        </T>
-                      </View>
-                    ) : (
-                      <View style={styles.badgeSpacer} />
-                    )}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -243,21 +210,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: 6,
     paddingTop: 1,
-  },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  badgeText: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  badgeSpacer: {
-    height: 20,
   },
   emptyCard: {
     borderRadius: 12,

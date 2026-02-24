@@ -3,62 +3,110 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import { FlowScreen, SurfaceCard, T, useFlowPalette } from "@/components/community/freelancerFlow/shared";
-
-const PROPOSAL_STATUS_KEY = "freelancer_proposal_status_v1";
+import { useGig, useMyProposals, useSubmitProposal } from "@/hooks/useGig";
 
 export default function FreelancerSendProposalScreen() {
   const { palette } = useFlowPalette();
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
-  const params = useLocalSearchParams<{
-    id?: string;
-    title?: string;
-    company?: string;
-    budget?: string;
-    timeline?: string;
-  }>();
+  const params = useLocalSearchParams<{ id?: string }>();
 
   const gigId = typeof params.id === "string" ? params.id : "";
-  const gigTitle = typeof params.title === "string" && params.title.trim() ? params.title : "Selected Gig";
-  const gigCompany = typeof params.company === "string" && params.company.trim() ? params.company : "Founder Company";
-  const suggestedBudget = typeof params.budget === "string" && params.budget.trim() ? params.budget : "₹25,000";
-  const suggestedTimeline = typeof params.timeline === "string" && params.timeline.trim() ? params.timeline : "2 weeks";
+  const hasValidGigId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(gigId);
+  const { data: gig } = useGig(gigId, hasValidGigId);
+  const { data: myProposals } = useMyProposals({ limit: 100 });
+  const submitProposal = useSubmitProposal();
 
-  const [price, setPrice] = useState(suggestedBudget.replace(/[^0-9]/g, "") || "25000");
-  const [timeline, setTimeline] = useState(suggestedTimeline);
+  const [price, setPrice] = useState("");
+  const [timeline, setTimeline] = useState("");
   const [availability, setAvailability] = useState("Immediate");
   const [portfolioLink, setPortfolioLink] = useState("");
   const [milestonePlan, setMilestonePlan] = useState("");
   const [coverNote, setCoverNote] = useState("");
 
-  const canSubmit = useMemo(() => {
-    return (
-      price.trim().length > 0 &&
-      timeline.trim().length > 0 &&
-      availability.trim().length > 0 &&
-      coverNote.trim().length > 20
-    );
-  }, [availability, coverNote, price, timeline]);
+  const suggestedBudget = gig
+    ? `${Number(gig.budget_min || 0).toLocaleString()}-${Number(gig.budget_max || 0).toLocaleString()}`
+    : "";
+
+  const existingProposal = useMemo(() => {
+    if (!gigId) return null;
+    return (myProposals?.items || []).find((proposal) => proposal.gig_id === gigId) || null;
+  }, [gigId, myProposals?.items]);
+
+  const existingBlocksSubmit = !!existingProposal;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
-    try {
-      const raw = await AsyncStorage.getItem(PROPOSAL_STATUS_KEY);
-      const map = raw ? JSON.parse(raw) : {};
-      const gigKey = gigId || "unknown-gig";
-      map[gigKey] = {
-        status: "pending",
-        updatedAt: new Date().toISOString(),
-      };
-      await AsyncStorage.setItem(PROPOSAL_STATUS_KEY, JSON.stringify(map));
-    } catch {
-      // best-effort local persistence
+    if (!hasValidGigId) {
+      Alert.alert("Invalid gig", "This gig link is invalid. Please open the gig from Browse Gigs and try again.");
+      return;
     }
-    router.replace("/(role-pager)/(freelancer-tabs)/browse-gigs");
+    if (!price.trim()) {
+      Alert.alert("Missing price", "Please enter your proposal amount.");
+      return;
+    }
+    if (!timeline.trim()) {
+      Alert.alert("Missing timeline", "Please enter delivery timeline in days.");
+      return;
+    }
+    if (!availability.trim()) {
+      Alert.alert("Missing availability", "Please enter your start availability.");
+      return;
+    }
+    if (coverNote.trim().length <= 20) {
+      Alert.alert("Cover note too short", "Please provide at least 20 characters in cover note.");
+      return;
+    }
+    if (existingBlocksSubmit) {
+      Alert.alert("Already submitted", "You have already submitted a proposal for this gig.");
+      return;
+    }
+
+    const proposedAmount = Number(price.replace(/[^0-9.]/g, ""));
+    if (!Number.isFinite(proposedAmount) || proposedAmount <= 0) {
+      Alert.alert("Invalid amount", "Please enter a valid proposal amount.");
+      return;
+    }
+
+    const estimatedDays = Number(timeline.replace(/[^0-9]/g, ""));
+    try {
+      if (!gig?.id) {
+        Alert.alert("Gig not loaded", "Please wait for gig details to load and try again.");
+        return;
+      }
+
+      await submitProposal.mutateAsync({
+        gigId,
+        data: {
+          cover_letter: [
+            coverNote.trim(),
+            milestonePlan.trim() ? `\n\nMilestones:\n${milestonePlan.trim()}` : "",
+            portfolioLink.trim() ? `\n\nPortfolio: ${portfolioLink.trim()}` : "",
+            availability.trim() ? `\n\nAvailability: ${availability.trim()}` : "",
+          ].join(""),
+          proposed_amount: proposedAmount,
+          estimated_days: Number.isFinite(estimatedDays) && estimatedDays > 0 ? estimatedDays : undefined,
+        },
+      });
+
+      Alert.alert("Proposal sent", "Your proposal has been submitted.", [
+        { text: "OK", onPress: () => router.replace("/(role-pager)/(freelancer-tabs)/browse-gigs") },
+      ]);
+    } catch (error: any) {
+      console.error("[send-proposal] submit error", {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        gigId,
+      });
+      if (error?.status === 409 || error?.code === "conflict") {
+        Alert.alert("Already submitted", "A proposal for this gig already exists.");
+        return;
+      }
+      Alert.alert("Submit failed", error?.message || "Unable to submit proposal right now.");
+    }
   };
 
   return (
@@ -85,21 +133,21 @@ export default function FreelancerSendProposalScreen() {
             style={[styles.heroCard, { borderColor: palette.borderLight }]}
           >
             <T weight="medium" color={palette.text} style={styles.gigTitle} numberOfLines={2}>
-              {gigTitle}
+              {gig?.title || "Selected Gig"}
             </T>
             <T weight="regular" color={palette.subText} style={styles.gigMeta} numberOfLines={1}>
-              {gigCompany}
+              {gig?.founder?.full_name || "Founder"}
             </T>
 
             <View style={styles.gigHints}>
               <View style={[styles.hintPill, { backgroundColor: palette.borderLight }]}> 
                 <T weight="regular" color={palette.subText} style={styles.hintText}>
-                  Budget {suggestedBudget}
+                  Budget {suggestedBudget || "N/A"}
                 </T>
               </View>
               <View style={[styles.hintPill, { backgroundColor: palette.borderLight }]}> 
                 <T weight="regular" color={palette.subText} style={styles.hintText}>
-                  Timeline {suggestedTimeline}
+                  {gig?.is_remote ? "Remote" : gig?.location_text || "On-site"}
                 </T>
               </View>
             </View>
@@ -125,12 +173,13 @@ export default function FreelancerSendProposalScreen() {
               </View>
               <View style={styles.col}>
                 <T weight="medium" color={palette.subText} style={styles.label}>
-                  Delivery Timeline
+                  Delivery (days)
                 </T>
                 <TextInput
                   value={timeline}
                   onChangeText={setTimeline}
-                  placeholder="2 weeks"
+                  placeholder="14"
+                  keyboardType="numeric"
                   placeholderTextColor={palette.subText}
                   style={[styles.input, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
                 />
@@ -162,7 +211,7 @@ export default function FreelancerSendProposalScreen() {
               textAlignVertical="top"
               value={coverNote}
               onChangeText={setCoverNote}
-              placeholder="Explain why you are a good fit, your execution approach, and expected outcomes."
+              placeholder="Explain why you are a good fit and your approach."
               placeholderTextColor={palette.subText}
               style={[styles.textarea, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
             />
@@ -174,7 +223,7 @@ export default function FreelancerSendProposalScreen() {
             </T>
 
             <T weight="medium" color={palette.subText} style={styles.label}>
-              Portfolio / Work Sample URL
+              Portfolio URL
             </T>
             <TextInput
               value={portfolioLink}
@@ -193,21 +242,35 @@ export default function FreelancerSendProposalScreen() {
               textAlignVertical="top"
               value={milestonePlan}
               onChangeText={setMilestonePlan}
-              placeholder="Break delivery into milestones with expected dates."
+              placeholder="Break delivery into milestones with dates."
               placeholderTextColor={palette.subText}
               style={[styles.textareaSmall, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
             />
           </SurfaceCard>
 
+          {existingProposal ? (
+            <SurfaceCard style={styles.formCard}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                Proposal Status
+              </T>
+              <T weight="regular" color={palette.subText} style={styles.statusText}>
+                You already submitted this proposal. Current status: {existingProposal.status}
+              </T>
+            </SurfaceCard>
+          ) : null}
+
           <TouchableOpacity
             activeOpacity={0.88}
-            disabled={!canSubmit}
-            style={[styles.submitBtn, { backgroundColor: palette.accent, opacity: canSubmit ? 1 : 0.45 }]}
+            disabled={submitProposal.isPending || existingBlocksSubmit}
+            style={[
+              styles.submitBtn,
+              { backgroundColor: palette.accent, opacity: submitProposal.isPending || existingBlocksSubmit ? 0.45 : 1 },
+            ]}
             onPress={handleSubmit}
           >
             <Ionicons name="send" size={16} color="#fff" />
             <T weight="medium" color="#fff" style={styles.submitText}>
-              Submit Proposal
+              {existingBlocksSubmit ? "Already Submitted" : submitProposal.isPending ? "Submitting..." : "Submit Proposal"}
             </T>
           </TouchableOpacity>
 
@@ -330,52 +393,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  checkRowWrap: {
-    marginTop: 12,
-    gap: 8,
-  },
-  checkPill: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  checkText: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  summaryCard: {
-    padding: 13,
-    borderRadius: 12,
-  },
-  summaryRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  summaryLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  summaryValue: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
   submitBtn: {
     marginTop: 2,
+    minHeight: 46,
     borderRadius: 12,
-    height: 46,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 7,
+    gap: 8,
   },
   submitText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  statusText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
 });

@@ -5,7 +5,7 @@ import * as proposalService from "../services/proposalService.js";
 const router = Router({ mergeParams: true });
 router.post("/", validate(createProposalSchema), async (req, res, next) => {
     try {
-        const data = await proposalService.createProposal(req.db, req.params.id, req.user.id, req.body);
+        const data = await proposalService.createProposal(req.db, req.params.id, req.user.id, req.body, (req.user.user_metadata || {}));
         res.status(201).json({ data });
     }
     catch (err) {

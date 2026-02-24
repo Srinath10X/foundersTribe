@@ -10,35 +10,37 @@ import {
   FlowScreen,
   SurfaceCard,
   T,
-  people,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { useContract } from "@/hooks/useGig";
+
+function formatStatus(status?: string) {
+  if (!status) return "Active Contract";
+  return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function FreelancerContractDetailsScreen() {
   const { palette } = useFlowPalette();
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
-  const params = useLocalSearchParams<{
-    id?: string;
-    title?: string;
-    client?: string;
-    due?: string;
-    progress?: string;
-  }>();
+  const params = useLocalSearchParams<{ id?: string }>();
 
-  const title = typeof params.title === "string" && params.title.trim() ? params.title : "Contract Job";
-  const client = typeof params.client === "string" && params.client.trim() ? params.client : "Founder";
-  const due = typeof params.due === "string" && params.due.trim() ? params.due : "in 5 days";
-  const progressRaw = typeof params.progress === "string" ? Number(params.progress) : 50;
-  const progress = Number.isFinite(progressRaw) ? Math.max(0, Math.min(100, Math.round(progressRaw))) : 50;
-  const contractId = typeof params.id === "string" && params.id.trim() ? params.id : "N/A";
-  const threadIdMap: Record<string, string> = {
-    "gig-1": "m1",
-    "gig-2": "m2",
-    "gig-3": "m3",
-    "gig-4": "m4",
-  };
-  const threadId = threadIdMap[contractId] || contractId;
+  const contractId = typeof params.id === "string" ? params.id : "";
+  const { data: contract } = useContract(contractId, !!contractId);
+
+  const title = contract?.gig?.title || "Contract Job";
+  const client = contract?.founder?.full_name || "Founder";
+  const progress = contract?.founder_approved
+    ? 100
+    : contract?.freelancer_marked_complete
+      ? 85
+      : contract?.status === "active"
+        ? 55
+        : 35;
+
+  const budgetText = contract?.gig
+    ? `₹${Number(contract.gig.budget_min || 0).toLocaleString()} - ₹${Number(contract.gig.budget_max || 0).toLocaleString()}`
+    : "-";
 
   return (
     <FlowScreen scroll={false}>
@@ -53,7 +55,6 @@ export default function FreelancerContractDetailsScreen() {
         <T weight="medium" color={palette.text} style={styles.headerTitle} numberOfLines={1}>
           Contract Details
         </T>
-
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -67,12 +68,12 @@ export default function FreelancerContractDetailsScreen() {
             <View style={styles.heroTop}>
               <View style={[styles.heroPill, { backgroundColor: palette.accentSoft }]}> 
                 <T weight="medium" color={palette.accent} style={styles.heroPillText}>
-                  Active Contract
+                  {formatStatus(contract?.status)}
                 </T>
               </View>
               <View style={[styles.heroPill, { backgroundColor: palette.borderLight }]}> 
                 <T weight="regular" color={palette.subText} style={styles.heroPillText}>
-                  ID {contractId}
+                  ID {contractId || "N/A"}
                 </T>
               </View>
             </View>
@@ -82,13 +83,13 @@ export default function FreelancerContractDetailsScreen() {
             </T>
 
             <View style={styles.ownerRow}>
-              <Avatar source={people.alex} size={34} />
+              <Avatar source={contract?.founder?.avatar_url || undefined} size={34} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <T weight="medium" color={palette.text} style={styles.ownerName} numberOfLines={1}>
                   {client}
                 </T>
                 <T weight="regular" color={palette.subText} style={styles.ownerMeta} numberOfLines={1}>
-                  Deadline {due}
+                  Started {contract?.started_at ? new Date(contract.started_at).toLocaleDateString() : "-"}
                 </T>
               </View>
             </View>
@@ -113,16 +114,16 @@ export default function FreelancerContractDetailsScreen() {
                 Contract Value
               </T>
               <T weight="semiBold" color={palette.text} style={styles.snapshotValue}>
-                ₹25,000
+                {budgetText}
               </T>
             </SurfaceCard>
 
             <SurfaceCard style={styles.snapshotCard}>
               <T weight="medium" color={palette.subText} style={styles.snapshotLabel}>
-                Remaining
+                Status
               </T>
               <T weight="semiBold" color={palette.text} style={styles.snapshotValue}>
-                ₹15,000
+                {formatStatus(contract?.status)}
               </T>
             </SurfaceCard>
           </View>
@@ -132,28 +133,8 @@ export default function FreelancerContractDetailsScreen() {
               Project Overview
             </T>
             <T weight="regular" color={palette.subText} style={styles.sectionBody}>
-              This contract covers end-to-end delivery of the agreed work scope with weekly progress updates, milestone
-              validation, and final handoff documentation.
+              {contract?.gig?.description || "No project overview available."}
             </T>
-          </SurfaceCard>
-
-          <SurfaceCard style={styles.card}>
-            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-              Deliverables
-            </T>
-
-            {[
-              "Responsive implementation for agreed screens",
-              "Weekly progress update with blocker tracking",
-              "Final delivery package and handoff notes",
-            ].map((item) => (
-              <View key={item} style={styles.scopeRow}>
-                <View style={[styles.scopeDot, { backgroundColor: palette.accent }]} />
-                <T weight="regular" color={palette.subText} style={styles.scopeText}>
-                  {item}
-                </T>
-              </View>
-            ))}
           </SurfaceCard>
 
           <View style={styles.actionRow}>
@@ -162,7 +143,7 @@ export default function FreelancerContractDetailsScreen() {
               style={[styles.primaryBtn, { backgroundColor: palette.accent }]}
               onPress={() =>
                 router.push(
-                  `/(role-pager)/(freelancer-tabs)/thread/${encodeURIComponent(threadId)}` as any,
+                  `/(role-pager)/(freelancer-tabs)/thread/${encodeURIComponent(contractId)}?title=${encodeURIComponent(client)}&avatar=${encodeURIComponent(contract?.founder?.avatar_url || "")}` as any,
                 )
               }
             >
@@ -289,8 +270,8 @@ const styles = StyleSheet.create({
   },
   snapshotValue: {
     marginTop: 6,
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 17,
     letterSpacing: -0.2,
   },
   card: {
@@ -307,84 +288,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
-  timelineWrap: {
-    marginTop: 10,
-    gap: 2,
-  },
-  timelineRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  timelineRail: {
-    width: 18,
-    alignItems: "center",
-  },
-  timelineLine: {
-    width: 2,
-    height: 30,
-    marginTop: 2,
-    borderRadius: 2,
-  },
-  timelineContent: {
-    flex: 1,
-    paddingBottom: 10,
-  },
-  milestoneTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  milestoneNote: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  scopeRow: {
-    marginTop: 9,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  scopeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginTop: 6,
-  },
-  scopeText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
-  },
   actionRow: {
     marginTop: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  ghostBtn: {
-    width: 108,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  ghostBtnText: {
-    fontSize: 13,
-    lineHeight: 17,
   },
   primaryBtn: {
-    flex: 1,
     borderRadius: 12,
-    paddingVertical: 12,
+    minHeight: 46,
     alignItems: "center",
     justifyContent: "center",
   },
   primaryBtnText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: -0.2,
   },
 });

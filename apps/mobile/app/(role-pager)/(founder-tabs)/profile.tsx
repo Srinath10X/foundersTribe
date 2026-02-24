@@ -6,6 +6,7 @@ import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View
 
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -107,6 +108,7 @@ function FieldRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap
 
 export default function FreelancerProfileScreen() {
   const { palette } = useFlowPalette();
+  const { themeMode, setThemeMode } = useTheme();
   const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
@@ -175,6 +177,11 @@ export default function FreelancerProfileScreen() {
 
   const works = profile?.previous_works || [];
   const links = (profile?.social_links || []).filter((x) => x?.url);
+  const themeOptions: { key: "system" | "light" | "dark"; label: string }[] = [
+    { key: "system", label: "System" },
+    { key: "light", label: "Light" },
+    { key: "dark", label: "Dark" },
+  ];
   const pitchUrls = Array.from(
     new Set(
       [
@@ -365,6 +372,35 @@ export default function FreelancerProfileScreen() {
                 ))}
               </View>
             )}
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.sectionCard}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Appearance
+            </T>
+            <View style={styles.themeSwitchRow}>
+              {themeOptions.map((option) => {
+                const selected = themeMode === option.key;
+                return (
+                  <TouchableOpacity
+                    key={option.key}
+                    activeOpacity={0.86}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: selected ? palette.accent : palette.borderLight,
+                        backgroundColor: selected ? palette.accentSoft : palette.surface,
+                      },
+                    ]}
+                    onPress={() => setThemeMode(option.key)}
+                  >
+                    <T weight={selected ? "medium" : "regular"} color={selected ? palette.accent : palette.subText} style={styles.themeOptionText}>
+                      {option.label}
+                    </T>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </SurfaceCard>
 
           <TouchableOpacity
@@ -588,6 +624,23 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 10,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  themeSwitchRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  themeOption: {
+    flex: 1,
+    height: 34,
+    borderWidth: 1,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  themeOptionText: {
     fontSize: 11,
     lineHeight: 14,
   },

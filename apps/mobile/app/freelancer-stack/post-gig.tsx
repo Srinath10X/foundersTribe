@@ -1,28 +1,33 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useState, useEffect } from "react";
-import { StyleSheet, Switch, TextInput, TouchableOpacity, View, ActivityIndicator, ScrollView, Alert } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
 
 import {
   FlowScreen,
-  FlowTopBar,
   PrimaryButton,
+  SurfaceCard,
   T,
-  useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { useGig, useCreateGig, useUpdateGig } from "@/hooks/useGig";
+import { useCreateGig, useGig, useUpdateGig } from "@/hooks/useGig";
 import type { GigCreateInput, GigUpdateInput } from "@/types/gig";
 
 const experienceOptions = ["junior", "mid", "senior"] as const;
 
 export default function PostGigScreen() {
   const { palette } = useFlowPalette();
-  const nav = useFlowNav();
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
-
   const isEditing = !!id;
 
   const { data: existingGig, isLoading: isFetching } = useGig(id);
@@ -41,7 +46,6 @@ export default function PostGigScreen() {
 
   const isSaving = createGigMutation.isPending || updateGigMutation.isPending;
 
-  // Pre-fill form when editing and gig data arrives
   useEffect(() => {
     if (isEditing && existingGig && !formInitialized) {
       setTitle(existingGig.title || "");
@@ -52,11 +56,11 @@ export default function PostGigScreen() {
       setIsRemote(existingGig.is_remote ?? true);
       setLocation(existingGig.location_text || "");
       if (existingGig.gig_tags && existingGig.gig_tags.length > 0) {
-        setTagsInput(existingGig.gig_tags.map(gt => gt.tags?.label).filter(Boolean).join(", "));
+        setTagsInput(existingGig.gig_tags.map((gt) => gt.tags?.label).filter(Boolean).join(", "));
       }
       setFormInitialized(true);
     }
-  }, [existingGig, isEditing, formInitialized]);
+  }, [existingGig, formInitialized, isEditing]);
 
   const budgetError = useMemo(() => {
     const min = Number(budgetMin);
@@ -65,18 +69,22 @@ export default function PostGigScreen() {
     if (min < 0 || max < 0) return "Budget values cannot be negative.";
     if (max < min) return "Maximum budget must be greater than or equal to minimum.";
     return "";
-  }, [budgetMin, budgetMax]);
+  }, [budgetMax, budgetMin]);
 
   const canPost = useMemo(() => {
     const min = Number(budgetMin);
     const max = Number(budgetMax);
     return title.trim().length > 0 && description.trim().length > 0 && min >= 0 && max >= min && !budgetError && !isSaving;
-  }, [title, description, budgetMin, budgetMax, budgetError, isSaving]);
+  }, [budgetError, budgetMax, budgetMin, description, isSaving, title]);
 
   const handleSave = async (isDraft = false) => {
     if (!canPost && !isDraft) return;
     try {
-      const tags = tagsInput.split(",").map(t => t.trim()).filter(Boolean);
+      const tags = tagsInput
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
       if (isEditing && id) {
         const payload: GigUpdateInput & { tags?: string[] } = {
           title: title.trim(),
@@ -106,7 +114,8 @@ export default function PostGigScreen() {
         };
         await createGigMutation.mutateAsync(payload);
       }
-      nav.replace("/freelancer-stack/my-gigs");
+
+      router.replace("/freelancer-stack/my-gigs");
     } catch (error: any) {
       console.error("Save gig error:", error);
       Alert.alert("Save Failed", error?.message || "Something went wrong while saving the gig.");
@@ -115,22 +124,38 @@ export default function PostGigScreen() {
 
   return (
     <FlowScreen scroll={false}>
-      <FlowTopBar
-        title={isEditing ? "Edit Gig" : "Post a Gig"}
-        left="arrow-back"
-        onLeftPress={() => nav.replace("/freelancer-stack")}
-      />
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
+        <TouchableOpacity
+          style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+          onPress={() => router.replace("/freelancer-stack")}
+        >
+          <Ionicons name="arrow-back" size={15} color={palette.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <T weight="medium" color={palette.text} style={styles.pageTitle}>
+            {isEditing ? "Edit Gig" : "Post a Gig"}
+          </T>
+          <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
+            Add requirements and publish your post
+          </T>
+        </View>
+      </View>
 
       {isFetching ? (
-        <LoadingState rows={4} />
+        <View style={styles.loadingWrap}>
+          <LoadingState rows={4} />
+        </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
-            {/* ─── Project Brief ─── */}
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
-              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>PROJECT BRIEF</T>
+            <SurfaceCard style={styles.card}>
+              <T weight="regular" color={palette.subText} style={styles.sectionLabel}>
+                Project Brief
+              </T>
 
-              <T weight="bold" color={palette.text} style={styles.fieldLabel}>Gig Title</T>
+              <T weight="medium" color={palette.text} style={styles.fieldLabel}>
+                Gig Title
+              </T>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
@@ -139,86 +164,101 @@ export default function PostGigScreen() {
                 style={[styles.input, { backgroundColor: palette.border, color: palette.text }]}
               />
 
-              <T weight="bold" color={palette.text} style={[styles.fieldLabel, { marginTop: SP._16 }]}>Description</T>
+              <T weight="medium" color={palette.text} style={[styles.fieldLabel, styles.mt12]}>
+                Description
+              </T>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
                 multiline
                 textAlignVertical="top"
-                placeholder="Describe your gig requirements..."
+                placeholder="Describe your gig requirements"
                 placeholderTextColor={palette.subText}
                 style={[styles.textArea, { backgroundColor: palette.border, color: palette.text }]}
               />
-            </View>
+            </SurfaceCard>
 
-            {/* ─── Budget ─── */}
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
-              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>BUDGET</T>
-              <View style={styles.budgetRow}>
-                <View style={styles.budgetCol}>
-                  <T weight="bold" color={palette.text} style={styles.fieldLabel}>Minimum</T>
-                  <View style={[styles.budgetInputWrap, { backgroundColor: palette.border }]}>
-                    <T weight="semiBold" color={palette.subText} style={styles.currency}>₹</T>
+            <SurfaceCard style={styles.card}>
+              <T weight="regular" color={palette.subText} style={styles.sectionLabel}>
+                Budget
+              </T>
+              <View style={styles.row}>
+                <View style={styles.col}>
+                  <T weight="medium" color={palette.text} style={styles.fieldLabel}>
+                    Minimum
+                  </T>
+                  <View style={[styles.amountWrap, { backgroundColor: palette.border }]}> 
+                    <T weight="regular" color={palette.subText} style={styles.currency}>₹</T>
                     <TextInput
                       value={budgetMin}
                       onChangeText={setBudgetMin}
                       keyboardType="numeric"
                       placeholder="0"
                       placeholderTextColor={palette.subText}
-                      style={[styles.budgetInput, { color: palette.text }]}
+                      style={[styles.amountInput, { color: palette.text }]}
                     />
                   </View>
                 </View>
-                <View style={styles.budgetCol}>
-                  <T weight="bold" color={palette.text} style={styles.fieldLabel}>Maximum</T>
-                  <View style={[styles.budgetInputWrap, { backgroundColor: palette.border }]}>
-                    <T weight="semiBold" color={palette.subText} style={styles.currency}>₹</T>
+
+                <View style={styles.col}>
+                  <T weight="medium" color={palette.text} style={styles.fieldLabel}>
+                    Maximum
+                  </T>
+                  <View style={[styles.amountWrap, { backgroundColor: palette.border }]}> 
+                    <T weight="regular" color={palette.subText} style={styles.currency}>₹</T>
                     <TextInput
                       value={budgetMax}
                       onChangeText={setBudgetMax}
                       keyboardType="numeric"
                       placeholder="0"
                       placeholderTextColor={palette.subText}
-                      style={[styles.budgetInput, { color: palette.text }]}
+                      style={[styles.amountInput, { color: palette.text }]}
                     />
                   </View>
                 </View>
               </View>
               {budgetError ? (
-                <T weight="medium" color={palette.accent} style={styles.errorText}>{budgetError}</T>
+                <T weight="regular" color={palette.accent} style={styles.errorText}>
+                  {budgetError}
+                </T>
               ) : null}
-            </View>
+            </SurfaceCard>
 
-            {/* ─── Requirements ─── */}
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
-              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>REQUIREMENTS</T>
-              <T weight="bold" color={palette.text} style={styles.fieldLabel}>Experience Level</T>
+            <SurfaceCard style={styles.card}>
+              <T weight="regular" color={palette.subText} style={styles.sectionLabel}>
+                Requirements
+              </T>
+
+              <T weight="medium" color={palette.text} style={styles.fieldLabel}>
+                Experience Level
+              </T>
               <View style={styles.chips}>
-                {experienceOptions.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[
-                      styles.chip,
-                      {
-                        borderColor: opt === experienceLevel ? palette.accent : palette.border,
-                        backgroundColor: opt === experienceLevel ? palette.accentSoft : 'transparent',
-                      },
-                    ]}
-                    onPress={() => setExperienceLevel(opt)}
-                    activeOpacity={0.8}
-                  >
-                    <T
-                      weight="semiBold"
-                      color={opt === experienceLevel ? palette.accent : palette.subText}
-                      style={styles.chipText}
+                {experienceOptions.map((opt) => {
+                  const active = opt === experienceLevel;
+                  return (
+                    <TouchableOpacity
+                      key={opt}
+                      onPress={() => setExperienceLevel(opt)}
+                      activeOpacity={0.8}
+                      style={[
+                        styles.chip,
+                        {
+                          borderColor: active ? palette.accent : palette.borderLight,
+                          backgroundColor: active ? palette.accentSoft : "transparent",
+                        },
+                      ]}
                     >
-                      {opt}
-                    </T>
-                  </TouchableOpacity>
-                ))}
+                      <T weight="regular" color={active ? palette.accent : palette.subText} style={styles.chipText}>
+                        {opt}
+                      </T>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
-              <T weight="bold" color={palette.text} style={[styles.fieldLabel, { marginTop: SP._20 }]}>Skills / Tags</T>
+              <T weight="medium" color={palette.text} style={[styles.fieldLabel, styles.mt12]}>
+                Skills / Tags
+              </T>
               <TextInput
                 value={tagsInput}
                 onChangeText={setTagsInput}
@@ -226,32 +266,49 @@ export default function PostGigScreen() {
                 placeholderTextColor={palette.subText}
                 style={[styles.input, { backgroundColor: palette.border, color: palette.text }]}
               />
-              <T weight="medium" color={palette.subText} style={styles.helper}>Comma separated</T>
-            </View>
+              <T weight="regular" color={palette.subText} style={styles.helper}>
+                Comma separated
+              </T>
+            </SurfaceCard>
 
-            {/* ─── Location ─── */}
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
-              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>LOCATION</T>
-              <View style={styles.rowBetween}>
-                <View>
-                  <T weight="bold" color={palette.text} style={styles.fieldLabel}>Remote Friendly</T>
-                  <T weight="medium" color={palette.subText} style={styles.helper}>Toggle if location-specific</T>
+            <SurfaceCard style={styles.card}>
+              <T weight="regular" color={palette.subText} style={styles.sectionLabel}>
+                Location
+              </T>
+
+              <View style={styles.switchRow}>
+                <View style={{ flex: 1, paddingRight: 10 }}>
+                  <T weight="medium" color={palette.text} style={styles.fieldLabel}>
+                    Remote Friendly
+                  </T>
+                  <T weight="regular" color={palette.subText} style={styles.helper}>
+                    Toggle off if location-specific
+                  </T>
                 </View>
-                <Switch value={isRemote} onValueChange={setIsRemote} thumbColor="#fff" trackColor={{ true: palette.accent, false: palette.border }} />
+                <Switch
+                  value={isRemote}
+                  onValueChange={setIsRemote}
+                  thumbColor="#fff"
+                  trackColor={{ true: palette.accent, false: palette.border }}
+                />
               </View>
 
-              <T weight="bold" color={palette.text} style={[styles.fieldLabel, { marginTop: SP._16 }]}>Location</T>
+              <T weight="medium" color={palette.text} style={[styles.fieldLabel, styles.mt12]}>
+                Location
+              </T>
               <TextInput
                 value={location}
                 onChangeText={setLocation}
                 editable={!isRemote}
                 placeholder={isRemote ? "Disabled for remote gigs" : "e.g. Bengaluru, KA"}
                 placeholderTextColor={palette.subText}
-                style={[styles.input, { backgroundColor: palette.border, color: palette.text, opacity: isRemote ? 0.5 : 1 }]}
+                style={[
+                  styles.input,
+                  { backgroundColor: palette.border, color: palette.text, opacity: isRemote ? 0.55 : 1 },
+                ]}
               />
-            </View>
+            </SurfaceCard>
 
-            {/* ─── Actions ─── */}
             <View style={styles.ctaWrap}>
               <PrimaryButton
                 label={isEditing ? "Update Gig" : "Post Gig"}
@@ -260,7 +317,7 @@ export default function PostGigScreen() {
                 disabled={!canPost}
                 loading={isSaving}
               />
-              <T weight="medium" color={palette.subText} style={styles.validation}>
+              <T weight="regular" color={palette.subText} style={styles.validationHint}>
                 Title and description are required.
               </T>
             </View>
@@ -272,120 +329,144 @@ export default function PostGigScreen() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    paddingTop: 54,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pageTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+  },
+  pageSubtitle: {
+    marginTop: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  loadingWrap: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
   scrollContent: {
-    paddingBottom: SP._32,
+    paddingBottom: 120,
   },
   content: {
-    paddingHorizontal: SCREEN_PADDING,
-    paddingTop: SP._16,
-    gap: SP._12,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    gap: 8,
   },
   card: {
-    padding: SP._16,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
+    padding: 12,
   },
   sectionLabel: {
-    fontSize: 10,
-    letterSpacing: 0.9,
+    fontSize: 11,
+    lineHeight: 14,
+    marginBottom: 10,
     textTransform: "uppercase",
-    marginBottom: SP._12,
+    letterSpacing: 0.7,
   },
   fieldLabel: {
-    fontSize: 14,
-    marginBottom: SP._8,
-  },
-  helper: {
     fontSize: 12,
-    marginTop: SP._2,
+    lineHeight: 16,
+    marginBottom: 6,
   },
   input: {
-    borderRadius: RADIUS.md,
-    height: 48,
-    paddingHorizontal: SP._16,
-    fontFamily: "Poppins_500Medium",
-    fontSize: 14,
+    height: 42,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    lineHeight: 16,
   },
   textArea: {
-    borderRadius: RADIUS.md,
-    minHeight: 110,
-    paddingHorizontal: SP._16,
-    paddingTop: SP._12,
-    fontFamily: "Poppins_500Medium",
-    fontSize: 14,
-    lineHeight: 22,
+    minHeight: 96,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    lineHeight: 17,
   },
-  budgetRow: {
+  mt12: {
+    marginTop: 12,
+  },
+  row: {
     flexDirection: "row",
-    gap: SP._12,
-    marginTop: SP._4,
+    gap: 8,
   },
-  budgetCol: {
+  col: {
     flex: 1,
   },
-  budgetInputWrap: {
-    height: 48,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SP._16,
+  amountWrap: {
+    height: 42,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
   },
   currency: {
-    fontSize: 16,
-    marginRight: SP._8,
+    fontSize: 14,
+    lineHeight: 18,
+    marginRight: 6,
   },
-  budgetInput: {
+  amountInput: {
     flex: 1,
-    fontFamily: "Poppins_500Medium",
-    fontSize: 15,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    lineHeight: 16,
     paddingVertical: 0,
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 11,
+    lineHeight: 14,
   },
   chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: SP._8,
+    gap: 8,
   },
   chip: {
-    borderWidth: 1.5,
-    borderRadius: RADIUS.pill,
-    paddingHorizontal: SP._16,
-    paddingVertical: SP._8,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 14,
     textTransform: "capitalize",
   },
-  rowBetween: {
+  helper: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   ctaWrap: {
-    marginTop: SP._8,
-    marginBottom: SP._24,
-    gap: SP._8,
-    position: "relative",
+    marginTop: 4,
+    gap: 6,
   },
-  errorText: {
-    fontSize: 12,
-    marginTop: SP._8,
-  },
-  validation: {
-    fontSize: 12,
+  validationHint: {
     textAlign: "center",
-    marginTop: SP._4,
-  },
-  centerContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingOverlay: {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    marginTop: -10,
-    marginLeft: -10,
-    zIndex: 10,
+    fontSize: 11,
+    lineHeight: 14,
   },
 });

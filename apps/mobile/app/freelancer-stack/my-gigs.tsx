@@ -1,24 +1,28 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState, useCallback, useMemo } from "react";
-import { StyleSheet, TouchableOpacity, View, FlatList, ActivityIndicator, Alert, RefreshControl } from "react-native";
+import React, { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 
 import {
   Badge,
   FlowScreen,
+  SurfaceCard,
   T,
   useFlowNav,
   useFlowPalette,
-  PrimaryButton,
 } from "@/components/community/freelancerFlow/shared";
-import { StatCard } from "@/components/freelancer/StatCard";
-import { SectionHeader } from "@/components/freelancer/SectionHeader";
 import { EmptyState } from "@/components/freelancer/EmptyState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
-import { useMyGigs, useDeleteGig } from "@/hooks/useGig";
+import { useDeleteGig, useMyGigs } from "@/hooks/useGig";
 import type { Gig } from "@/types/gig";
-
 
 export default function MyGigsScreen() {
   const { palette } = useFlowPalette();
@@ -27,10 +31,13 @@ export default function MyGigsScreen() {
 
   const { data: gigsData, isLoading: loading, refetch } = useMyGigs();
   const deleteGigMutation = useDeleteGig();
+
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const gigs = gigsData?.items ?? [];
+  const activeCount = gigs.filter((g) => g.status === "in_progress" || g.status === "open").length;
+  const completedCount = gigs.filter((g) => g.status === "completed").length;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -58,74 +65,77 @@ export default function MyGigsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   };
 
-  const activeCount = gigs.filter((g) => g.status === "in_progress" || g.status === "open").length;
-  const completedCount = gigs.filter((g) => g.status === "completed").length;
-
-  const renderHeader = () => (
-    <View style={styles.statsRow}>
-      <StatCard label="Active" value={activeCount} accentColor={palette.accent} />
-      <StatCard label="Completed" value={completedCount} accentColor={palette.success} />
-    </View>
-  );
-
   const getStatusTone = (status: string) => {
-    if (status === "open") return "progress" as const;
+    if (status === "open" || status === "in_progress") return "progress" as const;
     if (status === "completed") return "success" as const;
-    if (status === "in_progress") return "progress" as const;
     return "neutral" as const;
   };
+
+  const renderKpi = () => (
+    <View style={styles.kpiRow}>
+      <SurfaceCard style={styles.kpiCard}>
+        <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
+          Active
+        </T>
+        <T weight="medium" color={palette.text} style={styles.kpiValue}>
+          {activeCount}
+        </T>
+      </SurfaceCard>
+      <SurfaceCard style={styles.kpiCard}>
+        <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
+          Completed
+        </T>
+        <T weight="medium" color={palette.text} style={styles.kpiValue}>
+          {completedCount}
+        </T>
+      </SurfaceCard>
+    </View>
+  );
 
   const renderItem = ({ item: gig }: { item: Gig }) => {
     const isDeleting = deletingId === gig.id;
     const budgetDisplay = gig.budget_max ?? gig.budget ?? 0;
 
     return (
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={() => router.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
-      >
-        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight, opacity: isDeleting ? 0.5 : 1 }]}>
-          {/* Header: Title + Badge */}
-          <View style={styles.cardHead}>
-            <T weight="bold" color={palette.text} style={styles.cardTitle} numberOfLines={2}>
+      <TouchableOpacity activeOpacity={0.86} onPress={() => router.push(`/freelancer-stack/gig-details?id=${gig.id}`)}>
+        <SurfaceCard style={[styles.card, isDeleting ? { opacity: 0.55 } : null]}>
+          <View style={styles.cardHeader}>
+            <T weight="medium" color={palette.text} style={styles.cardTitle} numberOfLines={2}>
               {gig.title}
             </T>
-            <Badge label={gig.status.toUpperCase()} tone={getStatusTone(gig.status)} />
+            <Badge label={gig.status.replace("_", " ").toUpperCase()} tone={getStatusTone(gig.status)} />
           </View>
 
-          {/* Meta */}
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
-              <Ionicons name="wallet-outline" size={14} color={palette.subText} />
-              <T weight="medium" color={palette.subText} style={styles.metaText}>
+              <Ionicons name="wallet-outline" size={13} color={palette.subText} />
+              <T weight="regular" color={palette.subText} style={styles.metaText}>
                 ₹{budgetDisplay.toLocaleString()}
               </T>
             </View>
             <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={14} color={palette.subText} />
-              <T weight="medium" color={palette.subText} style={styles.metaText}>
+              <Ionicons name="time-outline" size={13} color={palette.subText} />
+              <T weight="regular" color={palette.subText} style={styles.metaText}>
                 {new Date(gig.created_at).toLocaleDateString()}
               </T>
             </View>
           </View>
 
-          {/* Divider */}
-          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+          <View style={[styles.divider, { backgroundColor: palette.borderLight }]} />
 
-          {/* Actions */}
-          <View style={styles.cardActions}>
-            <View style={styles.actionGroup}>
+          <View style={styles.actionsRow}>
+            <View style={styles.leftActions}>
               <TouchableOpacity
                 onPress={() => router.push(`/freelancer-stack/post-gig?id=${gig.id}`)}
                 style={styles.actionBtn}
-                activeOpacity={0.7}
+                activeOpacity={0.75}
               >
-                <Ionicons name="pencil" size={16} color={palette.accent} />
-                <T weight="semiBold" color={palette.accent} style={styles.actionLabel}>
+                <Ionicons name="pencil" size={14} color={palette.accent} />
+                <T weight="regular" color={palette.accent} style={styles.actionText}>
                   Edit
                 </T>
               </TouchableOpacity>
@@ -134,14 +144,14 @@ export default function MyGigsScreen() {
                 onPress={() => handleDelete(gig.id, gig.title)}
                 style={styles.actionBtn}
                 disabled={isDeleting}
-                activeOpacity={0.7}
+                activeOpacity={0.75}
               >
                 {isDeleting ? (
                   <ActivityIndicator size="small" color="#FF3B30" />
                 ) : (
-                  <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                  <Ionicons name="trash-outline" size={14} color="#FF3B30" />
                 )}
-                <T weight="semiBold" color="#FF3B30" style={styles.actionLabel}>
+                <T weight="regular" color="#FF3B30" style={styles.actionText}>
                   Delete
                 </T>
               </TouchableOpacity>
@@ -149,50 +159,42 @@ export default function MyGigsScreen() {
 
             <TouchableOpacity
               onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
+              style={[styles.proposalsBtn, { backgroundColor: palette.accentSoft }]}
               activeOpacity={0.8}
-              style={styles.proposalsBtn}
             >
-              <T weight="bold" color={palette.accent} style={styles.proposalsText}>
+              <T weight="medium" color={palette.accent} style={styles.proposalsText}>
                 Proposals
               </T>
-              <Ionicons name="chevron-forward" size={14} color={palette.accent} />
+              <Ionicons name="chevron-forward" size={13} color={palette.accent} />
             </TouchableOpacity>
           </View>
-        </View>
+        </SurfaceCard>
       </TouchableOpacity>
     );
   };
 
   return (
     <FlowScreen scroll={false}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: palette.borderLight }]}>
-        <View style={styles.headerContent}>
-          <T weight="bold" color={palette.text} style={styles.headerTitle}>
-            My Gigs
-          </T>
-        </View>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
+        <T weight="medium" color={palette.text} style={styles.pageTitle}>
+          My Gigs
+        </T>
+        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
+          Track status and review proposals
+        </T>
       </View>
 
       {loading && !refreshing ? (
         <View style={styles.loadingWrap}>
-          <View style={styles.statsRow}>
-            {[1, 2].map((i) => (
-              <View
-                key={i}
-                style={[styles.statSkeleton, { backgroundColor: palette.card, borderColor: palette.borderLight }]}
-              />
-            ))}
-          </View>
-          <LoadingState rows={3} style={{ marginTop: SP._16 }} />
+          <LoadingState rows={4} />
         </View>
       ) : (
         <FlatList
           data={gigs}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
-          ListHeaderComponent={renderHeader}
-          contentContainerStyle={styles.content}
+          ListHeaderComponent={renderKpi}
+          contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
           ListEmptyComponent={
@@ -212,121 +214,112 @@ export default function MyGigsScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 56,
-    paddingHorizontal: SCREEN_PADDING,
-    paddingBottom: SP._20,
+    paddingTop: 54,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
     borderBottomWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
-  headerContent: {
-    flex: 1,
+  pageTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
   },
-  headerLabel: {
-    fontSize: 13,
-    marginTop: 4,
-    opacity: 0.7,
-  },
-  headerTitle: {
-    fontSize: 26,
-    lineHeight: 30,
-    letterSpacing: -0.4,
-  },
-  addBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: RADIUS.xl,
-    justifyContent: "center",
-    alignItems: "center",
-    ...SHADOWS.card,
-  },
-  content: {
-    paddingHorizontal: SCREEN_PADDING,
-    paddingTop: SP._16,
-    paddingBottom: SP._32,
-    gap: SP._12,
+  pageSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
   },
   loadingWrap: {
-    paddingHorizontal: SCREEN_PADDING,
-    paddingTop: SP._16,
+    paddingHorizontal: 18,
+    paddingTop: 14,
   },
-  statsRow: {
+  listContent: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 120,
+    gap: 8,
+  },
+  kpiRow: {
     flexDirection: "row",
-    gap: SP._16,
-    marginBottom: SP._24,
-    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
   },
-  statSkeleton: {
+  kpiCard: {
     flex: 1,
-    minWidth: "45%",
-    minHeight: 110,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
+    padding: 11,
+  },
+  kpiLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  kpiValue: {
+    marginTop: 4,
+    fontSize: 18,
+    lineHeight: 23,
   },
   card: {
-    padding: SP._16,
-    paddingBottom: SP._20,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    ...SHADOWS.card,
+    padding: 12,
   },
-  cardHead: {
+  cardHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: SP._8,
+    justifyContent: "space-between",
+    gap: 8,
   },
   cardTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    letterSpacing: -0.2,
     flex: 1,
-    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: -0.2,
   },
   metaRow: {
     flexDirection: "row",
-    gap: SP._16,
-    marginTop: SP._12,
+    gap: 12,
+    marginTop: 8,
   },
   metaItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SP._8,
+    gap: 6,
   },
   metaText: {
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 14,
   },
   divider: {
     height: 1,
-    marginVertical: SP._16,
+    marginVertical: 10,
   },
-  cardActions: {
+  actionsRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
   },
-  actionGroup: {
+  leftActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SP._20,
+    gap: 16,
   },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SP._4,
+    gap: 4,
   },
-  actionLabel: {
-    fontSize: 13,
+  actionText: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   proposalsBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: SP._2,
-    paddingVertical: SP._4,
-    paddingHorizontal: SP._8,
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
   },
   proposalsText: {
-    fontSize: 13,
+    fontSize: 11,
+    lineHeight: 14,
   },
 });

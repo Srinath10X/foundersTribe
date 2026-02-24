@@ -1,21 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import {
   Avatar,
   FlowScreen,
-  FlowTopBar,
   PrimaryButton,
   SurfaceCard,
   T,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-import { LoadingState } from "@/components/freelancer/LoadingState";
 import { ErrorState } from "@/components/freelancer/ErrorState";
-import { useContract, useCompleteContract, useApproveContract } from "@/hooks/useGig";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { useApproveContract, useCompleteContract, useContract } from "@/hooks/useGig";
 
 export default function ContractDetailsScreen() {
   const { palette } = useFlowPalette();
@@ -27,21 +26,47 @@ export default function ContractDetailsScreen() {
   const approveMutation = useApproveContract();
 
   const formatAmount = (amount: string | number | undefined) => {
-    if (!amount) return "—";
+    if (!amount) return "-";
     const num = typeof amount === "string" ? parseFloat(amount) : amount;
     return `₹${num.toLocaleString()}`;
   };
 
   const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return "—";
-    return new Date(dateStr).toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const handleComplete = async () => {
+    if (!contract) return;
+    try {
+      await completeMutation.mutateAsync(contract.id);
+    } catch (err) {
+      console.error("Failed to mark contract complete:", err);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!contract) return;
+    try {
+      await approveMutation.mutateAsync(contract.id);
+    } catch (err) {
+      console.error("Failed to approve contract:", err);
+    }
   };
 
   if (isLoading) {
     return (
       <FlowScreen>
-        <FlowTopBar title="Contract Details" onLeftPress={nav.back} />
-        <View style={{ paddingHorizontal: 18, paddingTop: 16 }}>
+        <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
+          <TouchableOpacity style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]} onPress={nav.back}>
+            <Ionicons name="arrow-back" size={15} color={palette.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <T weight="medium" color={palette.text} style={styles.pageTitle}>Contract Details</T>
+            <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Track progress and actions</T>
+          </View>
+        </View>
+        <View style={styles.loadingWrap}>
           <LoadingState rows={3} />
         </View>
       </FlowScreen>
@@ -51,13 +76,17 @@ export default function ContractDetailsScreen() {
   if (error || !contract) {
     return (
       <FlowScreen>
-        <FlowTopBar title="Contract Details" onLeftPress={nav.back} />
-        <View style={{ paddingHorizontal: 18, paddingTop: 16 }}>
-          <ErrorState
-            title="Failed to load contract"
-            message={error?.message || "Contract not found"}
-            onRetry={() => refetch()}
-          />
+        <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
+          <TouchableOpacity style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]} onPress={nav.back}>
+            <Ionicons name="arrow-back" size={15} color={palette.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <T weight="medium" color={palette.text} style={styles.pageTitle}>Contract Details</T>
+            <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Track progress and actions</T>
+          </View>
+        </View>
+        <View style={styles.loadingWrap}>
+          <ErrorState title="Failed to load contract" message={error?.message || "Contract not found"} onRetry={() => refetch()} />
         </View>
       </FlowScreen>
     );
@@ -68,171 +97,262 @@ export default function ContractDetailsScreen() {
   const freelancerName = freelancer?.full_name || freelancer?.handle || "Freelancer";
   const freelancerAvatar = freelancer?.avatar_url;
 
-  // Derive contract value from gig budget
   const contractValue = gig?.budget_max
     ? formatAmount(gig.budget_max)
     : gig?.budget_min
       ? formatAmount(gig.budget_min)
-      : "—";
+      : "-";
 
   const statusColor =
-    contract.status === "active" ? "#34C759" :
-    contract.status === "completed" ? "#007AFF" :
-    contract.status === "cancelled" ? "#FF3B30" :
-    palette.subText;
-
+    contract.status === "active"
+      ? "#34C759"
+      : contract.status === "completed"
+        ? "#007AFF"
+        : contract.status === "cancelled"
+          ? "#FF3B30"
+          : palette.subText;
   const statusLabel = contract.status.charAt(0).toUpperCase() + contract.status.slice(1);
 
-  const handleComplete = async () => {
-    try {
-      await completeMutation.mutateAsync(contract.id);
-    } catch (err) {
-      console.error("Failed to mark contract complete:", err);
-    }
-  };
-
-  const handleApprove = async () => {
-    try {
-      await approveMutation.mutateAsync(contract.id);
-    } catch (err) {
-      console.error("Failed to approve contract:", err);
-    }
-  };
-
   return (
-    <FlowScreen>
-      <FlowTopBar title="Contract Details" onLeftPress={nav.back} right="document-text-outline" onRightPress={() => {}} />
+    <FlowScreen scroll={false}>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
+        <TouchableOpacity style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]} onPress={nav.back}>
+          <Ionicons name="arrow-back" size={15} color={palette.text} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <T weight="medium" color={palette.text} style={styles.pageTitle}>Contract Details</T>
+          <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Track progress and actions</T>
+        </View>
+      </View>
 
-      {/* Freelancer Card */}
-      <SurfaceCard style={styles.freelancerCard}>
-        <View style={styles.freelancerRow}>
-          <Avatar source={freelancerAvatar ? { uri: freelancerAvatar } : undefined} size={54} />
-          <View style={{ flex: 1 }}>
-            <T weight="bold" color={palette.text} style={styles.name}>{freelancerName}</T>
-            <T weight="medium" color={palette.subText} style={styles.role}>
-              {freelancer?.bio ? freelancer.bio.substring(0, 40) : "Freelancer"}
-            </T>
-            <View style={styles.stars}>
-              <View style={[styles.statusChip, { backgroundColor: statusColor + "1A" }]}>
-                <T weight="semiBold" color={statusColor} style={styles.statusText}>
-                  {statusLabel.toUpperCase()}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.content}>
+          <SurfaceCard style={styles.card}>
+            <View style={styles.profileRow}>
+              <Avatar source={freelancerAvatar ? { uri: freelancerAvatar } : undefined} size={44} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
+                  {freelancerName}
                 </T>
+                <T weight="regular" color={palette.subText} style={styles.role} numberOfLines={1}>
+                  {freelancer?.bio || "Freelancer"}
+                </T>
+                <View style={[styles.statusPill, { backgroundColor: `${statusColor}1A` }]}> 
+                  <T weight="regular" color={statusColor} style={styles.statusText}>
+                    {statusLabel.toUpperCase()}
+                  </T>
+                </View>
               </View>
+              <TouchableOpacity onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${contract.freelancer_id}`)}>
+                <T weight="regular" color={palette.accent} style={styles.linkText}>View</T>
+              </TouchableOpacity>
             </View>
+          </SurfaceCard>
+
+          <View style={styles.kpiRow}>
+            <SurfaceCard style={styles.kpiCard}>
+              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>Contract Value</T>
+              <T weight="medium" color={palette.text} style={styles.kpiValue}>{contractValue}</T>
+            </SurfaceCard>
+            <SurfaceCard style={styles.kpiCard}>
+              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>Started</T>
+              <T weight="medium" color={palette.text} style={styles.kpiValue}>{formatDate(contract.started_at)}</T>
+            </SurfaceCard>
           </View>
-          <TouchableOpacity onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${contract.freelancer_id}`)}>
-            <T weight="semiBold" color={palette.accent} style={styles.view}>View</T>
-          </TouchableOpacity>
+
+          <SurfaceCard style={styles.card}>
+            <T weight="medium" color={palette.text} style={styles.blockTitle}>Project Overview</T>
+            <T weight="regular" color={palette.subText} style={styles.blockBody}>
+              {gig?.description || "No description available."}
+            </T>
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.card}>
+            <T weight="medium" color={palette.text} style={styles.blockTitle}>Deliverables Status</T>
+
+            <View style={styles.progressRow}>
+              <Ionicons name="checkmark-circle" size={15} color="#1D9A5B" />
+              <T weight="regular" color={palette.subText} style={styles.progressText}>Contract created</T>
+            </View>
+
+            <View style={styles.progressRow}>
+              <Ionicons
+                name={contract.freelancer_marked_complete ? "checkmark-circle" : "ellipse-outline"}
+                size={15}
+                color={contract.freelancer_marked_complete ? "#1D9A5B" : palette.subText}
+              />
+              <T weight="regular" color={palette.subText} style={styles.progressText}>Freelancer marked complete</T>
+            </View>
+
+            <View style={styles.progressRow}>
+              <Ionicons
+                name={contract.founder_approved ? "checkmark-circle" : "ellipse-outline"}
+                size={15}
+                color={contract.founder_approved ? "#1D9A5B" : palette.subText}
+              />
+              <T weight="regular" color={palette.subText} style={styles.progressText}>Founder approved</T>
+            </View>
+          </SurfaceCard>
+
+          <View style={styles.ctaWrap}>
+            <PrimaryButton
+              label="Open Chat"
+              icon="chatbubble-ellipses-outline"
+              onPress={() =>
+                nav.push(
+                  `/freelancer-stack/contract-chat-thread?contractId=${contract.id}&title=${encodeURIComponent(
+                    `${freelancerName} • Contract Chat`,
+                  )}`,
+                )
+              }
+            />
+
+            {contract.status === "active" && !contract.freelancer_marked_complete ? (
+              <PrimaryButton
+                label="Mark as Complete"
+                icon="checkmark-done-outline"
+                onPress={handleComplete}
+                loading={completeMutation.isPending}
+                style={{ marginTop: 8 }}
+              />
+            ) : null}
+
+            {contract.status === "active" && contract.freelancer_marked_complete && !contract.founder_approved ? (
+              <PrimaryButton
+                label="Approve & Complete"
+                icon="shield-checkmark-outline"
+                onPress={handleApprove}
+                loading={approveMutation.isPending}
+                style={{ marginTop: 8 }}
+              />
+            ) : null}
+
+            {contract.status === "completed" ? (
+              <PrimaryButton
+                label="Leave a Review"
+                icon="star-outline"
+                onPress={() =>
+                  nav.push(`/freelancer-stack/leave-review?contractId=${contract.id}&revieweeId=${contract.freelancer_id}`)
+                }
+                style={{ marginTop: 8 }}
+              />
+            ) : null}
+          </View>
         </View>
-      </SurfaceCard>
-
-      {/* KPIs */}
-      <View style={styles.grid}>
-        <SurfaceCard style={styles.kpi}>
-          <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>CONTRACT VALUE</T>
-          <T weight="bold" color={palette.text} style={styles.kpiValue}>{contractValue}</T>
-        </SurfaceCard>
-        <SurfaceCard style={styles.kpi}>
-          <T weight="semiBold" color={palette.subText} style={styles.kpiLabel}>STARTED</T>
-          <T weight="bold" color={palette.text} style={styles.kpiValue}>{formatDate(contract.started_at)}</T>
-        </SurfaceCard>
-      </View>
-
-      {/* Project Summary */}
-      <SurfaceCard style={styles.block}>
-        <T weight="bold" color={palette.text} style={styles.blockTitle}>Project Summary</T>
-        <T color={palette.subText} style={styles.blockBody}>
-          {gig?.description || "No description available."}
-        </T>
-      </SurfaceCard>
-
-      {/* Contract Progress */}
-      <SurfaceCard style={styles.block}>
-        <T weight="bold" color={palette.text} style={styles.blockTitle}>Progress</T>
-        <View style={styles.milestoneRow}>
-          <Ionicons name="checkmark-circle" size={16} color="#1D9A5B" />
-          <T weight="medium" color={palette.subText} style={styles.milestoneText}>Contract created</T>
-        </View>
-        <View style={styles.milestoneRow}>
-          <Ionicons
-            name={contract.freelancer_marked_complete ? "checkmark-circle" : "ellipse-outline"}
-            size={16}
-            color={contract.freelancer_marked_complete ? "#1D9A5B" : palette.subText}
-          />
-          <T weight="medium" color={palette.subText} style={styles.milestoneText}>
-            Freelancer marked complete
-          </T>
-        </View>
-        <View style={styles.milestoneRow}>
-          <Ionicons
-            name={contract.founder_approved ? "checkmark-circle" : "ellipse-outline"}
-            size={16}
-            color={contract.founder_approved ? "#1D9A5B" : palette.subText}
-          />
-          <T weight="medium" color={palette.subText} style={styles.milestoneText}>
-            Founder approved
-          </T>
-        </View>
-      </SurfaceCard>
-
-      {/* Actions */}
-      <View style={styles.ctaWrap}>
-        <PrimaryButton
-          label="Open Chat"
-          icon="chatbubble-ellipses-outline"
-          onPress={() => nav.push(`/freelancer-stack/contract-chat-thread?contractId=${contract.id}&title=${encodeURIComponent(freelancerName + " • Contract Chat")}`)}
-        />
-
-        {contract.status === "active" && !contract.freelancer_marked_complete && (
-          <PrimaryButton
-            label="Mark as Complete"
-            icon="checkmark-done-outline"
-            onPress={handleComplete}
-            loading={completeMutation.isPending}
-            style={{ marginTop: 10 }}
-          />
-        )}
-
-        {contract.status === "active" && contract.freelancer_marked_complete && !contract.founder_approved && (
-          <PrimaryButton
-            label="Approve & Complete"
-            icon="shield-checkmark-outline"
-            onPress={handleApprove}
-            loading={approveMutation.isPending}
-            style={{ marginTop: 10 }}
-          />
-        )}
-
-        {contract.status === "completed" && (
-          <PrimaryButton
-            label="Leave a Review"
-            icon="star-outline"
-            onPress={() => nav.push(`/freelancer-stack/leave-review?contractId=${contract.id}&revieweeId=${contract.freelancer_id}`)}
-            style={{ marginTop: 10 }}
-          />
-        )}
-      </View>
+      </ScrollView>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  freelancerCard: { marginHorizontal: 18, marginTop: 12, padding: 12 },
-  freelancerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  name: { fontSize: 18 },
-  role: { fontSize: 13, marginTop: 2 },
-  stars: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 },
-  statusChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 10, letterSpacing: 0.5 },
-  view: { fontSize: 13 },
-  grid: { flexDirection: "row", gap: 8, marginHorizontal: 18, marginTop: 10 },
-  kpi: { flex: 1, padding: 12 },
-  kpiLabel: { fontSize: 10, letterSpacing: 0.7 },
-  kpiValue: { fontSize: 20, marginTop: 4 },
-  block: { marginHorizontal: 18, marginTop: 10, padding: 12 },
-  blockTitle: { fontSize: 16 },
-  blockBody: { fontSize: 13, marginTop: 6, lineHeight: 18 },
-  milestoneRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
-  milestoneText: { fontSize: 13 },
-  ctaWrap: { marginHorizontal: 18, marginTop: 16 },
+  header: {
+    paddingTop: 54,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pageTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+  },
+  pageSubtitle: {
+    marginTop: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  loadingWrap: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
+  scrollContent: {
+    paddingBottom: 60,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    gap: 8,
+  },
+  card: {
+    padding: 12,
+  },
+  profileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  name: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  role: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  statusPill: {
+    marginTop: 4,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: "flex-start",
+  },
+  statusText: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  linkText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  kpiRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  kpiCard: {
+    flex: 1,
+    padding: 10,
+  },
+  kpiLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  kpiValue: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  blockTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  blockBody: {
+    marginTop: 6,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  progressRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  progressText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  ctaWrap: {
+    marginTop: 4,
+  },
 });

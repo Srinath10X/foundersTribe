@@ -39,19 +39,20 @@ export class GigRepository {
             .eq("status", "active");
         if (activeErr)
             throw activeErr;
-        // Sum earnings from completed contracts this month
+        // Sum earnings from completed contracts this month.
+        // contracts table does not have agreed_amount; derive amount from linked proposals.
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
-        const { data: earningsData, error: earningsErr } = await this.db
+        const { data: completedContracts, error: completedErr } = await this.db
             .from("contracts")
             .select("proposals(proposed_amount)")
             .eq("freelancer_id", userId)
             .eq("status", "completed")
             .gte("updated_at", startOfMonth.toISOString());
-        if (earningsErr)
-            throw earningsErr;
-        const earningsMtd = (earningsData || []).reduce((sum, c) => sum + (Number(c.proposals?.proposed_amount) || 0), 0);
+        if (completedErr)
+            throw completedErr;
+        const earningsMtd = (completedContracts || []).reduce((sum, c) => sum + (Number(c.proposals?.proposed_amount) || 0), 0);
         return {
             earnings_mtd: earningsMtd,
             active_projects: activeProjects || 0,

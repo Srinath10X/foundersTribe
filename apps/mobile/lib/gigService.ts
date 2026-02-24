@@ -163,7 +163,7 @@ async function fetchWithAuth<T>(
 // URL PARAMS HELPER
 // ============================================================
 
-function buildQueryString(params?: Record<string, unknown>): string {
+function buildQueryString(params?: object): string {
   if (!params) return "";
   
   const searchParams = new URLSearchParams();
@@ -348,11 +348,15 @@ export const gigService = {
    * Returns { contract_id: string }
    */
   acceptProposal: async (proposalId: string): Promise<{ contract_id: string }> => {
-    const response = await fetchWithAuth<{ data: { contract_id: string } }>(
+    const response = await fetchWithAuth<{ data?: { contract_id?: string }; contract_id?: string }>(
       `/api/proposals/${proposalId}/accept`,
       { method: "POST" }
     );
-    return response.data!;
+    const contractId = response?.data?.contract_id || response?.contract_id;
+    if (!contractId) {
+      throw new GigServiceError("Accept succeeded but contract id is missing", 500, "INVALID_RESPONSE");
+    }
+    return { contract_id: contractId };
   },
 
   /**
@@ -542,3 +546,6 @@ export const gigService = {
 // ============================================================
 
 export default gigService;
+
+// Re-export common domain types for legacy imports that still reference this module.
+export type { Gig, ContractMessage };
