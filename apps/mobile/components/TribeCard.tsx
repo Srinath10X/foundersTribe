@@ -2,7 +2,6 @@ import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { Spacing } from "../constants/DesignSystem";
 import { useTheme } from "../context/ThemeContext";
 import { supabase } from "../lib/supabase";
 
@@ -27,8 +26,7 @@ export default function TribeCard({
   onJoin,
 }: TribeCardProps) {
   const { theme } = useTheme();
-  const members = tribe.member_count ?? 0;
-  const summary = tribe.description?.trim() || `${members} members`;
+  const summary = tribe.description?.trim() || "No description yet";
   const [avatarSrc, setAvatarSrc] = React.useState<string>("");
 
   React.useEffect(() => {
@@ -57,7 +55,11 @@ export default function TribeCard({
   }, [tribe.avatar_url]);
 
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: theme.borderLight }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
       <View style={styles.left}>
         <View style={[styles.avatarWrap, { borderColor: theme.borderLight }]}>
           <Image
@@ -69,28 +71,20 @@ export default function TribeCard({
         </View>
 
         <View style={styles.meta}>
-          <Text style={[styles.title, { color: theme.text.primary }]} numberOfLines={1}>
-            {tribe.name}
-          </Text>
-          <View style={styles.metaLine}>
-            <Text style={[styles.members, { color: theme.text.tertiary }]}>
-              {members} members
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: theme.text.primary }]} numberOfLines={1}>
+              {tribe.name}
             </Text>
           </View>
-          {!!tribe.description && (
-            <Text style={[styles.desc, { color: theme.text.tertiary }]} numberOfLines={1}>
-              {summary}
-            </Text>
-          )}
+          <Text style={[styles.desc, { color: theme.text.tertiary }]} numberOfLines={1}>
+            {summary}
+          </Text>
         </View>
       </View>
 
       {variant === "explore" && onJoin ? (
         <TouchableOpacity
-          style={[
-            styles.joinBtn,
-            { backgroundColor: theme.brand.primary, shadowColor: theme.brand.primary },
-          ]}
+          style={[styles.joinBtn, { backgroundColor: theme.brand.primary }]}
           onPress={(e: any) => {
             e.stopPropagation?.();
             onJoin();
@@ -111,22 +105,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: Spacing.lg,
+    borderBottomWidth: 1,
+    paddingHorizontal: 2,
+    paddingVertical: 10,
   },
   left: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
     minWidth: 0,
-    marginRight: Spacing.sm,
+    marginRight: 10,
   },
   avatarWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
     overflow: "hidden",
-    marginRight: Spacing.sm,
+    marginRight: 10,
   },
   avatar: {
     width: "100%",
@@ -136,45 +132,35 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  title: {
-    fontSize: 14,
-    lineHeight: 19,
-    letterSpacing: -0.1,
-    fontFamily: "Poppins_500Medium",
-  },
-  metaLine: {
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 2,
-    gap: 6,
+    gap: 8,
   },
-  members: {
-    fontSize: 11,
-    lineHeight: 15,
-    letterSpacing: 0.1,
-    fontFamily: "Poppins_400Regular",
+  title: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: -0.2,
+    fontFamily: "Poppins_500Medium",
   },
   desc: {
     fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 14,
     letterSpacing: 0.1,
     fontFamily: "Poppins_400Regular",
-    marginTop: 2,
+    marginTop: 3,
   },
   joinBtn: {
     borderRadius: 999,
-    paddingHorizontal: 22,
-    paddingVertical: 9,
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   joinText: {
     color: "#fff",
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     letterSpacing: -0.1,
-    fontFamily: "Poppins_600SemiBold",
+    fontFamily: "Poppins_500Medium",
   },
 });
