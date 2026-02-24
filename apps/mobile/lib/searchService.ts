@@ -18,6 +18,9 @@ export interface SearchAccount {
   username: string;
   avatar_url: string | null;
   bio: string | null;
+  skills?: string[];
+  rating?: number;
+  hourly_rate?: number;
 }
 
 export interface SearchCommunity {
@@ -42,6 +45,9 @@ const MOCK_ACCOUNTS: SearchAccount[] = [
     username: "sarahchen",
     avatar_url: null,
     bio: "Building the future of fintech",
+    skills: ["React", "Node.js", "TypeScript"],
+    rating: 4.9,
+    hourly_rate: 75,
   },
   {
     id: "2",
@@ -49,6 +55,9 @@ const MOCK_ACCOUNTS: SearchAccount[] = [
     username: "arivera",
     avatar_url: null,
     bio: "Serial entrepreneur & investor",
+    skills: ["Product Management", "Strategy", "SaaS"],
+    rating: 4.8,
+    hourly_rate: 120,
   },
   {
     id: "3",
@@ -56,6 +65,9 @@ const MOCK_ACCOUNTS: SearchAccount[] = [
     username: "priyasharma",
     avatar_url: null,
     bio: "AI/ML engineer turned founder",
+    skills: ["Python", "Machine Learning", "TensorFlow"],
+    rating: 5.0,
+    hourly_rate: 95,
   },
   {
     id: "4",
@@ -63,6 +75,49 @@ const MOCK_ACCOUNTS: SearchAccount[] = [
     username: "jameswu",
     avatar_url: null,
     bio: "YC alum, scaling B2B SaaS",
+    skills: ["Sales", "Growth", "B2B"],
+    rating: 4.7,
+    hourly_rate: 150,
+  },
+  {
+    id: "5",
+    display_name: "Michael Torres",
+    username: "michaeltorres",
+    avatar_url: null,
+    bio: "Full-stack developer with 5+ years experience",
+    skills: ["Frontend Developer", "React", "Vue.js", "CSS"],
+    rating: 4.8,
+    hourly_rate: 60,
+  },
+  {
+    id: "6",
+    display_name: "Emma Wilson",
+    username: "emmawilson",
+    avatar_url: null,
+    bio: "UI/UX Designer passionate about clean interfaces",
+    skills: ["UI Design", "Figma", "User Research", "Frontend Developer"],
+    rating: 4.9,
+    hourly_rate: 55,
+  },
+  {
+    id: "7",
+    display_name: "David Kim",
+    username: "davidkim",
+    avatar_url: null,
+    bio: "Mobile app developer specializing in React Native",
+    skills: ["React Native", "Mobile Development", "iOS", "Android"],
+    rating: 4.7,
+    hourly_rate: 70,
+  },
+  {
+    id: "8",
+    display_name: "Lisa Johnson",
+    username: "lisajohnson",
+    avatar_url: null,
+    bio: "Backend engineer with expertise in scalable systems",
+    skills: ["Backend", "PostgreSQL", "AWS", "Docker"],
+    rating: 4.8,
+    hourly_rate: 80,
   },
 ];
 
@@ -115,13 +170,13 @@ async function searchArticles(query: string): Promise<SearchArticle[]> {
 }
 
 function searchAccounts(query: string): SearchAccount[] {
-  // TODO: Replace with supabase query when profiles table is ready
   const q = query.toLowerCase();
   return MOCK_ACCOUNTS.filter(
     (a) =>
       a.display_name.toLowerCase().includes(q) ||
       a.username.toLowerCase().includes(q) ||
-      (a.bio && a.bio.toLowerCase().includes(q))
+      (a.bio && a.bio.toLowerCase().includes(q)) ||
+      (a.skills && a.skills.some((skill) => skill.toLowerCase().includes(q)))
   );
 }
 

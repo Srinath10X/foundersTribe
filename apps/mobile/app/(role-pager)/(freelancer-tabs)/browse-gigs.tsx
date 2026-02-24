@@ -1,71 +1,96 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState, useEffect, useCallback, memo } from "react";
-import { StyleSheet, TextInput, TouchableOpacity, View, FlatList, ActivityIndicator, RefreshControl } from "react-native";
+import { StyleSheet, TouchableOpacity, View, FlatList, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
 
-import { Badge, FlowScreen, FlowTopBar, SurfaceCard, T, useFlowNav, useFlowPalette, PrimaryButton } from "@/components/community/freelancerFlow/shared";
+import {
+  FlowScreen,
+  FlowTopBar,
+  T,
+  useFlowNav,
+  useFlowPalette,
+} from "@/components/community/freelancerFlow/shared";
+import { SearchBar } from "@/components/freelancer/SearchBar";
+import { GigCard } from "@/components/freelancer/GigCard";
+import { EmptyState } from "@/components/freelancer/EmptyState";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { SP, RADIUS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
 import { gigService, Gig, GigFilters } from "@/lib/gigService";
+
+// ─── Temporary Dummy Data ──────────────────────────────────────
+const DUMMY_BROWSE_GIGS: Gig[] = [
+  {
+    id: "bg-1",
+    title: "Full-Stack Web App for Logistics Platform",
+    description: "Next.js + Node.js logistics tracking platform.",
+    budget: 120000,
+    status: "open",
+    deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "SwiftRoute Logistics",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "bg-2",
+    title: "Mobile App UI Design — Health & Wellness",
+    description: "Figma designs for a meditation and wellness app.",
+    budget: 35000,
+    status: "open",
+    deadline: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "MindSync Wellness",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "bg-3",
+    title: "DevOps & CI/CD Pipeline Setup",
+    description: "Docker, GitHub Actions, AWS ECS deployment pipeline.",
+    budget: 55000,
+    status: "in_progress",
+    client_company: "CloudNine Tech",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "bg-4",
+    title: "Data Visualization Dashboard — D3.js",
+    description: "Interactive charts and graphs for financial data.",
+    budget: 40000,
+    status: "open",
+    deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "FinSight Analytics",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "bg-5",
+    title: "E-Commerce Store — Shopify Custom Theme",
+    description: "Custom Shopify theme with Liquid templating.",
+    budget: 28000,
+    status: "completed",
+    client_company: "CraftBrew Co.",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "bg-6",
+    title: "AI Chatbot Integration — OpenAI + WhatsApp",
+    description: "Customer support chatbot with natural language processing.",
+    budget: 75000,
+    status: "open",
+    deadline: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
+    client_company: "TalkBot AI",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
 
 const STATUS_FILTERS = [
   { label: "All", value: "" },
   { label: "Open", value: "open" },
   { label: "Active", value: "in_progress" },
-  { label: "Completed", value: "completed" }
+  { label: "Completed", value: "completed" },
 ] as const;
-
-// Memoize the Gig item to avoid unnecessary re-renders in FlatList
-const GigItem = memo(({ gig, palette, nav, router }: { gig: Gig, palette: any, nav: any, router: any }) => {
-  const isUrgent = gig.status === "open" && gig.deadline && (new Date(gig.deadline).getTime() - Date.now()) < 3 * 24 * 60 * 60 * 1000;
-
-  // Format the deadline to relative time
-  const formatTime = (dateStr?: string) => {
-    if (!dateStr) return "Unknown";
-    const date = new Date(dateStr);
-    const diff = Math.floor((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-    if (diff < 0) return "Overdue";
-    if (diff === 0) return "Due today";
-    return `Due in ${diff}d`;
-  };
-
-  return (
-    <SurfaceCard style={styles.card}>
-      <View style={styles.cardHead}>
-        {isUrgent ? <Badge label="Urgent" tone="danger" /> : <View />}
-        <TouchableOpacity>
-          <Ionicons name="bookmark-outline" size={18} color={palette.subText} />
-        </TouchableOpacity>
-      </View>
-
-      <T weight="bold" color={palette.text} style={styles.title}>{gig.title}</T>
-      <View style={styles.metaRow}>
-        <Ionicons name="business-outline" size={14} color={palette.subText} />
-        <T weight="medium" color={palette.subText} style={styles.meta}>
-          {gig.client_company || gig.client_name || "A Client"}
-        </T>
-        <T weight="medium" color={palette.subText} style={styles.meta}>• {formatTime(gig.deadline)}</T>
-      </View>
-
-      <View style={styles.tags}>
-        {/* Placeholder for tags if added to schema, currently using static mock or status */}
-        <View style={[styles.tag, { backgroundColor: palette.border }]}>
-          <T weight="medium" color={palette.subText} style={styles.tagText}>{gig.status.toUpperCase()}</T>
-        </View>
-      </View>
-
-      <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-      <View style={styles.bottom}>
-        <View>
-          <T weight="semiBold" color={palette.subText} style={styles.label}>BUDGET</T>
-          <T weight="bold" color={palette.accent} style={styles.price}>₹{gig.budget?.toLocaleString() || "..."}</T>
-        </View>
-        <TouchableOpacity style={[styles.btn, { backgroundColor: palette.accent }]} onPress={() => router.push(`/talent-stack/gig-details?id=${gig.id}`)}>
-          <T weight="bold" color="#fff" style={styles.btnText}>View Details</T>
-        </TouchableOpacity>
-      </View>
-    </SurfaceCard>
-  );
-});
 
 export default function BrowseGigsScreen() {
   const { palette } = useFlowPalette();
@@ -87,19 +112,26 @@ export default function BrowseGigsScreen() {
 
       const filters: GigFilters = {};
       if (activeFilter) filters.status = activeFilter as any;
-      // Note: searchQuery would typically be passed to backend if supported by gigService
 
       const data = await gigService.getGigs(filters);
 
-      // Client-side search filtering (fallback if not handled by API)
+      const raw = data && data.length > 0 ? data : DUMMY_BROWSE_GIGS;
       const filteredData = searchQuery
-        ? data.filter(g => g.title.toLowerCase().includes(searchQuery.toLowerCase()))
-        : data;
+        ? raw.filter((g) => g.title.toLowerCase().includes(searchQuery.toLowerCase()))
+        : activeFilter
+          ? raw.filter((g) => g.status === activeFilter)
+          : raw;
 
       setGigs(filteredData || []);
     } catch (err: any) {
-      console.error("Gigs fetch error:", err);
-      setError(err.message || "Failed to load gigs");
+      console.error("Gigs fetch error (using dummy):", err);
+      const raw = DUMMY_BROWSE_GIGS;
+      const filteredData = searchQuery
+        ? raw.filter((g) => g.title.toLowerCase().includes(searchQuery.toLowerCase()))
+        : activeFilter
+          ? raw.filter((g) => g.status === activeFilter)
+          : raw;
+      setGigs(filteredData);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -110,7 +142,6 @@ export default function BrowseGigsScreen() {
     loadGigs();
   }, [activeFilter]);
 
-  // Debounce search client-side
   useEffect(() => {
     const handler = setTimeout(() => {
       loadGigs();
@@ -122,105 +153,131 @@ export default function BrowseGigsScreen() {
     loadGigs(true);
   }, [activeFilter, searchQuery]);
 
-  // Header components layout
   const ListHeaderComponent = () => (
     <View style={styles.headerContainer}>
-      <View style={[styles.search, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
-        <Ionicons name="search" size={16} color={palette.subText} />
-        <TextInput
-          placeholder="Search gigs"
-          placeholderTextColor={palette.subText}
-          style={[styles.input, { color: palette.text }]}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery("")}>
-            <Ionicons name="close-circle" size={16} color={palette.subText} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Search */}
+      <SearchBar
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholders={[
+          "Search for gigs...",
+          "Find React Native projects...",
+          "Discover UI/UX work...",
+          "Explore backend roles...",
+        ]}
+      />
 
+      {/* Filters */}
       <View style={styles.filterRow}>
-        <FlatList
-          data={STATUS_FILTERS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.value}
-          renderItem={({ item }) => {
-            const isActive = activeFilter === item.value;
-            return (
-              <TouchableOpacity
-                style={[
-                  styles.filterPill,
-                  {
-                    backgroundColor: isActive ? palette.accent : palette.surface,
-                    borderColor: isActive ? palette.accent : palette.borderLight
-                  }
-                ]}
-                onPress={() => setActiveFilter(item.value)}
+        {STATUS_FILTERS.map((item) => {
+          const isActive = activeFilter === item.value;
+          return (
+            <TouchableOpacity
+              key={item.value}
+              style={[
+                styles.filterPill,
+                {
+                  backgroundColor: isActive ? palette.accent : 'transparent',
+                  borderColor: isActive ? palette.accent : palette.borderLight,
+                },
+              ]}
+              onPress={() => setActiveFilter(item.value)}
+              activeOpacity={0.8}
+            >
+              <T
+                weight={isActive ? "bold" : "medium"}
+                color={isActive ? "#fff" : palette.subText}
+                style={styles.filterText}
               >
-                <T
-                  weight={isActive ? "bold" : "medium"}
-                  color={isActive ? "#fff" : palette.subText}
-                  style={styles.filterText}
-                >
-                  {item.label}
-                </T>
-              </TouchableOpacity>
-            );
-          }}
-          contentContainerStyle={styles.filterListContainer}
-        />
+                {item.label}
+              </T>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
+      {/* Error inline */}
       {error && (
-        <SurfaceCard style={styles.errorCard}>
-          <Ionicons name="alert-circle-outline" size={32} color="#FF3B30" />
-          <T weight="medium" color={palette.text} style={styles.errorText}>{error}</T>
-          <PrimaryButton label="Retry" onPress={() => loadGigs()} style={styles.retryBtn} />
-        </SurfaceCard>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Connection Error"
+          subtitle={error}
+          ctaLabel="Retry"
+          onCtaPress={() => loadGigs()}
+        />
       )}
     </View>
   );
 
   const ListEmptyComponent = () => {
-    if (loading) return null; // Let the main loading handler show
-    if (error) return null; // Error handled in header
-
+    if (loading || error) return null;
     return (
-      <SurfaceCard style={styles.emptyCard}>
-        <Ionicons name="briefcase-outline" size={48} color={palette.border} />
-        <T weight="bold" color={palette.text} style={styles.emptyTitle}>No Gigs Found</T>
-        <T color={palette.subText} style={styles.emptySubtitle}>Try adjusting your filters or search terms.</T>
-        {(searchQuery || activeFilter) && (
-          <PrimaryButton
-            label="Clear Filters"
-            onPress={() => {
+      <EmptyState
+        icon="briefcase-outline"
+        title="No Gigs Found"
+        subtitle="Try adjusting your filters or search terms to find more opportunities."
+        ctaLabel={searchQuery || activeFilter ? "Clear Filters" : undefined}
+        onCtaPress={
+          searchQuery || activeFilter
+            ? () => {
               setSearchQuery("");
               setActiveFilter("");
-            }}
-            style={styles.emptyBtn}
-          />
-        )}
-      </SurfaceCard>
+            }
+            : undefined
+        }
+      />
     );
   };
 
+  const getStatusTone = (status: string) => {
+    if (status === "open") return "progress" as const;
+    if (status === "completed") return "success" as const;
+    if (status === "in_progress") return "progress" as const;
+    return "neutral" as const;
+  };
+
   return (
-    <FlowScreen>
+    <FlowScreen scroll={false}>
       <FlowTopBar title="Browse Gigs" showLeft={false} right="options-outline" onRightPress={() => { }} />
 
       {loading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={palette.accent} />
-          <T color={palette.subText} style={{ marginTop: 8 }}>Loading gigs...</T>
+        <View style={styles.loadingWrap}>
+          <View style={styles.headerContainer}>
+            <SearchBar value="" onChangeText={() => { }} />
+            <View style={styles.filterRow}>
+              {STATUS_FILTERS.map((item) => (
+                <View
+                  key={item.value}
+                  style={[styles.filterPill, { borderColor: palette.borderLight }]}
+                />
+              ))}
+            </View>
+          </View>
+          <LoadingState rows={3} />
         </View>
       ) : (
         <FlatList
           data={gigs}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <GigItem gig={item} palette={palette} nav={nav} router={router} />}
+          renderItem={({ item }) => (
+            <GigCard
+              title={item.title}
+              company={item.client_company || item.client_name || "A Client"}
+              status={item.status.toUpperCase()}
+              statusTone={getStatusTone(item.status)}
+              budget={item.budget}
+              deadline={item.deadline}
+              isUrgent={
+                item.status === "open" &&
+                !!item.deadline &&
+                new Date(item.deadline).getTime() - Date.now() < 3 * 24 * 60 * 60 * 1000
+              }
+              tags={[item.status.toUpperCase()]}
+              onPress={() => router.push(`/talent-stack/gig-details?id=${item.id}`)}
+              onBookmark={() => { }}
+              style={styles.gigCardSpacing}
+            />
+          )}
           contentContainerStyle={styles.listContent}
           initialNumToRender={5}
           maxToRenderPerBatch={10}
@@ -238,34 +295,34 @@ export default function BrowseGigsScreen() {
 }
 
 const styles = StyleSheet.create({
-  listContent: { paddingHorizontal: 16, paddingBottom: 24, paddingTop: 12 },
-  headerContainer: { marginBottom: 12 },
-  filterRow: { marginTop: 12, marginBottom: 8 },
-  filterListContainer: { gap: 8 },
-  filterPill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  filterText: { fontSize: 13 },
-  search: { height: 48, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", gap: 12 },
-  input: { flex: 1, fontFamily: "Poppins_500Medium", fontSize: 15 },
-  card: { padding: 16, marginBottom: 12, borderRadius: 16 },
-  cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: 18, marginTop: 12, lineHeight: 24 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
-  meta: { fontSize: 13 },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  tag: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
-  tagText: { fontSize: 11, textTransform: "uppercase" },
-  divider: { height: 1, marginVertical: 16 },
-  bottom: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  label: { fontSize: 11, letterSpacing: 0.8 },
-  price: { fontSize: 20, marginTop: 4 },
-  btn: { borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12 },
-  btnText: { fontSize: 14 },
-  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  errorCard: { padding: 24, alignItems: "center", borderRadius: 12, marginTop: 12 },
-  errorText: { marginTop: 12, marginBottom: 16, textAlign: "center" },
-  retryBtn: { paddingHorizontal: 24, paddingVertical: 8, borderRadius: 8 },
-  emptyCard: { padding: 40, alignItems: "center", borderRadius: 16, marginTop: 24 },
-  emptyTitle: { fontSize: 18, marginTop: 16 },
-  emptySubtitle: { fontSize: 14, marginTop: 8, textAlign: "center", marginBottom: 24 },
-  emptyBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  listContent: {
+    paddingHorizontal: SCREEN_PADDING,
+    paddingBottom: SP._32,
+    paddingTop: SP._12,
+  },
+  loadingWrap: {
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: SP._12,
+  },
+  headerContainer: {
+    marginBottom: SP._16,
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SP._8,
+    marginTop: SP._16,
+  },
+  filterPill: {
+    paddingHorizontal: SP._16,
+    paddingVertical: SP._8,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+  },
+  filterText: {
+    fontSize: 13,
+  },
+  gigCardSpacing: {
+    marginBottom: SP._12,
+  },
 });

@@ -4,16 +4,20 @@ import { StyleSheet, TouchableOpacity, View, FlatList, ActivityIndicator, Alert,
 import { useRouter } from "expo-router";
 
 import {
-  Avatar,
   Badge,
   FlowScreen,
-  SurfaceCard,
   T,
   useFlowNav,
   useFlowPalette,
-  PrimaryButton
+  PrimaryButton,
 } from "@/components/community/freelancerFlow/shared";
+import { StatCard } from "@/components/freelancer/StatCard";
+import { SectionHeader } from "@/components/freelancer/SectionHeader";
+import { EmptyState } from "@/components/freelancer/EmptyState";
+import { LoadingState } from "@/components/freelancer/LoadingState";
+import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
 import { gigService, Gig } from "@/lib/gigService";
+
 
 export default function MyGigsScreen() {
   const { palette } = useFlowPalette();
@@ -27,13 +31,12 @@ export default function MyGigsScreen() {
 
   const fetchMyGigs = async () => {
     try {
-      const data = await gigService.getGigs();
-      // Assuming backend handles client context via token or we filter client_id here.
-      // E.g. const data = await gigService.getGigs({ client_id: myUserId })
-      setGigs(data || []);
+      const response = await gigService.getMyGigs();
+      setGigs(response.items);
     } catch (err: any) {
       console.error("Failed to load my gigs:", err);
-      Alert.alert("Error", err.message || "Could not load gigs.");
+      Alert.alert("Error", err.message || "Failed to load gigs.");
+      setGigs([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -62,125 +65,142 @@ export default function MyGigsScreen() {
             try {
               setDeletingId(gigId);
               await gigService.deleteGig(gigId);
-              // Refresh list
-              setGigs(prev => prev.filter(g => g.id !== gigId));
+              setGigs((prev) => prev.filter((g) => g.id !== gigId));
             } catch (err: any) {
               Alert.alert("Error", err.message || "Failed to delete gig.");
             } finally {
               setDeletingId(null);
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  const activeCount = gigs.filter(g => g.status === "in_progress" || g.status === "open").length;
-  const completedCount = gigs.filter(g => g.status === "completed").length;
-  const draftCount = gigs.filter(g => g.status === "draft").length;
+  const activeCount = gigs.filter((g) => g.status === "in_progress" || g.status === "open").length;
+  const completedCount = gigs.filter((g) => g.status === "completed").length;
+  const draftCount = gigs.filter((g) => g.status === "draft").length;
 
   const renderHeader = () => (
-    <>
-      <View style={styles.summaryRow}>
-        <SurfaceCard style={styles.summaryCard}>
-          <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>ACTIVE</T>
-          <T weight="bold" color={palette.text} style={styles.summaryValue}>{activeCount}</T>
-        </SurfaceCard>
-        <SurfaceCard style={styles.summaryCard}>
-          <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>COMPLETED</T>
-          <T weight="bold" color={palette.text} style={styles.summaryValue}>{completedCount}</T>
-        </SurfaceCard>
-        <SurfaceCard style={styles.summaryCard}>
-          <T weight="semiBold" color={palette.subText} style={styles.summaryLabel}>DRAFT / PEND</T>
-          <T weight="bold" color={palette.text} style={styles.summaryValue}>{draftCount}</T>
-        </SurfaceCard>
-      </View>
-    </>
+    <View style={styles.statsRow}>
+      <StatCard label="Active" value={activeCount} accentColor={palette.accent} />
+      <StatCard label="Completed" value={completedCount} accentColor={palette.success} />
+    </View>
   );
+
+  const getStatusTone = (status: string) => {
+    if (status === "open") return "progress" as const;
+    if (status === "completed") return "success" as const;
+    if (status === "in_progress") return "progress" as const;
+    return "neutral" as const;
+  };
 
   const renderItem = ({ item: gig }: { item: Gig }) => {
     const isDeleting = deletingId === gig.id;
+    const budgetDisplay = gig.budget_max ?? gig.budget ?? 0;
+
     return (
-      <SurfaceCard style={[styles.card, isDeleting && { opacity: 0.5 }]}>
-        <View style={styles.cardHead}>
-          <T weight="bold" color={palette.text} style={styles.cardTitle} numberOfLines={2}>
-            {gig.title}
-          </T>
-          <Badge label={gig.status.toUpperCase()} tone={gig.status === "open" ? "progress" : gig.status === "completed" ? "success" : "neutral"} />
-        </View>
-
-        <View style={styles.metaRow}>
-          <View style={styles.metaItem}>
-            <Ionicons name="wallet-outline" size={15} color={palette.subText} />
-            <T weight="medium" color={palette.subText} style={styles.metaText}>
-              ₹{gig.budget?.toLocaleString() || "..."}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={() => router.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
+      >
+        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight, opacity: isDeleting ? 0.5 : 1 }]}>
+          {/* Header: Title + Badge */}
+          <View style={styles.cardHead}>
+            <T weight="bold" color={palette.text} style={styles.cardTitle} numberOfLines={2}>
+              {gig.title}
             </T>
+            <Badge label={gig.status.toUpperCase()} tone={getStatusTone(gig.status)} />
           </View>
 
-          <View style={styles.metaItem}>
-            <Ionicons name="time-outline" size={15} color={palette.subText} />
-            <T weight="medium" color={palette.subText} style={styles.metaText}>
-              Posted: {new Date(gig.created_at).toLocaleDateString()}
-            </T>
+          {/* Meta */}
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <Ionicons name="wallet-outline" size={14} color={palette.subText} />
+              <T weight="medium" color={palette.subText} style={styles.metaText}>
+                ₹{budgetDisplay.toLocaleString()}
+              </T>
+            </View>
+            <View style={styles.metaItem}>
+              <Ionicons name="time-outline" size={14} color={palette.subText} />
+              <T weight="medium" color={palette.subText} style={styles.metaText}>
+                {new Date(gig.created_at).toLocaleDateString()}
+              </T>
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          {/* Actions */}
+          <View style={styles.cardActions}>
+            <View style={styles.actionGroup}>
+              <TouchableOpacity
+                onPress={() => router.push(`/freelancer-stack/post-gig?id=${gig.id}`)}
+                style={styles.actionBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="pencil" size={16} color={palette.accent} />
+                <T weight="semiBold" color={palette.accent} style={styles.actionLabel}>
+                  Edit
+                </T>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleDelete(gig.id, gig.title)}
+                style={styles.actionBtn}
+                disabled={isDeleting}
+                activeOpacity={0.7}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color="#FF3B30" />
+                ) : (
+                  <Ionicons name="trash-outline" size={16} color="#FF3B30" />
+                )}
+                <T weight="semiBold" color="#FF3B30" style={styles.actionLabel}>
+                  Delete
+                </T>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => nav.push("/freelancer-stack/gig-proposals")}
+              activeOpacity={0.8}
+              style={styles.proposalsBtn}
+            >
+              <T weight="bold" color={palette.accent} style={styles.proposalsText}>
+                Proposals
+              </T>
+              <Ionicons name="chevron-forward" size={14} color={palette.accent} />
+            </TouchableOpacity>
           </View>
         </View>
-
-        <View style={[styles.divider, { backgroundColor: palette.border }]} />
-
-        <View style={styles.cardBottom}>
-          <View style={styles.actionGroup}>
-            <TouchableOpacity
-              onPress={() => router.push(`/freelancer-stack/post-gig?id=${gig.id}`)}
-              style={styles.iconBtn}
-            >
-              <Ionicons name="pencil" size={18} color={palette.accent} />
-              <T weight="semiBold" color={palette.accent} style={styles.btnLabel}>Edit</T>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleDelete(gig.id, gig.title)}
-              style={styles.iconBtn}
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <ActivityIndicator size="small" color="#FF3B30" />
-              ) : (
-                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-              )}
-              <T weight="semiBold" color="#FF3B30" style={styles.btnLabel}>Delete</T>
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity onPress={() => nav.push("/freelancer-stack/gig-proposals")} activeOpacity={0.8} style={styles.viewProposalsBtn}>
-            <T weight="bold" color={palette.accent} style={styles.actionText}>Proposals</T>
-            <Ionicons name="chevron-forward" size={16} color={palette.accent} />
-          </TouchableOpacity>
-        </View>
-      </SurfaceCard>
+      </TouchableOpacity>
     );
   };
 
   return (
-    <FlowScreen>
-      <View style={[styles.header, { borderBottomColor: palette.border }]}>
-        <View>
-          <T weight="semiBold" color={palette.subText} style={styles.smallLabel}>Your Workspace</T>
-          <T weight="bold" color={palette.text} style={styles.title}>My Gigs</T>
+    <FlowScreen scroll={false}>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: palette.borderLight }]}>
+        <View style={styles.headerContent}>
+          <T weight="bold" color={palette.text} style={styles.headerTitle}>
+            My Gigs
+          </T>
         </View>
-
-        <TouchableOpacity
-          style={[styles.addBtn, { backgroundColor: palette.surface, borderColor: palette.border }]}
-          onPress={() => nav.push("/freelancer-stack/post-gig")}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add" size={22} color={palette.accent} />
-        </TouchableOpacity>
       </View>
 
       {loading && !refreshing ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={palette.accent} />
-          <T color={palette.subText} style={{ marginTop: 16 }}>Loading your gigs...</T>
+        <View style={styles.loadingWrap}>
+          <View style={styles.statsRow}>
+            {[1, 2].map((i) => (
+              <View
+                key={i}
+                style={[styles.statSkeleton, { backgroundColor: palette.card, borderColor: palette.borderLight }]}
+              />
+            ))}
+          </View>
+          <LoadingState rows={3} style={{ marginTop: SP._16 }} />
         </View>
       ) : (
         <FlatList
@@ -192,12 +212,13 @@ export default function MyGigsScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
           ListEmptyComponent={
-            <SurfaceCard style={styles.emptyCard}>
-              <Ionicons name="briefcase-outline" size={48} color={palette.border} />
-              <T weight="bold" color={palette.text} style={styles.emptyTitle}>No Gigs Yet</T>
-              <T color={palette.subText} style={styles.emptySubtitle}>Post a gig to start finding top talent.</T>
-              <PrimaryButton label="Post a Gig" onPress={() => nav.push("/freelancer-stack/post-gig")} style={styles.emptyBtn} />
-            </SurfaceCard>
+            <EmptyState
+              icon="briefcase-outline"
+              title="No Gigs Yet"
+              subtitle="Post your first gig to start finding top talent."
+              ctaLabel="Post a Gig"
+              onCtaPress={() => nav.push("/freelancer-stack/post-gig")}
+            />
           }
         />
       )}
@@ -207,45 +228,121 @@ export default function MyGigsScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    paddingTop: 54,
-    paddingHorizontal: 18,
-    paddingBottom: 12,
+    paddingTop: 56,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingBottom: SP._20,
     borderBottomWidth: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  smallLabel: { fontSize: 11, letterSpacing: 0.8 },
-  title: { fontSize: 26 },
+  headerContent: {
+    flex: 1,
+  },
+  headerLabel: {
+    fontSize: 13,
+    marginTop: 4,
+    opacity: 0.7,
+  },
+  headerTitle: {
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.4,
+  },
   addBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
+    width: 52,
+    height: 52,
+    borderRadius: RADIUS.xl,
     justifyContent: "center",
     alignItems: "center",
+    ...SHADOWS.card,
   },
-  content: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 24, gap: 12 },
-  summaryRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
-  summaryCard: { flex: 1, paddingVertical: 10, alignItems: "center" },
-  summaryLabel: { fontSize: 10, letterSpacing: 0.8 },
-  summaryValue: { fontSize: 18, marginTop: 4 },
-  card: { padding: 16, marginBottom: 4 },
-  cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 },
-  cardTitle: { fontSize: 18, flex: 1, flexShrink: 1, paddingRight: 2 },
-  metaRow: { gap: 8 },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 7, minWidth: 0 },
-  metaText: { fontSize: 13, flexShrink: 1 },
-  divider: { height: 1, marginVertical: 14 },
-  cardBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  actionGroup: { flexDirection: "row", alignItems: "center", gap: 16 },
-  iconBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  btnLabel: { fontSize: 13 },
-  viewProposalsBtn: { flexDirection: "row", alignItems: "center", gap: 2, padding: 6, opacity: 0.9 },
-  actionText: { fontSize: 13, flexShrink: 1 },
-  centerContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  emptyCard: { padding: 40, alignItems: "center", borderRadius: 16, marginTop: 24 },
-  emptyTitle: { fontSize: 18, marginTop: 16 },
-  emptySubtitle: { fontSize: 14, marginTop: 8, textAlign: "center", marginBottom: 24 },
-  emptyBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  content: {
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: SP._16,
+    paddingBottom: SP._32,
+    gap: SP._12,
+  },
+  loadingWrap: {
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: SP._16,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: SP._16,
+    marginBottom: SP._24,
+    flexWrap: "wrap",
+  },
+  statSkeleton: {
+    flex: 1,
+    minWidth: "45%",
+    minHeight: 110,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+  },
+  card: {
+    padding: SP._16,
+    paddingBottom: SP._20,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    ...SHADOWS.card,
+  },
+  cardHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: SP._8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.2,
+    flex: 1,
+    flexShrink: 1,
+  },
+  metaRow: {
+    flexDirection: "row",
+    gap: SP._16,
+    marginTop: SP._12,
+  },
+  metaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SP._8,
+  },
+  metaText: {
+    fontSize: 12,
+  },
+  divider: {
+    height: 1,
+    marginVertical: SP._16,
+  },
+  cardActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SP._20,
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SP._4,
+  },
+  actionLabel: {
+    fontSize: 13,
+  },
+  proposalsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SP._2,
+    paddingVertical: SP._4,
+    paddingHorizontal: SP._8,
+  },
+  proposalsText: {
+    fontSize: 13,
+  },
 });

@@ -6,13 +6,12 @@ import { useLocalSearchParams } from "expo-router";
 import {
   FlowScreen,
   FlowTopBar,
-  GhostButton,
   PrimaryButton,
-  SurfaceCard,
   T,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
 import { gigService, Gig } from "@/lib/gigService";
 
 const experienceOptions = ["junior", "mid", "senior"] as const;
@@ -31,6 +30,7 @@ export default function PostGigScreen() {
   const [experienceLevel, setExperienceLevel] = useState<(typeof experienceOptions)[number]>("mid");
   const [isRemote, setIsRemote] = useState(true);
   const [location, setLocation] = useState("");
+  const [tagsInput, setTagsInput] = useState("");
 
   const [isFetching, setIsFetching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -43,7 +43,15 @@ export default function PostGigScreen() {
           const gig = await gigService.getGig(id);
           setTitle(gig.title || "");
           setDescription(gig.description || "");
-          setBudgetMax((gig.budget || 2500).toString());
+          setBudgetMin(String(gig.budget_min ?? 0));
+          setBudgetMax(String(gig.budget_max ?? 0));
+          setExperienceLevel(gig.experience_level || "mid");
+          setIsRemote(gig.is_remote ?? true);
+          setLocation(gig.location_text || "");
+
+          if (gig.gig_tags && gig.gig_tags.length > 0) {
+            setTagsInput(gig.gig_tags.map(gt => gt.tags?.label).join(", "));
+          }
         } catch (error) {
           console.error("Failed to fetch gig for editing:", error);
           Alert.alert("Error", "Could not load the gig details.");
@@ -52,7 +60,6 @@ export default function PostGigScreen() {
           setIsFetching(false);
         }
       };
-
       fetchGig();
     }
   }, [id, isEditing]);
@@ -69,34 +76,30 @@ export default function PostGigScreen() {
   const canPost = useMemo(() => {
     const min = Number(budgetMin);
     const max = Number(budgetMax);
-    return title.trim().length >= 10 && description.trim().length >= 30 && min >= 0 && max >= min && !budgetError && !isSaving;
+    return title.trim().length > 0 && description.trim().length > 0 && min >= 0 && max >= min && !budgetError && !isSaving;
   }, [title, description, budgetMin, budgetMax, budgetError, isSaving]);
 
   const handleSave = async (isDraft = false) => {
     if (!canPost && !isDraft) return;
-
     try {
       setIsSaving(true);
-
-      const payload: Partial<Gig> = {
+      const payload: Partial<Gig> & { tags?: string[] } = {
         title: title.trim(),
         description: description.trim(),
         budget_type: "fixed",
         budget_min: Number(budgetMin),
         budget_max: Number(budgetMax),
-        budget: Number(budgetMax),
         experience_level: experienceLevel,
         is_remote: isRemote,
         location_text: location.trim() || undefined,
         status: isDraft ? "draft" : "open",
+        tags: tagsInput.split(",").map(t => t.trim()).filter(Boolean),
       };
-
       if (isEditing && id) {
         await gigService.updateGig(id, payload);
       } else {
         await gigService.createGig(payload);
       }
-
       nav.replace("/freelancer-stack/my-gigs");
     } catch (error: any) {
       console.error("Save gig error:", error);
@@ -107,7 +110,7 @@ export default function PostGigScreen() {
   };
 
   return (
-    <FlowScreen>
+    <FlowScreen scroll={false}>
       <FlowTopBar
         title={isEditing ? "Edit Gig" : "Post a Gig"}
         left="arrow-back"
@@ -117,15 +120,16 @@ export default function PostGigScreen() {
       {isFetching ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={palette.accent} />
-          <T color={palette.subText} style={{ marginTop: 16 }}>Loading gig details...</T>
+          <T color={palette.subText} style={{ marginTop: SP._16 }}>Loading gig details...</T>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
-            <SurfaceCard style={styles.card}>
-              <T weight="semiBold" color={palette.subText} style={styles.metaLabel}>PROJECT BRIEF</T>
+            {/* ─── Project Brief ─── */}
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>PROJECT BRIEF</T>
 
-              <T weight="bold" color={palette.text} style={styles.label}>Gig Title</T>
+              <T weight="bold" color={palette.text} style={styles.fieldLabel}>Gig Title</T>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
@@ -134,24 +138,24 @@ export default function PostGigScreen() {
                 style={[styles.input, { backgroundColor: palette.border, color: palette.text }]}
               />
 
-              <T weight="bold" color={palette.text} style={[styles.label, { marginTop: 12 }]}>Description</T>
+              <T weight="bold" color={palette.text} style={[styles.fieldLabel, { marginTop: SP._16 }]}>Description</T>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
                 multiline
                 textAlignVertical="top"
-                placeholder="Minimum 30 characters"
+                placeholder="Describe your gig requirements..."
                 placeholderTextColor={palette.subText}
                 style={[styles.textArea, { backgroundColor: palette.border, color: palette.text }]}
               />
-            </SurfaceCard>
+            </View>
 
-            <SurfaceCard style={styles.card}>
-              <T weight="semiBold" color={palette.subText} style={styles.metaLabel}>BUDGET</T>
-
+            {/* ─── Budget ─── */}
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>BUDGET</T>
               <View style={styles.budgetRow}>
                 <View style={styles.budgetCol}>
-                  <T weight="bold" color={palette.text} style={styles.label}>Minimum</T>
+                  <T weight="bold" color={palette.text} style={styles.fieldLabel}>Minimum</T>
                   <View style={[styles.budgetInputWrap, { backgroundColor: palette.border }]}>
                     <T weight="semiBold" color={palette.subText} style={styles.currency}>₹</T>
                     <TextInput
@@ -165,7 +169,7 @@ export default function PostGigScreen() {
                   </View>
                 </View>
                 <View style={styles.budgetCol}>
-                  <T weight="bold" color={palette.text} style={styles.label}>Maximum</T>
+                  <T weight="bold" color={palette.text} style={styles.fieldLabel}>Maximum</T>
                   <View style={[styles.budgetInputWrap, { backgroundColor: palette.border }]}>
                     <T weight="semiBold" color={palette.subText} style={styles.currency}>₹</T>
                     <TextInput
@@ -180,60 +184,83 @@ export default function PostGigScreen() {
                 </View>
               </View>
               {budgetError ? (
-                <T weight="medium" color={palette.accent} style={styles.errorText}>
-                  {budgetError}
-                </T>
+                <T weight="medium" color={palette.accent} style={styles.errorText}>{budgetError}</T>
               ) : null}
-            </SurfaceCard>
+            </View>
 
-            <SurfaceCard style={styles.card}>
-              <T weight="semiBold" color={palette.subText} style={styles.metaLabel}>REQUIREMENTS</T>
-              <T weight="bold" color={palette.text} style={styles.label}>Experience Level</T>
+            {/* ─── Requirements ─── */}
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>REQUIREMENTS</T>
+              <T weight="bold" color={palette.text} style={styles.fieldLabel}>Experience Level</T>
               <View style={styles.chips}>
                 {experienceOptions.map((opt) => (
                   <TouchableOpacity
                     key={opt}
-                    style={[styles.chip, { borderColor: opt === experienceLevel ? palette.accent : palette.border, backgroundColor: opt === experienceLevel ? palette.accentSoft : palette.surface }]}
+                    style={[
+                      styles.chip,
+                      {
+                        borderColor: opt === experienceLevel ? palette.accent : palette.border,
+                        backgroundColor: opt === experienceLevel ? palette.accentSoft : 'transparent',
+                      },
+                    ]}
                     onPress={() => setExperienceLevel(opt)}
+                    activeOpacity={0.8}
                   >
-                    <T weight="semiBold" color={opt === experienceLevel ? palette.accent : palette.subText} style={styles.chipText}>{opt}</T>
+                    <T
+                      weight="semiBold"
+                      color={opt === experienceLevel ? palette.accent : palette.subText}
+                      style={styles.chipText}
+                    >
+                      {opt}
+                    </T>
                   </TouchableOpacity>
                 ))}
               </View>
-            </SurfaceCard>
 
-            <SurfaceCard style={styles.card}>
-              <T weight="semiBold" color={palette.subText} style={styles.metaLabel}>LOCATION</T>
+              <T weight="bold" color={palette.text} style={[styles.fieldLabel, { marginTop: SP._20 }]}>Skills / Tags</T>
+              <TextInput
+                value={tagsInput}
+                onChangeText={setTagsInput}
+                placeholder="e.g. React, Node.js, UI Design"
+                placeholderTextColor={palette.subText}
+                style={[styles.input, { backgroundColor: palette.border, color: palette.text }]}
+              />
+              <T weight="medium" color={palette.subText} style={styles.helper}>Comma separated</T>
+            </View>
+
+            {/* ─── Location ─── */}
+            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+              <T weight="semiBold" color={palette.subText} style={styles.sectionLabel}>LOCATION</T>
               <View style={styles.rowBetween}>
                 <View>
-                  <T weight="bold" color={palette.text} style={styles.label}>Remote Friendly</T>
+                  <T weight="bold" color={palette.text} style={styles.fieldLabel}>Remote Friendly</T>
                   <T weight="medium" color={palette.subText} style={styles.helper}>Toggle if location-specific</T>
                 </View>
                 <Switch value={isRemote} onValueChange={setIsRemote} thumbColor="#fff" trackColor={{ true: palette.accent, false: palette.border }} />
               </View>
 
-              <T weight="bold" color={palette.text} style={[styles.label, { marginTop: 12 }]}>Location</T>
+              <T weight="bold" color={palette.text} style={[styles.fieldLabel, { marginTop: SP._16 }]}>Location</T>
               <TextInput
                 value={location}
                 onChangeText={setLocation}
                 editable={!isRemote}
                 placeholder={isRemote ? "Disabled for remote gigs" : "e.g. Bengaluru, KA"}
                 placeholderTextColor={palette.subText}
-                style={[styles.input, { backgroundColor: palette.border, color: palette.text, opacity: isRemote ? 0.6 : 1 }]}
+                style={[styles.input, { backgroundColor: palette.border, color: palette.text, opacity: isRemote ? 0.5 : 1 }]}
               />
-            </SurfaceCard>
+            </View>
 
+            {/* ─── Actions ─── */}
             <View style={styles.ctaWrap}>
-              <GhostButton label="Save Draft" onPress={() => handleSave(true)} />
               <PrimaryButton
                 label={isEditing ? "Update Gig" : "Post Gig"}
-                icon={isSaving ? undefined : "send"}
-                onPress={canPost ? () => handleSave(false) : undefined}
-                style={{ opacity: canPost ? 1 : 0.55 }}
+                icon="send"
+                onPress={() => handleSave(false)}
+                disabled={!canPost}
+                loading={isSaving}
               />
-              {isSaving && <ActivityIndicator color="#fff" style={styles.loadingOverlay} />}
               <T weight="medium" color={palette.subText} style={styles.validation}>
-                Title must be at least 10 characters and description at least 30.
+                Title and description are required.
               </T>
             </View>
           </View>
@@ -244,50 +271,120 @@ export default function PostGigScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 18, paddingTop: 12, gap: 10 },
-  card: { padding: 12 },
-  metaLabel: { fontSize: 10, letterSpacing: 0.9, marginBottom: 8 },
-  label: { fontSize: 14, marginBottom: 7 },
-  helper: { fontSize: 11, marginTop: 2 },
+  scrollContent: {
+    paddingBottom: SP._32,
+  },
+  content: {
+    paddingHorizontal: SCREEN_PADDING,
+    paddingTop: SP._16,
+    gap: SP._12,
+  },
+  card: {
+    padding: SP._16,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    letterSpacing: 0.9,
+    textTransform: "uppercase",
+    marginBottom: SP._12,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    marginBottom: SP._8,
+  },
+  helper: {
+    fontSize: 12,
+    marginTop: SP._2,
+  },
   input: {
-    borderRadius: 10,
-    height: 46,
-    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    height: 48,
+    paddingHorizontal: SP._16,
     fontFamily: "Poppins_500Medium",
     fontSize: 14,
   },
   textArea: {
-    borderRadius: 10,
-    minHeight: 106,
-    paddingHorizontal: 12,
-    paddingTop: 10,
+    borderRadius: RADIUS.md,
+    minHeight: 110,
+    paddingHorizontal: SP._16,
+    paddingTop: SP._12,
     fontFamily: "Poppins_500Medium",
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
-  budgetRow: { flexDirection: "row", gap: 8, marginTop: 10, alignItems: "flex-start" },
-  budgetCol: { flex: 1, minWidth: 0 },
+  budgetRow: {
+    flexDirection: "row",
+    gap: SP._12,
+    marginTop: SP._4,
+  },
+  budgetCol: {
+    flex: 1,
+  },
   budgetInputWrap: {
-    height: 46,
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    height: 48,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SP._16,
     flexDirection: "row",
     alignItems: "center",
   },
-  currency: { fontSize: 14, marginRight: 6 },
+  currency: {
+    fontSize: 16,
+    marginRight: SP._8,
+  },
   budgetInput: {
     flex: 1,
     fontFamily: "Poppins_500Medium",
-    fontSize: 14,
+    fontSize: 15,
     paddingVertical: 0,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  chipText: { fontSize: 12, textTransform: "capitalize" },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  ctaWrap: { marginTop: 4, marginBottom: 24, gap: 8, position: "relative" },
-  errorText: { fontSize: 11, marginTop: 8 },
-  validation: { fontSize: 11, textAlign: "center" },
-  centerContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  loadingOverlay: { position: "absolute", top: "50%", left: "50%", marginTop: -10, marginLeft: -10, zIndex: 10 },
+  chips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SP._8,
+  },
+  chip: {
+    borderWidth: 1.5,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: SP._16,
+    paddingVertical: SP._8,
+  },
+  chipText: {
+    fontSize: 13,
+    textTransform: "capitalize",
+  },
+  rowBetween: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  ctaWrap: {
+    marginTop: SP._8,
+    marginBottom: SP._24,
+    gap: SP._8,
+    position: "relative",
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: SP._8,
+  },
+  validation: {
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: SP._4,
+  },
+  centerContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -10,
+    marginLeft: -10,
+    zIndex: 10,
+  },
 });

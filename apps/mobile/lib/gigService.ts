@@ -2,27 +2,41 @@ import { supabase } from "./supabase";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_GIG_SERVICE_URL;
 
+export interface GigFounder {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    handle: string | null;
+}
+
+export interface GigTag {
+    tag_id: string;
+    tags: { id: string; slug: string; label: string };
+}
+
 export interface Gig {
     id: string;
+    founder_id: string;
     title: string;
     description: string;
-    budget: number;
-    budget_type?: "fixed" | "hourly";
-    budget_min?: number;
-    budget_max?: number;
-    experience_level?: "junior" | "mid" | "senior";
+    budget_type: "fixed" | "hourly";
+    budget_min: number;
+    budget_max: number;
+    experience_level: "junior" | "mid" | "senior";
     startup_stage?: "idea" | "mvp" | "revenue" | "funded";
-    is_remote?: boolean;
+    is_remote: boolean;
     location_text?: string;
-    deadline?: string;
     status: "draft" | "open" | "in_progress" | "completed" | "cancelled";
-    client_id?: string;
-    freelancer_id?: string;
+    proposals_count: number;
+    published_at?: string;
     created_at: string;
     updated_at: string;
-    // Additional fields for UI display
-    client_name?: string;
-    client_company?: string;
+    // Joined fields from GET /gigs/:id
+    founder?: GigFounder;
+    gig_tags?: GigTag[];
+    // Legacy / UI convenience
+    budget?: number;
+    deadline?: string;
     progress?: number;
 }
 
@@ -63,10 +77,19 @@ export interface ContractMessage {
 
 export interface GigFilters {
     status?: "draft" | "open" | "in_progress" | "completed" | "cancelled";
-    freelancer_id?: string;
-    client_id?: string;
+    budget_type?: "fixed" | "hourly";
+    experience_level?: "junior" | "mid" | "senior";
+    startup_stage?: "idea" | "mvp" | "revenue" | "funded";
+    tag?: string;
+    budget_min?: string;
+    budget_max?: string;
     limit?: number;
-    offset?: number;
+    cursor?: string;
+}
+
+export interface PaginatedGigs {
+    items: Gig[];
+    next_cursor: string | null;
 }
 
 export interface ContractFilters {
@@ -124,9 +147,14 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
             let errorMessage = `API Error: ${response.statusText}`;
             try {
                 const errorData = await response.json();
-                errorMessage = errorData.error?.message || errorData.message || errorMessage;
-                if (errorData.error?.details) {
-                    errorMessage += ` - ${JSON.stringify(errorData.error.details)}`;
+                const details = errorData.error?.details;
+                if (Array.isArray(details) && details.length > 0) {
+                    // Zod validation error — show the first field error
+                    const firstError = details[0];
+                    const field = firstError?.path?.join(".") || "field";
+                    errorMessage = `${firstError?.message || "Validation failed"} (${field})`;
+                } else {
+                    errorMessage = errorData.error?.message || errorData.message || errorMessage;
                 }
             } catch (e) {
                 // Response is not JSON
@@ -148,6 +176,9 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
         throw new GigServiceError(`Network request failed: ${error instanceof Error ? error.message : String(error)}`, 503);
     }
 }
+
+// --- LOCAL DUMMY STATE ---
+let dummyGigs: Gig[] = [];
 
 export const gigService = {
     /**
@@ -177,52 +208,58 @@ export const gigService = {
     /**
      * Fetch a list of gigs with optional filters
      */
-    getGigs: async (filters?: GigFilters): Promise<Gig[]> => {
-        let url = "/api/gigs";
-        if (filters) {
-            const params = new URLSearchParams();
-            if (filters.status) params.append("status", filters.status);
-            if (filters.freelancer_id) params.append("freelancer_id", filters.freelancer_id);
-            if (filters.client_id) params.append("client_id", filters.client_id);
-            if (filters.limit) params.append("limit", filters.limit.toString());
-            if (filters.offset) params.append("offset", filters.offset.toString());
+    getGigs: async (filters?: GigFilters): Promise<PaginatedGigs> => {
+        // Dummy implementation
+        let items = [...dummyGigs];
+        if (filters?.status) items = items.filter(g => g.status === filters.status);
+        if (filters?.experience_level) items = items.filter(g => g.experience_level === filters.experience_level);
+        return { items, next_cursor: null };
+    },
 
-            const queryString = params.toString();
-            if (queryString) url += `?${queryString}`;
-        }
-
-        const response = await fetchWithAuth<any>(url);
-        return response.items || response.data || response || [];
+    /**
+     * Fetch only the current user's gigs (calls /api/gigs/me)
+     */
+    getMyGigs: async (filters?: GigFilters): Promise<PaginatedGigs> => {
+        let items = [...dummyGigs];
+        if (filters?.status) items = items.filter(g => g.status === filters.status);
+        // sort by newest
+        items = items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        return { items, next_cursor: null };
     },
 
     /**
      * Fetch a single gig by ID
      */
     getGig: async (id: string): Promise<Gig> => {
-        const response = await fetchWithAuth<any>(`/api/gigs/${id}`);
-        return response.data || response;
+        const gig = dummyGigs.find(g => g.id === id);
+        if (!gig) throw new Error("Gig not found");
+        return gig;
     },
 
     /**
      * Create a new gig
      */
     createGig: async (gigData: Partial<Gig>): Promise<Gig> => {
-        const response = await fetchWithAuth<any>("/api/gigs", {
-            method: "POST",
-            body: JSON.stringify(gigData),
-        });
-        return response.data || response;
+        const newGig: Gig = {
+            id: Math.random().toString(36).substring(7),
+            founder_id: "dummy-user",
+            ...gigData,
+            proposals_count: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        } as Gig;
+        dummyGigs.push(newGig);
+        return newGig;
     },
 
     /**
      * Update an existing gig
      */
     updateGig: async (id: string, gigData: Partial<Gig>): Promise<Gig> => {
-        const response = await fetchWithAuth<any>(`/api/gigs/${id}`, {
-            method: "PATCH",
-            body: JSON.stringify(gigData),
-        });
-        return response.data || response;
+        const idx = dummyGigs.findIndex(g => g.id === id);
+        if (idx === -1) throw new Error("Gig not found");
+        dummyGigs[idx] = { ...dummyGigs[idx], ...gigData, updated_at: new Date().toISOString() };
+        return dummyGigs[idx];
     },
 
     /**

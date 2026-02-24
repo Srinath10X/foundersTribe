@@ -1,556 +1,452 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState, useEffect, useRef } from "react";
-import {
-  StyleSheet,
-  TouchableOpacity,
-  View,
-  TextInput,
-  ScrollView,
-  Animated,
-  Platform,
-} from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View, ScrollView, FlatList, Image } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  Avatar,
   FlowScreen,
-  SurfaceCard,
+  Avatar,
   T,
-  people,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { SearchBar } from "@/components/freelancer/SearchBar";
+import { SectionHeader } from "@/components/freelancer/SectionHeader";
+import { CategoryCard } from "@/components/freelancer/CategoryCard";
+import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
+import { gigService, Gig } from "@/lib/gigService";
+import { searchAll, SearchAccount } from "@/lib/searchService";
 
-// Data Models
-const activeGigs = [
-  {
-    title: "Senior React Developer",
-    sub: "Neobank App",
-    status: "HIRING",
-    statusTone: "danger" as const,
-    metric: "12 Applications",
-    avatars: [people.female1, people.female2, people.sarah],
-  },
-  {
-    title: "UI/UX Design Audit",
-    sub: "Dashboard Redesign",
-    status: "IN PROGRESS",
-    statusTone: "progress" as const,
-    metric: "Due in 3 days",
-    avatars: [people.alex],
-  },
-];
 
 const popularCategories = [
-  {
-    id: 1,
-    title: "Graphic Designer",
-    icon: "color-palette",
-    color: "#FF7A00",
-    bgLight: "rgba(255, 122, 0, 0.12)",
-  },
-  {
-    id: 2,
-    title: "Profile Maker",
-    icon: "person",
-    color: "#007AFF",
-    bgLight: "rgba(0, 122, 255, 0.12)",
-  },
-  {
-    id: 3,
-    title: "Reel Editor",
-    icon: "videocam",
-    color: "#FF2D55",
-    bgLight: "rgba(255, 45, 85, 0.12)",
-  },
-  {
-    id: 4,
-    title: "Financial Pro",
-    icon: "briefcase",
-    color: "#34C759",
-    bgLight: "rgba(52, 199, 89, 0.12)",
-  },
+  { id: 1, title: "Graphic Designer", icon: "color-palette" as const, color: "#FF7A00", bg: "rgba(255,122,0,0.12)" },
+  { id: 2, title: "Profile Maker", icon: "person" as const, color: "#007AFF", bg: "rgba(0,122,255,0.12)" },
+  { id: 3, title: "Reel Editor", icon: "videocam" as const, color: "#FF2D55", bg: "rgba(255,45,85,0.12)" },
+  { id: 4, title: "Financial Pro", icon: "briefcase" as const, color: "#34C759", bg: "rgba(52,199,89,0.12)" },
 ];
 
 export default function FounderDashboardScreen() {
-  const { palette, isDark } = useFlowPalette();
+  const { palette } = useFlowPalette();
   const nav = useFlowNav();
-
-  // Search Animation State
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const isFocused = useRef(new Animated.Value(0)).current;
-
-  const [isInputFocused, setIsInputFocused] = useState(false);
+  const insets = useSafeAreaInsets();
   const [searchText, setSearchText] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchAccount[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [activeGigs, setActiveGigs] = useState<Gig[]>([]);
+  const [gigsLoading, setGigsLoading] = useState(true);
 
-  const placeholders = [
-    "Find your Reels editor...",
-    "Find your Graphic designer...",
-    "Find your Marketing manager...",
-    "Find your Financial manager...",
-  ];
+  const isSearching = searchText.trim().length > 0;
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      Animated.sequence([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      setTimeout(() => {
-        setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
-      }, 400);
-    }, 4000);
-    return () => clearInterval(interval);
+  const handleSearch = useCallback(async (query: string) => {
+    if (query.trim().length === 0) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const results = await searchAll(query);
+      setSearchResults(results.accounts);
+    } catch (err) {
+      console.error("Search error:", err);
+    } finally {
+      setSearching(false);
+    }
   }, []);
 
-  const handleSearchFocus = () => {
-    setIsInputFocused(true);
-    Animated.spring(isFocused, {
-      toValue: 1,
-      friction: 8,
-      tension: 60,
-      useNativeDriver: false,
-    }).start();
-  };
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleSearch(searchText);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchText, handleSearch]);
 
-  const handleSearchBlur = () => {
-    setIsInputFocused(false);
-    Animated.spring(isFocused, {
-      toValue: 0,
-      friction: 8,
-      tension: 60,
-      useNativeDriver: false,
-    }).start();
-  };
+  useEffect(() => {
+    const fetch = async () => {
+      try {
+        const response = await gigService.getMyGigs({ limit: 3 });
+        setActiveGigs(response.items.filter((g) => g.status === "open" || g.status === "in_progress"));
+      } catch (err) {
+        console.error("Dashboard gigs load failed:", err);
+      } finally {
+        setGigsLoading(false);
+      }
+    };
+    fetch();
+  }, []);
 
-  const dynamicShadowOpacity = isFocused.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.06, 0.12],
-  });
-
-  return (
-    <FlowScreen>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* --- Header Section --- */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[
-              styles.avatarBtn,
-              { borderColor: palette.borderLight || palette.border },
-            ]}
-          >
-            <Avatar source={people.alex} size={40} />
-          </TouchableOpacity>
-
-          <T
-            weight="medium"
-            color={palette.subText}
-            style={styles.headerTitleSub}
-          >
-            Find Your
-          </T>
-          <T weight="bold" color={palette.text} style={styles.headerTitleMain}>
-            Freelancer
-          </T>
-        </View>
-
-        {/* --- Search Section --- */}
-        <View style={styles.searchSection}>
-          <Animated.View
-            style={[
-              styles.searchBox,
-              {
-                backgroundColor: isDark ? palette.surface : "#FFFFFF",
-                borderColor: isDark ? palette.borderLight : "rgba(0,0,0,0.05)",
-                borderWidth: isDark ? 1 : 1,
-                shadowColor: "#000",
-                shadowOpacity: dynamicShadowOpacity,
-                shadowRadius: 16,
-                shadowOffset: { width: 0, height: 8 },
-                elevation: 4,
-              },
-            ]}
-          >
-            <Ionicons
-              name="search"
-              size={22}
-              color={palette.subText}
-              style={styles.searchIcon}
-            />
-            <View style={{ flex: 1, justifyContent: "center" }}>
-              {!isInputFocused && searchText.length === 0 && (
-                <Animated.View
-                  style={{
-                    flex: 1,
-                    opacity: fadeAnim,
-                    position: "absolute",
-                    width: "100%",
-                  }}
-                  pointerEvents="none"
-                >
-                  <T
-                    weight="medium"
-                    color={palette.subText}
-                    style={styles.placeholderText}
-                  >
-                    {placeholders[placeholderIndex]}
-                  </T>
-                </Animated.View>
-              )}
-              <TextInput
-                style={[styles.searchInput, { color: palette.text }]}
-                onFocus={handleSearchFocus}
-                onBlur={handleSearchBlur}
-                onChangeText={setSearchText}
-                value={searchText}
-                placeholderTextColor="transparent"
-              />
-            </View>
-            <TouchableOpacity activeOpacity={0.7} style={styles.filterBtn}>
-              <Ionicons name="options" size={18} color="#FFFFFF" />
-            </TouchableOpacity>
-          </Animated.View>
-        </View>
-
-        {/* --- Most Popular Section --- */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <T weight="bold" color={palette.text} style={styles.sectionTitle}>
-              Most Popular
-            </T>
-          </View>
-          <View style={styles.categoriesGrid}>
-            {popularCategories.map((cat) => (
-              <TouchableOpacity
-                key={cat.id}
-                activeOpacity={0.75}
-                style={styles.gridItemWrapper}
-              >
-                <SurfaceCard
-                  style={[
-                    styles.gridItem,
-                    {
-                      backgroundColor: isDark ? palette.surface : "#FFFFFF",
-                      borderColor: palette.borderLight || "transparent",
-                    },
-                  ]}
-                >
-                  <View
-                    style={[styles.iconBox, { backgroundColor: cat.bgLight }]}
-                  >
-                    <Ionicons
-                      name={cat.icon as any}
-                      size={28}
-                      color={cat.color}
-                    />
-                  </View>
-                  <T
-                    weight="semiBold"
-                    color={palette.text}
-                    style={styles.catTitle}
-                  >
-                    {cat.title}
-                  </T>
-                </SurfaceCard>
-              </TouchableOpacity>
+  const renderFreelancer = ({ item }: { item: SearchAccount }) => (
+    <TouchableOpacity
+      style={[styles.freelancerCard, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}
+      onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${item.id}`)}
+      activeOpacity={0.8}
+    >
+      <Avatar source={item.avatar_url ? { uri: item.avatar_url } : undefined} size={50} />
+      <View style={styles.freelancerInfo}>
+        <T weight="bold" color={palette.text} style={styles.freelancerName}>
+          {item.display_name}
+        </T>
+        <T weight="medium" color={palette.subText} style={styles.freelancerBio} numberOfLines={1}>
+          {item.bio}
+        </T>
+        {item.skills && item.skills.length > 0 && (
+          <View style={styles.skillsRow}>
+            {item.skills.slice(0, 3).map((skill, index) => (
+              <View key={index} style={[styles.skillTag, { backgroundColor: palette.accentSoft }]}>
+                <T weight="medium" color={palette.accent} style={styles.skillText}>{skill}</T>
+              </View>
             ))}
           </View>
-        </View>
+        )}
+      </View>
+      <View style={styles.freelancerRight}>
+        {item.rating && (
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={14} color="#F4C430" />
+            <T weight="semiBold" color={palette.text} style={styles.ratingText}>{item.rating}</T>
+          </View>
+        )}
+        <Ionicons name="chevron-forward" size={20} color={palette.subText} />
+      </View>
+    </TouchableOpacity>
+  );
 
-        {/* --- Active Gigs Section --- */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <T weight="bold" color={palette.text} style={styles.sectionTitle}>
-              Active Gigs
-            </T>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => nav.push("/freelancer-stack/my-gigs")}
-            >
-              <T weight="bold" color={palette.accent} style={styles.seeAllText}>
-                See All
+  return (
+    <FlowScreen scroll={false}>
+      {isSearching ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* ─── Search Header ─── */}
+          <View style={[styles.header, { paddingTop: insets.top + SP._32 }]}>
+            <View>
+              <T weight="bold" color={palette.text} style={styles.headerMain}>
+                Search Results
               </T>
-            </TouchableOpacity>
+              <T weight="medium" color={palette.subText} style={styles.searchQuery}>
+                "{searchText}"
+              </T>
+            </View>
           </View>
 
-          {activeGigs.map((gig, index) => (
-            <TouchableOpacity
-              key={index}
-              activeOpacity={0.8}
-              style={styles.gigCardWrapper}
-            >
-              <SurfaceCard
-                style={[
-                  styles.gigCard,
-                  {
-                    backgroundColor: isDark ? palette.surface : "#FFFFFF",
-                    borderColor: palette.borderLight || "transparent",
-                  },
-                ]}
-              >
-                <View style={styles.gigTop}>
-                  <View style={{ flex: 1, paddingRight: 16 }}>
-                    <T
-                      weight="bold"
-                      color={palette.text}
-                      style={styles.gigTitle}
-                    >
-                      {gig.title}
-                    </T>
-                    <T
-                      weight="medium"
-                      color={palette.subText}
-                      style={styles.gigSub}
-                    >
-                      {gig.sub}
-                    </T>
-                  </View>
+          {/* ─── Search Bar ─── */}
+          <View style={styles.searchWrap}>
+            <SearchBar
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholders={[
+                "Find your Reels editor...",
+                "Find your Graphic designer...",
+                "Find your Marketing manager...",
+                "Find your Financial manager...",
+              ]}
+            />
+          </View>
+
+          {/* ─── Search Results ─── */}
+          {searching ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="large" color={palette.accent} />
+            </View>
+          ) : searchResults.length > 0 ? (
+            <View style={styles.resultsSection}>
+              <T weight="semiBold" color={palette.subText} style={styles.resultsCount}>
+                {searchResults.length} freelancer{searchResults.length !== 1 ? "s" : ""} found
+              </T>
+              {searchResults.map((freelancer) => (
+                <View key={freelancer.id}>
+                  {renderFreelancer({ item: freelancer })}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.noResults}>
+              <Ionicons name="search" size={48} color={palette.subText} />
+              <T weight="semiBold" color={palette.text} style={styles.noResultsText}>
+                No freelancers found
+              </T>
+              <T weight="medium" color={palette.subText} style={styles.noResultsSubtext}>
+                Try searching for different skills or roles
+              </T>
+            </View>
+          )}
+        </ScrollView>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {/* ─── Header ─── */}
+          <View style={[styles.header, { paddingTop: insets.top + SP._32 }]}>
+            <View>
+              <T weight="bold" color={palette.text} style={styles.headerMain}>
+                Find Your
+              </T>
+              <T weight="bold" color={palette.accent} style={styles.headerHighlight}>
+                Freelancer
+              </T>
+            </View>
+          </View>
+
+          {/* ─── Search ─── */}
+          <View style={styles.searchWrap}>
+            <SearchBar
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholders={[
+                "Find your Reels editor...",
+                "Find your Graphic designer...",
+                "Find your Marketing manager...",
+                "Find your Financial manager...",
+              ]}
+            />
+          </View>
+
+          {/* ─── Most Popular ─── */}
+          <View style={styles.section}>
+            <SectionHeader title="Most Popular" />
+            <View style={styles.categoriesGrid}>
+              {popularCategories.map((cat) => (
+                <CategoryCard
+                  key={cat.id}
+                  title={cat.title}
+                  icon={cat.icon}
+                  color={cat.color}
+                  bgColor={cat.bg}
+                  onPress={() => { }}
+                />
+              ))}
+            </View>
+          </View>
+
+          {/* ─── Active Gigs ─── */}
+          <View style={styles.section}>
+            <SectionHeader
+              title="Active Gigs"
+              actionLabel="See All"
+              onAction={() => nav.push("/freelancer-stack/my-gigs")}
+            />
+
+            {gigsLoading ? (
+              <View style={{ paddingVertical: SP._20, alignItems: "center" }}>
+                <ActivityIndicator size="small" color={palette.accent} />
+              </View>
+            ) : activeGigs.length === 0 ? (
+              <View style={{ paddingVertical: SP._20, alignItems: "center" }}>
+                <T weight="medium" color={palette.subText} style={{ fontSize: 14 }}>No active gigs yet</T>
+              </View>
+            ) : (
+              activeGigs.map((gig) => (
+                <TouchableOpacity
+                  key={gig.id}
+                  activeOpacity={1}
+                  style={styles.gigCardWrapper}
+                  onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
+                >
                   <View
                     style={[
-                      styles.badge,
+                      styles.gigCard,
                       {
-                        backgroundColor:
-                          gig.statusTone === "danger"
-                            ? "rgba(255, 59, 48, 0.12)"
-                            : "rgba(42, 99, 246, 0.12)",
+                        backgroundColor: palette.surface,
+                        borderColor: palette.borderLight,
                       },
                     ]}
                   >
-                    <T
-                      weight="bold"
-                      color={
-                        gig.statusTone === "danger" ? "#FF3B30" : "#2A63F6"
-                      }
-                      style={styles.badgeText}
-                    >
-                      {gig.status}
-                    </T>
-                  </View>
-                </View>
-
-                {/* Styled Divider */}
-                <View
-                  style={[
-                    styles.divider,
-                    {
-                      backgroundColor:
-                        palette.borderLight || "rgba(0,0,0,0.05)",
-                    },
-                  ]}
-                />
-
-                <View style={styles.gigBottom}>
-                  <View style={styles.avatarStack}>
-                    {gig.avatars.map((avatar, idx) => (
+                    <View style={styles.gigTop}>
+                      <View style={styles.gigInfo}>
+                        <T weight="bold" color={palette.text} style={styles.gigTitle}>
+                          {gig.title}
+                        </T>
+                        <T weight="medium" color={palette.subText} style={styles.gigSub}>
+                          ₹{Number(gig.budget_min).toLocaleString()} – ₹{Number(gig.budget_max).toLocaleString()}
+                        </T>
+                      </View>
                       <View
-                        key={idx}
                         style={[
-                          styles.avatarRing,
+                          styles.statusBadge,
                           {
-                            marginLeft: idx === 0 ? 0 : -12,
-                            borderColor: isDark ? palette.surface : "#FFFFFF",
+                            backgroundColor:
+                              gig.status === "open"
+                                ? "rgba(52,199,89,0.12)"
+                                : "rgba(42,99,246,0.12)",
                           },
                         ]}
                       >
-                        <Avatar source={avatar} size={28} />
+                        <T
+                          weight="bold"
+                          color={gig.status === "open" ? "#34C759" : "#2A63F6"}
+                          style={styles.statusText}
+                        >
+                          {gig.status === "open" ? "HIRING" : "IN PROGRESS"}
+                        </T>
                       </View>
-                    ))}
+                    </View>
+
+                    <View style={[styles.divider, { backgroundColor: palette.borderLight }]} />
+
+                    <View style={styles.gigBottom}>
+                      <T weight="semiBold" color={palette.subText} style={styles.gigMetric}>
+                        {gig.proposals_count} proposal{gig.proposals_count !== 1 ? "s" : ""}
+                      </T>
+                    </View>
                   </View>
-                  <T
-                    weight="semiBold"
-                    color={palette.subText}
-                    style={styles.gigMetricText}
-                  >
-                    {gig.metric}
-                  </T>
-                </View>
-              </SurfaceCard>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </ScrollView>
+      )}
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingBottom: 64, // Space for floating tab bar if added later
+    paddingBottom: SP._64,
   },
-  /* --- Typography & Spacing System (8pt based) --- */
   header: {
-    paddingTop: 64, // 8 * 8
-    paddingHorizontal: 24, // 8 * 3
-    paddingBottom: 24,
+    paddingHorizontal: SCREEN_PADDING,
+    paddingBottom: SP._16,
   },
-  avatarBtn: {
-    alignSelf: "flex-end",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderRadius: 22,
-    padding: 2,
+  headerMain: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.5,
   },
-  headerTitleSub: {
-    fontSize: 24,
-    lineHeight: 32,
-    letterSpacing: -0.4,
-    opacity: 0.8,
+  headerHighlight: {
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.5,
+    marginTop: 2,
   },
-  headerTitleMain: {
-    fontSize: 40,
-    lineHeight: 48,
-    letterSpacing: -1.2,
+  searchQuery: {
+    fontSize: 16,
     marginTop: 4,
   },
-
-  /* --- Search Bar Upgrade --- */
-  searchSection: {
-    paddingHorizontal: 24,
-    marginBottom: 32, // 8 * 4
+  searchWrap: {
+    paddingHorizontal: SCREEN_PADDING,
+    marginBottom: SP._24,
   },
-  searchBox: {
+  loadingWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: SP._40,
+  },
+  resultsSection: {
+    paddingHorizontal: SCREEN_PADDING,
+  },
+  resultsCount: {
+    fontSize: 14,
+    marginBottom: SP._16,
+  },
+  freelancerCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20, // Better pill shape ratio
-    paddingLeft: 20,
-    paddingRight: 8,
-    height: 64,
+    padding: SP._16,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    marginBottom: SP._12,
+    ...SHADOWS.card,
   },
-  searchIcon: {
-    marginRight: 12,
-  },
-  searchInput: {
+  freelancerInfo: {
     flex: 1,
-    fontSize: 16,
-    fontFamily: Platform.OS === "ios" ? "System" : "Roboto",
-    fontWeight: "500",
-    height: "100%",
+    marginLeft: SP._12,
+    marginRight: SP._8,
   },
-  placeholderText: {
+  freelancerName: {
     fontSize: 16,
   },
-  filterBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 16, // Squircle geometry
-    backgroundColor: "#1C1C1E", // Premium dark contrast
+  freelancerBio: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  skillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: SP._8,
+  },
+  skillTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  skillText: {
+    fontSize: 11,
+  },
+  freelancerRight: {
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  ratingText: {
+    fontSize: 14,
+  },
+  noResults: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 8,
+    paddingTop: SP._60,
+    paddingHorizontal: SCREEN_PADDING,
   },
-
-  /* --- Section Headers --- */
-  sectionContainer: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
+  noResultsText: {
+    fontSize: 18,
+    marginTop: SP._16,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
+  noResultsSubtext: {
+    fontSize: 14,
+    marginTop: 4,
+    textAlign: "center",
   },
-  sectionTitle: {
-    fontSize: 22,
-    letterSpacing: -0.6,
+  section: {
+    paddingHorizontal: SCREEN_PADDING,
+    marginBottom: SP._32,
   },
-  seeAllText: {
-    fontSize: 15,
-  },
-
-  /* --- Most Popular Grid --- */
   categoriesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 16, // 8 * 2
+    gap: SP._16,
   },
-  gridItemWrapper: {
-    width: "47%",
-  },
-  gridItem: {
-    padding: 24,
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    borderRadius: 24,
-    minHeight: 160,
-    // Soft standard shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 2,
-    borderWidth: 1, // Will be overridden if light mode
-  },
-  iconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 20, // Squircle
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  catTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    letterSpacing: -0.3,
-  },
-
-  /* --- Active Gigs Section --- */
   gigCardWrapper: {
-    marginBottom: 16,
+    marginBottom: SP._12,
   },
   gigCard: {
-    padding: 20,
-    borderRadius: 24,
+    padding: SP._16,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
-    shadowRadius: 24,
-    elevation: 3,
   },
   gigTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
   },
+  gigInfo: {
+    flex: 1,
+    paddingRight: SP._16,
+  },
   gigTitle: {
-    fontSize: 18,
-    lineHeight: 24,
-    letterSpacing: -0.5,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.2,
   },
   gigSub: {
-    fontSize: 14,
-    marginTop: 6, // 8pt related spacing
+    fontSize: 13,
+    marginTop: SP._8,
     opacity: 0.7,
   },
-  badge: {
-    borderRadius: 12, // Improved badge pill
+  statusBadge: {
+    borderRadius: RADIUS.pill,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
   },
-  badgeText: {
+  statusText: {
     fontSize: 11,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   divider: {
     height: 1,
-    marginVertical: 20,
+    marginVertical: SP._16,
     borderRadius: 1,
   },
   gigBottom: {
@@ -566,7 +462,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 20,
   },
-  gigMetricText: {
+  gigMetric: {
     fontSize: 14,
   },
 });

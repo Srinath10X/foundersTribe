@@ -12,6 +12,8 @@ import {
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { StatCard } from "@/components/freelancer/StatCard";
+import { SP, RADIUS } from "@/components/freelancer/designTokens";
 
 const highlights = [
   { label: "Startup", value: "ShopHub" },
@@ -85,12 +87,7 @@ export default function FounderProfileScreen() {
         {metricRows.map((row, rowIdx) => (
           <View key={`row-${rowIdx}`} style={styles.metricRow}>
             {row.map((m) => (
-              <SurfaceCard key={m.label} style={styles.metricCard}>
-                <T weight="semiBold" color={palette.subText} style={styles.metricLabel} numberOfLines={1}>
-                  {m.label.toUpperCase()}
-                </T>
-                <T weight="bold" color={palette.text} style={styles.metricValue}>{m.value}</T>
-              </SurfaceCard>
+              <StatCard key={m.label} label={m.label} value={m.value} />
             ))}
           </View>
         ))}
@@ -117,7 +114,7 @@ export default function FounderProfileScreen() {
 
       <View style={styles.sectionHead}>
         <T weight="bold" color={palette.text} style={styles.sectionTitle}>Active Postings</T>
-        <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
+        <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}>
           <T weight="bold" color={palette.accent} style={styles.link}>See All</T>
         </TouchableOpacity>
       </View>
@@ -138,17 +135,20 @@ export default function FounderProfileScreen() {
         ))}
       </View>
 
-      <T weight="bold" color={palette.text} style={[styles.sectionTitle, { marginHorizontal: 18, marginTop: 12 }]}>Recent Reviews</T>
+      <T weight="bold" color={palette.text} style={[styles.sectionTitle, { marginHorizontal: SP._20, marginTop: SP._20 }]}>Recent Reviews</T>
       <View style={styles.listWrap}>
         {[{ n: "Sarah Jenkins", r: "Product Designer", d: people.female1, t: "Clear communicator, fast decisions, and organized collaboration." }, { n: "David Chen", r: "Full Stack Engineer", d: people.david, t: "Great product sense and very respectful founder to work with." }].map((r) => (
           <SurfaceCard key={r.n} style={styles.reviewCard}>
             <View style={styles.revTop}>
-              <Avatar source={r.d} size={34} />
-              <View style={{ flex: 1, minWidth: 0 }}>
+              <Avatar source={r.d} size={40} />
+              <View style={styles.revText}>
                 <T weight="bold" color={palette.text} style={styles.revName}>{r.n}</T>
                 <T weight="medium" color={palette.subText} style={styles.revRole}>{r.r}</T>
               </View>
-              <T weight="bold" color={palette.warning} style={styles.star}>★★★★★</T>
+              <View style={styles.ratingWrap}>
+                <Ionicons name="star" size={14} color={palette.warning} />
+                <T weight="bold" color={palette.text} style={styles.star}>5.0</T>
+              </View>
             </View>
             <T color={palette.text} style={styles.revBody}>"{r.t}"</T>
           </SurfaceCard>
@@ -159,57 +159,58 @@ export default function FounderProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  heroCard: { marginHorizontal: 18, marginTop: 10, padding: 14 },
+  heroCard: { marginHorizontal: SP._16, marginTop: SP._16, padding: SP._16 },
   headerWrap: { alignItems: "center" },
   avatarWrap: { position: "relative" },
   verify: {
     position: "absolute",
     right: 2,
     bottom: 2,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
   },
-  name: { fontSize: 24, marginTop: 8 },
-  role: { fontSize: 14, marginTop: 2 },
-  bio: { fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 8, maxWidth: 330 },
-  metaRow: { flexDirection: "row", gap: 14, marginTop: 10, flexWrap: "wrap", justifyContent: "center" },
-  metaItem: { flexDirection: "row", alignItems: "center", gap: 4 },
-  metaText: { fontSize: 12 },
+  name: { fontSize: 24, marginTop: SP._12, letterSpacing: -0.4 },
+  role: { fontSize: 14, marginTop: SP._2 },
+  bio: { fontSize: 14, lineHeight: 22, textAlign: "center", marginTop: SP._12, maxWidth: 330 },
+  metaRow: { flexDirection: "row", gap: SP._16, marginTop: SP._12, flexWrap: "wrap", justifyContent: "center" },
+  metaItem: { flexDirection: "row", alignItems: "center", gap: SP._8 },
+  metaText: { fontSize: 13 },
 
-  metricsGrid: { gap: 8, paddingHorizontal: 18, marginTop: 10 },
-  metricRow: { flexDirection: "row", gap: 8 },
-  metricCard: { flex: 1, minHeight: 78, justifyContent: "center", alignItems: "center", paddingVertical: 10, paddingHorizontal: 8 },
-  metricLabel: { fontSize: 10, letterSpacing: 0.7 },
-  metricValue: { fontSize: 18, marginTop: 4 },
+  metricsGrid: { gap: SP._16, paddingHorizontal: SP._16, marginTop: SP._16 },
+  metricRow: { flexDirection: "row", gap: SP._16 },
 
-  card: { marginHorizontal: 18, marginTop: 10, padding: 12 },
-  cardTitle: { fontSize: 16 },
-  detailsGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 10, rowGap: 10 },
-  detailCell: { width: "50%", paddingRight: 8 },
-  detailLabel: { fontSize: 11 },
-  detailValue: { fontSize: 13, marginTop: 2 },
-  row: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 8 },
-  rowText: { fontSize: 13, flex: 1 },
+  card: { marginHorizontal: SP._16, marginTop: SP._16, padding: SP._16 },
+  cardTitle: { fontSize: 16, letterSpacing: -0.2 },
+  detailsGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: SP._16, rowGap: SP._16 },
+  detailCell: { width: "50%", paddingRight: SP._8 },
+  detailLabel: { fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase" },
+  detailValue: { fontSize: 14, marginTop: SP._4 },
+  row: { flexDirection: "row", alignItems: "center", gap: SP._8, marginTop: SP._12 },
+  rowText: { fontSize: 14, flex: 1, lineHeight: 20 },
 
-  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingHorizontal: 18 },
-  sectionTitle: { fontSize: 18 },
-  link: { fontSize: 13 },
+  sectionHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: SP._24, paddingHorizontal: SP._16 },
+  sectionTitle: { fontSize: 18, letterSpacing: -0.2 },
+  link: { fontSize: 14 },
 
-  listWrap: { paddingHorizontal: 18, marginTop: 8, gap: 8 },
-  postCard: { padding: 12 },
-  postTitle: { fontSize: 16, flexShrink: 1 },
-  postMeta: { fontSize: 12, marginTop: 3 },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
-  tag: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
+  listWrap: { paddingHorizontal: SP._16, marginTop: SP._12, gap: SP._12 },
+  postCard: { padding: SP._16, borderRadius: RADIUS.lg },
+  postTitle: { fontSize: 15, flexShrink: 1, letterSpacing: -0.2 },
+  postMeta: { fontSize: 13, marginTop: SP._4 },
+  tags: { flexDirection: "row", flexWrap: "wrap", gap: SP._8, marginTop: SP._12 },
+  tag: { borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 5 },
   tagTxt: { fontSize: 11 },
 
-  reviewCard: { padding: 12 },
-  revTop: { flexDirection: "row", alignItems: "center", gap: 8 },
+  reviewCard: { padding: SP._16 },
+  revTop: { flexDirection: "row", alignItems: "center", gap: SP._12 },
+  revText: { flex: 1, minWidth: 0 },
   revName: { fontSize: 14 },
-  revRole: { fontSize: 11 },
-  star: { fontSize: 12 },
-  revBody: { marginTop: 8, fontSize: 13, lineHeight: 18 },
+  revRole: { fontSize: 12, marginTop: 2 },
+  ratingWrap: { flexDirection: "row", alignItems: "center", gap: 4 },
+  star: { fontSize: 14 },
+  revBody: { marginTop: SP._12, fontSize: 14, lineHeight: 22, fontStyle: "italic" },
 });
