@@ -1,196 +1,278 @@
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useRouter } from "expo-router";
+import React, { useMemo, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
-import {
-  Avatar,
-  FlowScreen,
-  FlowTopBar,
-  T,
-  people,
-  useFlowNav,
-  useFlowPalette,
-} from "@/components/community/freelancerFlow/shared";
-import { EmptyState } from "@/components/freelancer/EmptyState";
-import { SP, RADIUS, SHADOWS, SCREEN_PADDING } from "@/components/freelancer/designTokens";
+import { Avatar, FlowScreen, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 
-const threads = [
+type Thread = {
+  id: string;
+  name: string;
+  message: string;
+  time: string;
+  lastMessageAt: string;
+  unread: number;
+  avatar?: string;
+};
+
+const THREADS: Thread[] = [
   {
+    id: "m1",
     name: "Arjun Patel",
-    msg: "Please share updated prototypes today.",
+    message: "Perfect. Send v2 today, I’ll review by 7 PM.",
     time: "10:42 AM",
+    lastMessageAt: "2026-02-24T10:42:00+05:30",
     unread: 2,
     avatar: people.alex,
-    online: true,
   },
   {
+    id: "m2",
     name: "Priya Sharma",
-    msg: "Looks good. Let us finalize tomorrow.",
-    time: "Yesterday",
+    message: "Yes, this works. Let’s freeze and ship this build.",
+    time: "9:18 AM",
+    lastMessageAt: "2026-02-24T09:18:00+05:30",
     unread: 0,
     avatar: people.sarah,
-    online: false,
+  },
+  {
+    id: "m3",
+    name: "Nova Labs Team",
+    message: "Milestone approved. Start next phase and share ETA.",
+    time: "Yesterday",
+    lastMessageAt: "2026-02-23T18:30:00+05:30",
+    unread: 1,
+    avatar: people.jordan,
+  },
+  {
+    id: "m4",
+    name: "Helio Commerce",
+    message: "Can we do a quick call about timeline changes?",
+    time: "Mon",
+    lastMessageAt: "2026-02-22T11:05:00+05:30",
+    unread: 0,
+    avatar: people.david,
   },
 ];
 
 export default function TalentMessagesScreen() {
-  const { palette, isDark } = useFlowPalette();
-  const nav = useFlowNav();
+  const { palette } = useFlowPalette();
+  const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
+  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = !q
+      ? THREADS
+      : THREADS.filter(
+      (thread) =>
+        thread.name.toLowerCase().includes(q) ||
+        thread.message.toLowerCase().includes(q),
+    );
+    return [...base].sort(
+      (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime(),
+    );
+  }, [query]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 450);
+  };
 
   return (
-    <FlowScreen>
-      <FlowTopBar title="Messages" showLeft={false} right="create-outline" onRightPress={() => { }} />
+    <FlowScreen scroll={false}>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+        <T weight="medium" color={palette.text} style={styles.pageTitle}>
+          Messages
+        </T>
+        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
+          Your recent conversations
+        </T>
+      </View>
 
-      <View style={styles.content}>
-        {threads.length === 0 ? (
-          <EmptyState
-            icon="chatbubble-outline"
-            title="No Messages Yet"
-            subtitle="Start a conversation with a client or freelancer."
-          />
-        ) : (
-          threads.map((t) => (
-            <TouchableOpacity
-              key={t.name}
-              onPress={() => nav.push(`/talent-stack/chat-thread?title=${encodeURIComponent(t.name)}`)}
-              activeOpacity={1}
-            >
-              <View
-                style={[
-                  styles.card,
-                  {
-                    backgroundColor: palette.surface,
-                    borderColor: t.unread > 0 ? palette.accent + '22' : palette.borderLight,
-                  },
-                ]}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
+      >
+        <View style={styles.content}>
+          <View style={[styles.search, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
+            <Ionicons name="search" size={15} color={palette.subText} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search messages"
+              placeholderTextColor={palette.subText}
+              style={[styles.searchInput, { color: palette.text }]}
+            />
+            {query.length > 0 ? (
+              <TouchableOpacity onPress={() => setQuery("")}>
+                <Ionicons name="close-circle" size={16} color={palette.subText} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <View style={styles.list}>
+            {filtered.map((thread) => (
+              <TouchableOpacity
+                key={thread.id}
+                style={[styles.rowPressable, { borderBottomColor: palette.borderLight }]}
+                activeOpacity={0.88}
+                onPress={() =>
+                  router.push(
+                    `/(role-pager)/(freelancer-tabs)/thread/${encodeURIComponent(thread.id)}?title=${encodeURIComponent(thread.name)}&avatar=${encodeURIComponent(thread.avatar || people.alex)}`,
+                  )
+                }
               >
                 <View style={styles.row}>
-                  {/* Avatar with online dot */}
-                  <View style={styles.avatarWrap}>
-                    <Avatar source={t.avatar} size={48} />
-                    {t.online && (
-                      <View style={[styles.onlineDot, { borderColor: palette.surface }]}>
-                        <View style={styles.onlineDotInner} />
+                  <Avatar source={thread.avatar || people.alex} size={42} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
+                      {thread.name}
+                    </T>
+                    <T weight="regular" color={palette.subText} style={styles.message} numberOfLines={1}>
+                      {thread.message}
+                    </T>
+                  </View>
+                  <View style={styles.metaCol}>
+                    <T weight="regular" color={palette.subText} style={styles.time} numberOfLines={1}>
+                      {thread.time}
+                    </T>
+                    {thread.unread > 0 ? (
+                      <View style={[styles.badge, { backgroundColor: palette.accent }]}>
+                        <T weight="medium" color="#fff" style={styles.badgeText}>
+                          {thread.unread}
+                        </T>
                       </View>
+                    ) : (
+                      <View style={styles.badgeSpacer} />
                     )}
                   </View>
-
-                  {/* Text content */}
-                  <View style={styles.textWrap}>
-                    <View style={styles.nameRow}>
-                      <T
-                        weight={t.unread > 0 ? "bold" : "semiBold"}
-                        color={palette.text}
-                        style={styles.name}
-                        numberOfLines={1}
-                      >
-                        {t.name}
-                      </T>
-                      <T weight="medium" color={palette.mutedText} style={styles.time}>
-                        {t.time}
-                      </T>
-                    </View>
-                    <View style={styles.msgRow}>
-                      <T
-                        weight={t.unread > 0 ? "medium" : "regular"}
-                        color={t.unread > 0 ? palette.text : palette.subText}
-                        style={styles.msg}
-                        numberOfLines={1}
-                      >
-                        {t.msg}
-                      </T>
-                      {t.unread > 0 && (
-                        <View style={[styles.badge, { backgroundColor: palette.accent }]}>
-                          <T weight="bold" color="#fff" style={styles.badgeTxt}>
-                            {t.unread}
-                          </T>
-                        </View>
-                      )}
-                    </View>
-                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {filtered.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="chatbubble-ellipses-outline" size={30} color={palette.subText} />
+              <T weight="medium" color={palette.text} style={styles.emptyTitle}>
+                No messages found
+              </T>
+              <T weight="regular" color={palette.subText} style={styles.emptySub}>
+                Try another search term.
+              </T>
+            </View>
+          ) : null}
+
+          <View style={{ height: tabBarHeight + 16 }} />
+        </View>
+      </ScrollView>
     </FlowScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: SCREEN_PADDING,
-    paddingTop: SP._12,
-    gap: SP._8,
+  header: {
+    paddingTop: 54,
+    paddingHorizontal: 18,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
   },
-  card: {
-    padding: SP._16,
-    borderRadius: RADIUS.lg,
+  pageTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+  },
+  pageSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 20,
+    gap: 10,
+  },
+  search: {
+    height: 42,
     borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  list: {
+    marginTop: 2,
+  },
+  rowPressable: {
+    borderBottomWidth: 1,
+    paddingVertical: 10,
   },
   row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: SP._12,
-  },
-  avatarWrap: {
-    position: "relative",
-  },
-  onlineDot: {
-    position: "absolute",
-    bottom: 1,
-    right: 1,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#34C759",
-  },
-  onlineDotInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#34C759",
-  },
-  textWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  nameRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: SP._4,
+    alignItems: "flex-start",
+    gap: 10,
   },
   name: {
-    fontSize: 16,
     flex: 1,
-    marginRight: SP._8,
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: -0.2,
   },
   time: {
-    fontSize: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
-  msgRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: SP._8,
+  message: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 14,
   },
-  msg: {
-    fontSize: 14,
-    flex: 1,
+  metaCol: {
+    width: 64,
+    alignItems: "flex-end",
+    gap: 6,
+    paddingTop: 1,
   },
   badge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: SP._8,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 6,
   },
-  badgeTxt: {
+  badgeText: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  badgeSpacer: {
+    height: 20,
+  },
+  emptyCard: {
+    borderRadius: 12,
+    padding: 22,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  emptyTitle: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  emptySub: {
+    marginTop: 3,
     fontSize: 11,
+    lineHeight: 14,
   },
 });
