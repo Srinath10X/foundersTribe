@@ -549,7 +549,6 @@ export default function TalentDashboardScreen() {
               color={palette.subText}
             />
           </TouchableOpacity>
-          <Avatar source={people.alex} size={48} />
         </View>
       </View>
 
