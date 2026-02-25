@@ -61,6 +61,7 @@ export default function FreelancerTabLayout() {
         name="thread/[threadId]"
         options={{
           href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen

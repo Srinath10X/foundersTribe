@@ -16,7 +16,12 @@ router.post("/", validate(createMessageSchema), async (req, res, next) => {
 
 router.get("/", validate(listMessagesSchema), async (req, res, next) => {
   try {
-    const data = await messageService.listMessages(req.db, req.params.id as string, req.query);
+    const data = await messageService.listMessages(
+      req.db,
+      req.params.id as string,
+      req.user.id,
+      req.query,
+    );
     res.json(data);
   } catch (err) {
     next(err);

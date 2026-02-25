@@ -1,66 +1,62 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { MessageRepository } from "../repositories/messageRepository.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
 import { mapSupabaseError } from "./dbErrorMap.js";
-import { AppError } from "../utils/AppError.js";
-
-async function ensureCanChat(db: SupabaseClient, contractId: string) {
-  const { data: contract, error } = await db
-    .from("contracts")
-    .select("id, status")
-    .eq("id", contractId)
-    .maybeSingle();
-
-  if (error) {
-    throw mapSupabaseError(error, "Failed to validate contract access");
-  }
-
-  if (!contract) {
-    throw new AppError("Contract not found or access denied", 404, "not_found");
-  }
-
-  if (!["active", "completed"].includes(contract.status)) {
-    throw new AppError("Messaging is disabled for this contract state", 422, "validation_error");
-  }
-}
 
 export async function createMessage(db: SupabaseClient, contractId: string, senderId: string, payload: Record<string, any>) {
   try {
-    await ensureCanChat(db, contractId);
-    const repo = new MessageRepository(db);
-    const message = await repo.insertMessage({
-      ...payload,
-      contract_id: contractId,
-      sender_id: senderId,
+    const { data, error } = await db.rpc("create_contract_message_safe", {
+      p_contract_id: contractId,
+      p_user_id: senderId,
+      p_message_type: payload.message_type,
+      p_body: payload.body ?? null,
+      p_file_url: payload.file_url ?? null,
+      p_metadata: payload.metadata ?? {},
     });
+    if (error) throw error;
+    const message = Array.isArray(data) ? data[0] : data;
+    if (!message) {
+      throw new Error("Message create RPC returned no row");
+    }
     return message;
   } catch (error) {
     throw mapSupabaseError(error, "Failed to create message");
   }
 }
 
-export async function listMessages(db: SupabaseClient, contractId: string, query: Record<string, any>) {
-  await ensureCanChat(db, contractId);
-  const repo = new MessageRepository(db);
+export async function listMessages(db: SupabaseClient, contractId: string, userId: string, query: Record<string, any>) {
   const limit: number = Math.min(Number(query.limit || 50), 100);
   const cursor = decodeCursor(query.cursor);
-  const rows = await repo.listMessages(contractId, limit, cursor);
+  try {
+    const { data, error } = await db.rpc("list_contract_messages_safe", {
+      p_contract_id: contractId,
+      p_user_id: userId,
+      p_limit: limit,
+      p_cursor_created_at: cursor?.createdAt ?? null,
+      p_cursor_id: cursor?.id ?? null,
+    });
+    if (error) throw error;
+    const rows = data || [];
 
-  const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
 
-  const nextCursor = hasMore
-    ? encodeCursor(items[items.length - 1].created_at, items[items.length - 1].id)
-    : null;
+    const nextCursor = hasMore
+      ? encodeCursor(items[items.length - 1].created_at, items[items.length - 1].id)
+      : null;
 
-  return { items, next_cursor: nextCursor };
+    return { items, next_cursor: nextCursor };
+  } catch (error) {
+    throw mapSupabaseError(error, "Failed to list messages");
+  }
 }
 
 export async function markMessagesRead(db: SupabaseClient, contractId: string, userId: string) {
   try {
-    await ensureCanChat(db, contractId);
-    const repo = new MessageRepository(db);
-    await repo.markRead(contractId, userId);
+    const { error } = await db.rpc("mark_contract_messages_read_safe", {
+      p_contract_id: contractId,
+      p_user_id: userId,
+    });
+    if (error) throw error;
     return { success: true };
   } catch (error) {
     throw mapSupabaseError(error, "Failed to mark messages read");

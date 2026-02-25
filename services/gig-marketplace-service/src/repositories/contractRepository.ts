@@ -1,10 +1,73 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "../config/supabase.js";
+
+type ContractRow = {
+  id: string;
+  gig_id: string | null;
+  proposal_id: string | null;
+  founder_id: string | null;
+  freelancer_id: string | null;
+  [key: string]: any;
+};
 
 export class ContractRepository {
   db: SupabaseClient;
 
   constructor(db: SupabaseClient) {
     this.db = db;
+  }
+
+  private async hydrateContractRows(rows: ContractRow[]): Promise<any[]> {
+    if (!rows.length) return rows;
+
+    const gigIds = [...new Set(rows.map((row) => row.gig_id).filter(Boolean))] as string[];
+    const proposalIds = [...new Set(rows.map((row) => row.proposal_id).filter(Boolean))] as string[];
+    const participantIds = [
+      ...new Set(
+        rows
+          .flatMap((row) => [row.founder_id, row.freelancer_id])
+          .filter(Boolean),
+      ),
+    ] as string[];
+
+    const [gigsRes, proposalsRes, profilesRes] = await Promise.all([
+      gigIds.length
+        ? supabaseAdmin
+            .from("gigs")
+            .select(
+              "id, title, description, budget_min, budget_max, status, is_remote, location_text, experience_level, founder:user_profiles!gigs_founder_id_fkey(id, full_name, avatar_url, handle), gig_tags(tag_id, tags(id, slug, label))",
+            )
+            .in("id", gigIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      proposalIds.length
+        ? supabaseAdmin
+            .from("proposals")
+            .select("id, proposed_amount, estimated_days, cover_letter")
+            .in("id", proposalIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      participantIds.length
+        ? supabaseAdmin
+            .from("user_profiles")
+            .select("id, full_name, avatar_url, handle")
+            .in("id", participantIds)
+        : Promise.resolve({ data: [], error: null } as any),
+    ]);
+
+    if (gigsRes.error) throw gigsRes.error;
+    if (proposalsRes.error) throw proposalsRes.error;
+    if (profilesRes.error) throw profilesRes.error;
+
+    const gigMap = new Map((gigsRes.data || []).map((item: any) => [item.id, item]));
+    const proposalMap = new Map((proposalsRes.data || []).map((item: any) => [item.id, item]));
+    const profileMap = new Map((profilesRes.data || []).map((item: any) => [item.id, item]));
+
+    return rows.map((row): any => ({
+      ...row,
+      gig: row.gig_id ? gigMap.get(row.gig_id) || null : null,
+      proposal: row.proposal_id ? proposalMap.get(row.proposal_id) || null : null,
+      founder: row.founder_id ? profileMap.get(row.founder_id) || null : null,
+      freelancer: row.freelancer_id ? profileMap.get(row.freelancer_id) || null : null,
+    }));
   }
 
   async listContracts(filters: Record<string, any>, limit: number, cursor: { createdAt: string, id: string } | null) {
@@ -23,17 +86,19 @@ export class ContractRepository {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+    return this.hydrateContractRows((data || []) as ContractRow[]);
   }
 
   async getContractById(id: string) {
     const { data, error } = await this.db
       .from("contracts")
-      .select("*, gigs(id, title, status), founder:user_profiles!contracts_founder_id_fkey(id, full_name, avatar_url, handle), freelancer:user_profiles!contracts_freelancer_id_fkey(id, full_name, avatar_url, handle)")
+      .select("*")
       .eq("id", id)
       .maybeSingle();
     if (error) throw error;
-    return data;
+    if (!data) return data;
+    const [enriched] = await this.hydrateContractRows([data as ContractRow]);
+    return enriched;
   }
 
   async markComplete(id: string) {

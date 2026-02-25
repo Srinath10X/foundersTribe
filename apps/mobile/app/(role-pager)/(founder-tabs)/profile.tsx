@@ -5,6 +5,7 @@ import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
+import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
@@ -33,6 +34,7 @@ type ProfileData = {
   business_ideas?: string[] | null;
   idea_video_url?: string | null;
   idea_video_urls?: string[] | null;
+  updated_at?: string | null;
 };
 
 function toTitleCase(value: string) {
@@ -85,9 +87,23 @@ async function resolveAvatar(candidate: unknown, userId: string): Promise<string
   return data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : null;
 }
 
+function compactLocation(raw: unknown): string | null {
+  if (typeof raw === "string") {
+    const value = raw.trim();
+    return value.length > 0 ? value : null;
+  }
+  if (raw && typeof raw === "object") {
+    const city = typeof (raw as any).city === "string" ? (raw as any).city.trim() : "";
+    const state = typeof (raw as any).state === "string" ? (raw as any).state.trim() : "";
+    const country = typeof (raw as any).country === "string" ? (raw as any).country.trim() : "";
+    const line = [city, state, country].filter(Boolean).join(", ");
+    return line.length > 0 ? line : null;
+  }
+  return null;
+}
+
 function FieldRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string | null }) {
   const { palette } = useFlowPalette();
-  if (!value) return null;
 
   return (
     <View style={styles.fieldRow}>
@@ -99,7 +115,7 @@ function FieldRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap
           {label}
         </T>
         <T weight="medium" color={palette.text} style={styles.fieldValue} numberOfLines={2}>
-          {value}
+          {value || "Not provided"}
         </T>
       </View>
     </View>
@@ -115,54 +131,61 @@ export default function FreelancerProfileScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async () => {
-    const userId = session?.user?.id || "";
-    const meta = session?.user?.user_metadata || {};
-    const metaProfile = meta?.profile_data || {};
+    setLoading(true);
+    try {
+      const userId = session?.user?.id || "";
+      const meta = session?.user?.user_metadata || {};
+      const metaProfile = meta?.profile_data || {};
 
-    let db: any = null;
-    if (session?.access_token) {
-      try {
-        db = await tribeApi.getMyProfile(session.access_token);
-      } catch {
-        db = null;
+      let db: any = null;
+      if (session?.access_token) {
+        try {
+          db = await tribeApi.getMyProfile(session.access_token);
+        } catch {
+          db = null;
+        }
       }
+
+      const resolvedAvatar =
+        (await resolveAvatar(db?.photo_url || db?.avatar_url || meta?.avatar_url || meta?.picture || null, userId)) ||
+        people.alex;
+
+      const merged: ProfileData = {
+        id: userId,
+        display_name: normalizeName(db?.display_name || meta?.full_name || meta?.name, session?.user?.email),
+        username: db?.username || null,
+        bio: db?.bio ?? metaProfile?.bio ?? null,
+        avatar_url: resolvedAvatar,
+        photo_url: resolvedAvatar,
+        user_type: (db?.user_type || meta?.user_type || meta?.role || "freelancer") as any,
+        contact: db?.contact ?? metaProfile?.contact ?? null,
+        address: db?.address ?? metaProfile?.address ?? null,
+        location: compactLocation(db?.location ?? metaProfile?.location),
+        linkedin_url: db?.linkedin_url ?? metaProfile?.linkedin_url ?? null,
+        role: db?.role ?? metaProfile?.role ?? null,
+        previous_works:
+          (Array.isArray(db?.previous_works) && db.previous_works) ||
+          (Array.isArray(metaProfile?.previous_works) ? metaProfile.previous_works : []),
+        social_links:
+          (Array.isArray(db?.social_links) && db.social_links) ||
+          (Array.isArray(metaProfile?.social_links) ? metaProfile.social_links : []),
+        business_ideas:
+          (Array.isArray(db?.business_ideas) && db.business_ideas) ||
+          (Array.isArray(metaProfile?.business_ideas) ? metaProfile.business_ideas : []),
+        idea_video_url: db?.idea_video_url ?? metaProfile?.idea_video_url ?? null,
+        idea_video_urls:
+          (Array.isArray(db?.idea_video_urls) && db.idea_video_urls) ||
+          (Array.isArray(metaProfile?.idea_video_urls) ? metaProfile.idea_video_urls : []),
+        updated_at: db?.updated_at ?? null,
+      };
+
+      setProfile(merged);
+    } finally {
+      setLoading(false);
     }
-
-    const resolvedAvatar =
-      (await resolveAvatar(db?.photo_url || db?.avatar_url || meta?.avatar_url || meta?.picture || null, userId)) ||
-      people.alex;
-
-    const merged: ProfileData = {
-      id: userId,
-      display_name: normalizeName(db?.display_name || meta?.full_name || meta?.name, session?.user?.email),
-      username: db?.username || null,
-      bio: db?.bio ?? metaProfile?.bio ?? null,
-      avatar_url: resolvedAvatar,
-      photo_url: resolvedAvatar,
-      user_type: (db?.user_type || meta?.user_type || meta?.role || "freelancer") as any,
-      contact: db?.contact ?? metaProfile?.contact ?? null,
-      address: db?.address ?? metaProfile?.address ?? null,
-      location: db?.location ?? metaProfile?.location ?? null,
-      linkedin_url: db?.linkedin_url ?? metaProfile?.linkedin_url ?? null,
-      role: db?.role ?? metaProfile?.role ?? null,
-      previous_works:
-        (Array.isArray(db?.previous_works) && db.previous_works) ||
-        (Array.isArray(metaProfile?.previous_works) ? metaProfile.previous_works : []),
-      social_links:
-        (Array.isArray(db?.social_links) && db.social_links) ||
-        (Array.isArray(metaProfile?.social_links) ? metaProfile.social_links : []),
-      business_ideas:
-        (Array.isArray(db?.business_ideas) && db.business_ideas) ||
-        (Array.isArray(metaProfile?.business_ideas) ? metaProfile.business_ideas : []),
-      idea_video_url: db?.idea_video_url ?? metaProfile?.idea_video_url ?? null,
-      idea_video_urls:
-        (Array.isArray(db?.idea_video_urls) && db.idea_video_urls) ||
-        (Array.isArray(metaProfile?.idea_video_urls) ? metaProfile.idea_video_urls : []),
-    };
-
-    setProfile(merged);
   }, [session]);
 
   const onRefresh = useCallback(async () => {
@@ -203,8 +226,11 @@ export default function FreelancerProfileScreen() {
     const value = String(url || "").trim();
     if (!value) return;
     const safe = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    Linking.openURL(safe).catch(() => {});
+    Linking.canOpenURL(safe).then((canOpen) => {
+      if (canOpen) Linking.openURL(safe).catch(() => {});
+    });
   };
+  const lastUpdatedLabel = profile?.updated_at ? new Date(profile.updated_at).toLocaleDateString() : null;
 
   return (
     <FlowScreen scroll={false}>
@@ -222,6 +248,13 @@ export default function FreelancerProfileScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
       >
         <View style={styles.content}>
+          {loading && !profile ? (
+            <>
+              <SurfaceCard style={styles.sectionCard}><LoadingState rows={2} /></SurfaceCard>
+              <SurfaceCard style={styles.sectionCard}><LoadingState rows={3} /></SurfaceCard>
+              <SurfaceCard style={styles.sectionCard}><LoadingState rows={3} /></SurfaceCard>
+            </>
+          ) : null}
           <SurfaceCard style={styles.heroCard}>
             <View style={styles.heroTop}>
               <Avatar source={profile?.photo_url || people.alex} size={64} />
@@ -240,6 +273,9 @@ export default function FreelancerProfileScreen() {
 
             <T weight="regular" color={palette.subText} style={styles.bioText}>
               {profile?.bio || "Add a short bio to make your profile stronger."}
+            </T>
+            <T weight="regular" color={palette.subText} style={styles.updatedMeta}>
+              Last updated: {lastUpdatedLabel || "Not available"}
             </T>
 
             <View style={styles.heroActions}>
@@ -363,6 +399,7 @@ export default function FreelancerProfileScreen() {
                     key={`${item.platform || "link"}-${index}`}
                     style={[styles.linkPill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
                     activeOpacity={0.82}
+                    onPress={() => openUrl(String(item.url || ""))}
                   >
                     <Ionicons name="link-outline" size={13} color={palette.subText} />
                     <T weight="regular" color={palette.text} style={styles.linkText} numberOfLines={1}>
@@ -470,6 +507,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 12,
     lineHeight: 17,
+  },
+  updatedMeta: {
+    marginTop: 6,
+    fontSize: 10,
+    lineHeight: 13,
   },
   editBtn: {
     flex: 1,

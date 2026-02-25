@@ -279,7 +279,7 @@ const TabItem = memo(function TabItem({
   useEffect(() => {
     iconScale.value = withSpring(isFocused ? 1.07 : 1, SPRING_CONFIG);
     textOpacity.value = withTiming(isFocused ? 1 : 0.55, { duration: 200 });
-  }, [isFocused]);
+  }, [iconScale, isFocused, textOpacity]);
 
   const animatedIconStyle = useAnimatedStyle(() => ({
     transform: [
@@ -400,7 +400,7 @@ const SlidingBubble = memo(function SlidingBubble({
 
   useEffect(() => {
     translateX.value = withSpring(activeIndex * tabWidth, SPRING_CONFIG);
-  }, [activeIndex, tabWidth]);
+  }, [activeIndex, tabWidth, translateX]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -501,7 +501,12 @@ export default function LiquidTabBar({
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, session?.access_token]);
+  }, [
+    session?.user?.id,
+    session?.access_token,
+    session?.user?.user_metadata?.role,
+    session?.user?.user_metadata?.user_type,
+  ]);
 
   const showSwitchLeft = canSwitchMode && !isFounder;
   const showSwitchRight = canSwitchMode && isFounder;
@@ -511,6 +516,17 @@ export default function LiquidTabBar({
   const onTabsLayout = useCallback((e: LayoutChangeEvent) => {
     setMeasuredWidth(e.nativeEvent.layout.width);
   }, []);
+
+  const shouldHideTabBar = useMemo(() => {
+    const activeRoute = state.routes[state.index];
+    const activeOptions = descriptors[activeRoute.key]?.options as any;
+    const style = activeOptions?.tabBarStyle;
+    const styleList = Array.isArray(style) ? style : [style];
+    const hiddenByStyle = styleList.some((entry) => entry?.display === "none");
+    const hiddenByRouteName =
+      activeRoute.name.includes("thread/") || activeRoute.name.includes("contract-chat-thread");
+    return hiddenByStyle || hiddenByRouteName;
+  }, [descriptors, state.index, state.routes]);
 
   const visibleRoutes = useMemo(
     () =>
@@ -570,6 +586,8 @@ export default function LiquidTabBar({
       />
     );
   });
+
+  if (shouldHideTabBar) return null;
 
   return (
     <View style={barStyles.globalContainer} pointerEvents="box-none">

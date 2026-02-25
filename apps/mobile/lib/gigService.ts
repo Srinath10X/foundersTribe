@@ -178,6 +178,15 @@ function buildQueryString(params?: object): string {
   return query ? `?${query}` : "";
 }
 
+function normalizeContract(contract: Contract | (Contract & { gigs?: any })): Contract {
+  if (!contract) return contract as Contract;
+  const gig = (contract as any).gig ?? (contract as any).gigs ?? undefined;
+  return {
+    ...(contract as any),
+    gig,
+  } as Contract;
+}
+
 // ============================================================
 // GIG SERVICE METHODS
 // ============================================================
@@ -383,7 +392,7 @@ export const gigService = {
       `/api/contracts${query}`
     );
     return {
-      items: response.items || [],
+      items: (response.items || []).map((item) => normalizeContract(item as any)),
       next_cursor: response.next_cursor ?? null,
     };
   },
@@ -397,7 +406,7 @@ export const gigService = {
     if (!response.data) {
       throw new GigServiceError("Contract not found", 404, "NOT_FOUND");
     }
-    return response.data;
+    return normalizeContract(response.data as any);
   },
 
   /**
@@ -405,11 +414,14 @@ export const gigService = {
    * POST /api/contracts/:id/complete
    */
   completeContract: async (id: string): Promise<Contract> => {
-    const response = await fetchWithAuth<{ data: Contract }>(
+    const response = await fetchWithAuth<{ data?: Contract | { success?: boolean }; success?: boolean }>(
       `/api/contracts/${id}/complete`,
       { method: "POST" }
     );
-    return response.data!;
+    const maybeContract = response?.data as Contract | undefined;
+    if (maybeContract?.id) return normalizeContract(maybeContract as any);
+    // Some backend builds return `{ success: true }`; refetch full contract shape.
+    return gigService.getContract(id);
   },
 
   /**
@@ -417,11 +429,13 @@ export const gigService = {
    * POST /api/contracts/:id/approve
    */
   approveContract: async (id: string): Promise<Contract> => {
-    const response = await fetchWithAuth<{ data: Contract }>(
+    const response = await fetchWithAuth<{ data?: Contract | { success?: boolean }; success?: boolean }>(
       `/api/contracts/${id}/approve`,
       { method: "POST" }
     );
-    return response.data!;
+    const maybeContract = response?.data as Contract | undefined;
+    if (maybeContract?.id) return normalizeContract(maybeContract as any);
+    return gigService.getContract(id);
   },
 
   // ------------------------------------------

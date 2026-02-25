@@ -326,6 +326,7 @@ export function useCompleteContract() {
     mutationFn: (id) => gigService.completeContract(id),
     onSuccess: (updatedContract) => {
       queryClient.setQueryData(queryKeys.contracts.detail(updatedContract.id), updatedContract);
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(updatedContract.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
     },
   });
@@ -341,6 +342,7 @@ export function useApproveContract() {
     mutationFn: (id) => gigService.approveContract(id),
     onSuccess: (updatedContract) => {
       queryClient.setQueryData(queryKeys.contracts.detail(updatedContract.id), updatedContract);
+      queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(updatedContract.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.gigs.all });
     },

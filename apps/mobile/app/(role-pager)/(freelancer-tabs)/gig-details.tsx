@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import {
@@ -12,8 +13,95 @@ import {
   T,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { useAuth } from "@/context/AuthContext";
 import { useContracts, useGig, useMyProposals } from "@/hooks/useGig";
 import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
+import { supabase } from "@/lib/supabase";
+import * as tribeApi from "@/lib/tribeApi";
+
+const STORAGE_BUCKET = "tribe-media";
+
+type FounderProfileView = {
+  name: string;
+  handle: string | null;
+  role: string | null;
+  avatar: string | null;
+};
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeHandle(value: unknown) {
+  const raw = firstString(value);
+  if (!raw) return null;
+  return raw.replace(/^@+/, "");
+}
+
+function formatRole(value: unknown) {
+  const raw = firstString(value);
+  if (!raw) return null;
+  if (/^founder$/i.test(raw)) return "Founder";
+  if (/^freelancer$/i.test(raw)) return "Freelancer";
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+async function resolveAvatar(candidate: unknown, userId: string): Promise<string | null> {
+  try {
+    if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
+      return candidate;
+    }
+
+    if (typeof candidate === "string" && candidate.trim()) {
+      const { data } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(candidate.trim(), 60 * 60 * 24 * 30);
+      if (data?.signedUrl) return `${data.signedUrl}&t=${Date.now()}`;
+    }
+
+    if (!userId) return null;
+    const folder = `profiles/${userId}`;
+    const { data: files } = await supabase.storage.from(STORAGE_BUCKET).list(folder, { limit: 20 });
+    if (!Array.isArray(files) || files.length === 0) return null;
+    const preferred = files.find((file) => /^avatar\./i.test(file.name)) || files[0];
+    if (!preferred?.name) return null;
+
+    const { data } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(`${folder}/${preferred.name}`, 60 * 60 * 24 * 30);
+    return data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildFounderProfileView(
+  rawProfile: any,
+  founderId: string,
+  fallback: FounderProfileView,
+): Promise<FounderProfileView> {
+  const avatarCandidate =
+    firstString(rawProfile?.photo_url, rawProfile?.avatar_url, fallback.avatar) || null;
+  const avatar = await resolveAvatar(avatarCandidate, founderId);
+
+  return {
+    name:
+      firstString(rawProfile?.display_name, rawProfile?.full_name, rawProfile?.name, fallback.name) ||
+      "Founder",
+    handle: normalizeHandle(rawProfile?.username) || normalizeHandle(rawProfile?.handle) || fallback.handle,
+    role: formatRole(rawProfile?.role) || formatRole(rawProfile?.user_type) || fallback.role,
+    avatar: avatar || fallback.avatar,
+  };
+}
 
 function statusLabel(status?: string) {
   if (status === "in_progress") return "In Progress";
@@ -26,6 +114,8 @@ function statusLabel(status?: string) {
 export default function GigDetailsScreen() {
   const router = useRouter();
   const { palette } = useFlowPalette();
+  const { session } = useAuth();
+  const queryClient = useQueryClient();
   const tabBarHeight = useBottomTabBarHeight();
   const params = useLocalSearchParams<{ id?: string }>();
   const resolvedId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -59,6 +149,53 @@ export default function GigDetailsScreen() {
   const budgetText = item
     ? `₹${Number(item.budget_min || 0).toLocaleString()} - ₹${Number(item.budget_max || 0).toLocaleString()}`
     : "-";
+
+  const founderFromGig = useMemo<FounderProfileView>(
+    () => ({
+      name: firstString(item?.founder?.full_name) || "Founder",
+      handle: normalizeHandle(item?.founder?.handle),
+      role: "Founder",
+      avatar: firstString(item?.founder?.avatar_url),
+    }),
+    [item?.founder?.avatar_url, item?.founder?.full_name, item?.founder?.handle],
+  );
+  const [founderProfile, setFounderProfile] = useState<FounderProfileView>(founderFromGig);
+
+  useEffect(() => {
+    setFounderProfile(founderFromGig);
+  }, [founderFromGig]);
+
+  useEffect(() => {
+    const founderId = firstString(item?.founder_id);
+    const token = session?.access_token;
+    if (!founderId || !token) return;
+
+    let cancelled = false;
+    (async () => {
+      const cached = queryClient.getQueryData<any>(["tribe-public-profile", founderId]);
+      if (cached) {
+        const hydrated = await buildFounderProfileView(cached, founderId, founderFromGig);
+        if (!cancelled) setFounderProfile(hydrated);
+      }
+
+      try {
+        const raw = await tribeApi.getPublicProfile(token, founderId);
+        queryClient.setQueryData(["tribe-public-profile", founderId], raw);
+        const hydrated = await buildFounderProfileView(raw, founderId, founderFromGig);
+        if (!cancelled) setFounderProfile(hydrated);
+      } catch {
+        // Keep joined founder fallback if profile service is unavailable.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [founderFromGig, item?.founder_id, queryClient, session?.access_token]);
+
+  const founderMeta = founderProfile.handle
+    ? `@${founderProfile.handle}`
+    : founderProfile.role || "Founder account";
 
   const ctaDisabled = !!myProposal && !acceptedContract;
   const ctaLabel = myProposal
@@ -107,7 +244,7 @@ export default function GigDetailsScreen() {
               {item?.title || (isLoading ? "Loading..." : "Gig")}
             </T>
             <T weight="regular" color={palette.subText} style={styles.gigCompany}>
-              {item?.founder?.full_name || "Founder"}
+              {founderProfile.name}
             </T>
 
             <View style={styles.metaRow}>
@@ -134,13 +271,13 @@ export default function GigDetailsScreen() {
 
           <SurfaceCard style={styles.card}>
             <View style={styles.ownerRow}>
-              <Avatar source={item?.founder?.avatar_url || undefined} size={42} />
+              <Avatar source={founderProfile.avatar || undefined} size={42} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <T weight="medium" color={palette.text} style={styles.ownerName} numberOfLines={1}>
-                  {item?.founder?.full_name || "Founder"}
+                  {founderProfile.name}
                 </T>
                 <T weight="regular" color={palette.subText} style={styles.ownerMeta} numberOfLines={1}>
-                  {item?.founder?.handle ? `@${item.founder.handle}` : "Founder account"}
+                  {founderMeta}
                 </T>
               </View>
             </View>

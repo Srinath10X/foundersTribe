@@ -8,7 +8,7 @@ function asSingleParam(value: string | string[] | undefined): string | undefined
   return value;
 }
 
-export default function FreelancerThreadRoute() {
+export default function FounderThreadRoute() {
   const params = useLocalSearchParams<{
     threadId?: string | string[];
     title?: string | string[];

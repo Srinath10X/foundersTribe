@@ -31,6 +31,7 @@ import {
   useGigProposals,
   useRejectProposal,
 } from "@/hooks/useGig";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 import type { Proposal, ProposalStatus } from "@/types/gig";
@@ -60,18 +61,27 @@ function formatAmount(amount: string | number) {
   return `INR ${num.toLocaleString()}`;
 }
 
-function formatProposalDate(input: string) {
+function formatProposalDateTime(input: string) {
   const ts = new Date(input).getTime();
-  if (Number.isNaN(ts)) return "Recently";
+  if (Number.isNaN(ts)) return "Date unavailable";
+  return new Date(ts).toLocaleString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
-  const diff = Date.now() - ts;
-  const dayMs = 24 * 60 * 60 * 1000;
-  const days = Math.floor(diff / dayMs);
-
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  return new Date(ts).toLocaleDateString();
+function formatStartAvailability(raw: unknown) {
+  if (typeof raw !== "string") return null;
+  const value = raw.replace(/\s+/g, " ").trim();
+  if (!value) return null;
+  const lower = value.toLowerCase();
+  if (lower === "open") return "Open to start";
+  if (lower === "busy") return "Busy";
+  if (lower === "inactive") return "Inactive";
+  return value;
 }
 
 function parseCoverLetter(coverLetter: string) {
@@ -91,8 +101,25 @@ function parseCoverLetter(coverLetter: string) {
   const summary = coverLetter.slice(0, baseEnd).trim();
 
   const screeningStart = coverLetter.indexOf(screeningMarker);
+  const availabilityStart = coverLetter.indexOf(availabilityMarker);
+
+  let availability: string | null = null;
+  if (availabilityStart >= 0) {
+    const availabilityBodyStart = availabilityStart + availabilityMarker.length;
+    const availabilityEndCandidates = [
+      coverLetter.indexOf(screeningMarker, availabilityBodyStart),
+    ].filter((idx) => idx >= 0);
+    const availabilityEnd =
+      availabilityEndCandidates.length > 0 ? Math.min(...availabilityEndCandidates) : coverLetter.length;
+    const availabilityValue = coverLetter
+      .slice(availabilityBodyStart, availabilityEnd)
+      .trim()
+      .replace(/\s+/g, " ");
+    availability = availabilityValue || null;
+  }
+
   if (screeningStart < 0) {
-    return { summary, screeningAnswers: [] as string[] };
+    return { summary, screeningAnswers: [] as string[], availability };
   }
 
   const screeningBlock = coverLetter.slice(screeningStart + screeningMarker.length).trim();
@@ -102,7 +129,7 @@ function parseCoverLetter(coverLetter: string) {
     .filter(Boolean)
     .slice(0, 3);
 
-  return { summary, screeningAnswers: answers };
+  return { summary, screeningAnswers: answers, availability };
 }
 
 function statusColors(status: ProposalStatus, palette: ReturnType<typeof useFlowPalette>["palette"]) {
@@ -152,6 +179,7 @@ export default function GigProposalsScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const { gigId } = useLocalSearchParams<{ gigId?: string }>();
+  const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -189,13 +217,27 @@ export default function GigProposalsScreen() {
   useEffect(() => {
     if (!session?.access_token || proposalsRaw.length === 0) return;
 
+    const nextFromCache: Record<string, any> = {};
     const missingFreelancerIds = Array.from(
       new Set(
         proposalsRaw
           .map((proposal) => proposal.freelancer_id)
-          .filter((id) => Boolean(id) && !publicProfiles[id]),
+          .filter((id) => {
+            if (!id) return false;
+            if (publicProfiles[id]) return false;
+            const cached = queryClient.getQueryData(["tribe-public-profile", id]);
+            if (cached) {
+              nextFromCache[id] = cached;
+              return false;
+            }
+            return true;
+          }),
       ),
     );
+
+    if (Object.keys(nextFromCache).length > 0) {
+      setPublicProfiles((prev) => ({ ...nextFromCache, ...prev }));
+    }
 
     if (missingFreelancerIds.length === 0) return;
 
@@ -215,6 +257,7 @@ export default function GigProposalsScreen() {
                 ...profile,
                 avatar_url: resolvedAvatar || profile?.avatar_url || null,
                 photo_url: resolvedAvatar || profile?.photo_url || null,
+                _syncSource: "tribe",
               },
             ] as const;
           } catch {
@@ -227,7 +270,10 @@ export default function GigProposalsScreen() {
       setPublicProfiles((prev) => {
         const next = { ...prev };
         pairs.forEach(([userId, profile]) => {
-          next[userId] = profile;
+          next[userId] = profile ? { ...profile } : { _syncSource: "proposal" };
+          if (profile) {
+            queryClient.setQueryData(["tribe-public-profile", userId], profile);
+          }
         });
         return next;
       });
@@ -236,7 +282,7 @@ export default function GigProposalsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [proposalsRaw, publicProfiles, session?.access_token]);
+  }, [proposalsRaw, publicProfiles, queryClient, session?.access_token]);
 
   const hasAccepted = useMemo(
     () => proposalsRaw.some((proposal) => proposal.status === "accepted"),
@@ -613,14 +659,18 @@ export default function GigProposalsScreen() {
                   remoteProfile?.avatar_url ||
                   proposal.freelancer?.avatar_url;
                 const profileRole = remoteProfile?.role || remoteProfile?.user_type || "";
+                const profileSynced = remoteProfile?._syncSource !== "proposal" && Boolean(remoteProfile?.display_name || remoteProfile?.username);
                 const profileRating = Number(remoteProfile?.rating);
                 const profileRate = Number(remoteProfile?.hourly_rate);
+                const startAvailability =
+                  formatStartAvailability(parsedCover.availability) ||
+                  formatStartAvailability(remoteProfile?.availability);
 
                 return (
                   <SurfaceCard key={proposal.id} style={styles.card}>
                     <TouchableOpacity
                       style={styles.personRow}
-                      onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${proposal.freelancer_id}`)}
+                      onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${proposal.freelancer_id}&gigId=${gigId}`)}
                       activeOpacity={0.82}
                     >
                       <Avatar
@@ -632,8 +682,26 @@ export default function GigProposalsScreen() {
                           {displayName}
                         </T>
                         <T weight="regular" color={palette.subText} style={styles.subline} numberOfLines={1}>
-                          {[profileRole, formatProposalDate(proposal.created_at)].filter(Boolean).join(" • ")}
+                          {[profileRole, `Submitted ${formatProposalDateTime(proposal.created_at)}`]
+                            .filter(Boolean)
+                            .join(" • ")}
                         </T>
+                        <View
+                          style={[
+                            styles.profileSyncPill,
+                            {
+                              backgroundColor: profileSynced ? "rgba(52,199,89,0.12)" : palette.border,
+                            },
+                          ]}
+                        >
+                          <T
+                            weight="regular"
+                            color={profileSynced ? "#34C759" : palette.subText}
+                            style={styles.profileSyncText}
+                          >
+                            {profileSynced ? "Profile synced" : "Proposal profile"}
+                          </T>
+                        </View>
                       </View>
                       <View style={[styles.statusChip, { backgroundColor: colors.bg }]}>
                         <T weight="regular" color={colors.text} style={styles.statusText}>
@@ -655,6 +723,14 @@ export default function GigProposalsScreen() {
                           {proposal.estimated_days ? `${proposal.estimated_days} days` : "Flexible"}
                         </T>
                       </View>
+                      {startAvailability ? (
+                        <View style={[styles.metaPill, { backgroundColor: palette.border }]}>
+                          <Ionicons name="play-forward-outline" size={13} color={palette.subText} />
+                          <T weight="regular" color={palette.subText} style={styles.metaText}>
+                            Start {startAvailability}
+                          </T>
+                        </View>
+                      ) : null}
                       {Number.isFinite(profileRating) && profileRating > 0 ? (
                         <View style={[styles.metaPill, { backgroundColor: palette.border }]}>
                           <Ionicons name="star" size={13} color={palette.subText} />
@@ -693,7 +769,7 @@ export default function GigProposalsScreen() {
                     <View style={styles.actions}>
                       <TouchableOpacity
                         style={[styles.secondaryBtn, { backgroundColor: palette.border }]}
-                        onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${proposal.freelancer_id}`)}
+                        onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${proposal.freelancer_id}&gigId=${gigId}`)}
                         activeOpacity={0.84}
                       >
                         <T weight="regular" color={palette.text} style={styles.btnText}>
@@ -932,6 +1008,17 @@ const styles = StyleSheet.create({
     marginTop: 1,
     fontSize: 10,
     lineHeight: 13,
+  },
+  profileSyncPill: {
+    marginTop: 4,
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  profileSyncText: {
+    fontSize: 9,
+    lineHeight: 12,
   },
   profileMetaLine: {
     marginTop: 2,

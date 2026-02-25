@@ -1,12 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { usePathname } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useContractRealtimeChat } from "@/hooks/useContractRealtimeChat";
 
-import { Avatar, FlowScreen, FlowTopBar, T, people, useFlowNav, useFlowPalette } from "./shared";
+import { Avatar, FlowScreen, T, useFlowNav, useFlowPalette } from "./shared";
 
 type ChatRow =
   | { type: "date"; key: string; label: string }
@@ -19,14 +27,14 @@ type ThreadScreenProps = {
 };
 
 function formatDayLabel(dateInput: string): string {
-  const d = new Date(dateInput);
+  const date = new Date(dateInput);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const msgStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const msgStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const diffDays = Math.floor((todayStart - msgStart) / (1000 * 60 * 60 * 24));
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
-  return d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" });
+  return date.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function buildRows(messages: any[]): ChatRow[] {
@@ -58,18 +66,37 @@ function buildRows(messages: any[]): ChatRow[] {
   return rows;
 }
 
+function firstLetter(name: string) {
+  const value = name.trim();
+  if (!value) return "U";
+  return value.charAt(0).toUpperCase();
+}
+
+type ViewerRole = "founder" | "freelancer";
+
+function inferViewerRole(pathname: string): ViewerRole {
+  if (pathname.includes("/(role-pager)/(freelancer-tabs)/")) return "freelancer";
+  if (pathname.includes("/(role-pager)/(founder-tabs)/")) return "founder";
+  return "founder";
+}
+
 export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenProps) {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
-  const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const listRef = useRef<FlatList<ChatRow>>(null);
 
   const [draft, setDraft] = useState("");
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const {
+    contractId: resolvedContractId,
+    isRealtimeConnected,
     currentUserId,
+    founderId,
+    freelancerId,
+    viewerRole,
+    counterpartyProfile,
     messages,
     loading,
     sending,
@@ -78,27 +105,20 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     retryFailedMessage,
   } = useContractRealtimeChat({ contractId: threadId });
 
-  const participantName = title || "Conversation";
-  const participantAvatar = avatar || people.alex;
+  const resolvedViewerRole = viewerRole || inferViewerRole(pathname);
+  const myRoleLabel = resolvedViewerRole === "founder" ? "Founder" : "Freelancer";
+  const peerRoleLabel = resolvedViewerRole === "founder" ? "Freelancer" : "Founder";
 
+  const participantName = counterpartyProfile?.name || title || peerRoleLabel;
+  const participantAvatar = counterpartyProfile?.avatar || avatar || null;
+  const participantRole = counterpartyProfile?.role || peerRoleLabel;
   const rows = useMemo(() => buildRows(messages || []), [messages]);
-  const resolvedTabBarSpace = Math.max(tabBarHeight - 30, 0 + insets.bottom);
-  const footerBottom = keyboardOpen ? 8 : resolvedTabBarSpace + 2;
-  const listBottomPadding = keyboardOpen ? 88 : resolvedTabBarSpace + 50;
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardOpen(true));
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardOpen(false));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
+  const composerBottom = Math.max(8, insets.bottom);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       listRef.current?.scrollToEnd({ animated: true });
-    }, 10);
+    }, 15);
     return () => clearTimeout(timer);
   }, [rows.length]);
 
@@ -109,19 +129,77 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     await sendTextMessage(body);
   };
 
+  const roleForMessage = (message: any, isMine: boolean) => {
+    if (isMine) return myRoleLabel;
+
+    if (resolvedViewerRole === "founder") return "Freelancer";
+    if (resolvedViewerRole === "freelancer") return "Founder";
+
+    if (founderId && message.sender_id === founderId) return "Founder";
+    if (freelancerId && message.sender_id === freelancerId) return "Freelancer";
+    return peerRoleLabel;
+  };
+
   return (
     <FlowScreen scroll={false}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         enabled
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 92 : 10}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
-        <FlowTopBar title={participantName} onLeftPress={nav.back} right="ellipsis-horizontal" onRightPress={() => {}} />
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: insets.top + 8,
+              borderBottomColor: palette.borderLight,
+              backgroundColor: palette.surface,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={nav.back}
+            style={[styles.iconBtn, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
+          >
+            <Ionicons name="arrow-back" size={17} color={palette.text} />
+          </TouchableOpacity>
 
-        <View style={[styles.body, { backgroundColor: palette.bg }]}> 
+          <View style={styles.headerMain}>
+            {participantAvatar ? (
+              <Avatar source={{ uri: participantAvatar }} size={36} />
+            ) : (
+              <View style={[styles.avatarFallback, { backgroundColor: palette.accentSoft }]}>
+                <T weight="medium" color={palette.accent} style={styles.avatarLetter}>
+                  {firstLetter(participantName)}
+                </T>
+              </View>
+            )}
+
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <T weight="medium" color={palette.text} style={styles.headerName} numberOfLines={1}>
+                {participantName}
+              </T>
+              <View style={styles.headerMetaRow}>
+                <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
+                <T weight="regular" color={palette.subText} style={styles.headerMeta} numberOfLines={1}>
+                  {participantRole} • {isRealtimeConnected ? "Live" : "Connecting..."}
+                </T>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.iconBtn, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
+            onPress={() => {}}
+          >
+            <Ionicons name="ellipsis-vertical" size={15} color={palette.subText} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.body, { backgroundColor: palette.bg }]}>
           {error ? (
-            <View style={[styles.errorPill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}> 
+            <View style={[styles.errorPill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
               <T weight="regular" color={palette.accent} style={styles.errorText}>
                 {error}
               </T>
@@ -130,16 +208,17 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
 
           <FlatList
             ref={listRef}
+            style={{ flex: 1 }}
             data={rows}
             keyExtractor={(item) => item.key}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={[styles.chatContent, { paddingBottom: listBottomPadding }]}
+            contentContainerStyle={styles.chatContent}
             renderItem={({ item }) => {
               if (item.type === "date") {
                 return (
                   <View style={styles.dateWrap}>
-                    <View style={[styles.datePill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}> 
+                    <View style={[styles.datePill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
                       <T weight="regular" color={palette.subText} style={styles.dateText}>
                         {item.label}
                       </T>
@@ -150,25 +229,48 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
 
               const { message, showAvatar } = item;
               const isMine = message.sender_id === currentUserId;
+              const roleTag = roleForMessage(message, isMine);
               const timeLabel = new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              const isPending = !!message.pending;
+              const isFailed = !!message.failed;
 
               return (
                 <View style={[styles.row, isMine ? styles.rowMine : styles.rowPeer]}>
                   {!isMine ? (
-                    showAvatar ? <Avatar source={participantAvatar} size={24} /> : <View style={{ width: 24 }} />
+                    showAvatar ? (
+                      participantAvatar ? (
+                        <Avatar source={{ uri: participantAvatar }} size={24} />
+                      ) : (
+                        <View style={[styles.peerMiniAvatarFallback, { backgroundColor: palette.accentSoft }]}>
+                          <T weight="medium" color={palette.accent} style={styles.peerMiniAvatarLetter}>
+                            {firstLetter(participantName)}
+                          </T>
+                        </View>
+                      )
+                    ) : (
+                      <View style={{ width: 24 }} />
+                    )
                   ) : (
                     <View style={{ width: 24 }} />
                   )}
 
                   <View style={[styles.bubbleWrap, isMine ? styles.bubbleWrapMine : styles.bubbleWrapPeer]}>
-                    {!isMine && showAvatar ? (
-                      <T weight="medium" color={palette.subText} style={styles.senderName} numberOfLines={1}>
-                        {participantName}
+                    <View
+                      style={[
+                        styles.roleChip,
+                        {
+                          backgroundColor: isMine ? "rgba(255,255,255,0.2)" : palette.border,
+                        },
+                      ]}
+                    >
+                      <T weight="regular" color={isMine ? "#fff" : palette.subText} style={styles.roleChipText}>
+                        {roleTag}
                       </T>
-                    ) : null}
+                    </View>
+
                     <TouchableOpacity
-                      activeOpacity={message.failed ? 0.7 : 1}
-                      disabled={!message.failed}
+                      activeOpacity={isFailed ? 0.72 : 1}
+                      disabled={!isFailed}
                       onPress={() => retryFailedMessage(message)}
                     >
                       <View
@@ -177,7 +279,8 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                           isMine
                             ? { backgroundColor: palette.accent, borderColor: palette.accent }
                             : { backgroundColor: palette.surface, borderColor: palette.borderLight },
-                          message.pending || message.failed ? { opacity: 0.7 } : null,
+                          isMine ? styles.mineBubble : styles.peerBubble,
+                          isPending || isFailed ? { opacity: 0.74 } : null,
                         ]}
                       >
                         <T weight="regular" color={isMine ? "#fff" : palette.text} style={styles.bubbleText}>
@@ -185,11 +288,21 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                         </T>
                       </View>
                     </TouchableOpacity>
-                    <T weight="regular" color={palette.subText} style={[styles.time, { textAlign: isMine ? "right" : "left" }]}> 
-                      {timeLabel}
-                      {message.pending ? " • sending" : ""}
-                      {message.failed ? " • failed" : ""}
-                    </T>
+
+                    <View style={[styles.metaRow, { justifyContent: isMine ? "flex-end" : "flex-start" }]}>
+                      {isMine ? (
+                        <Ionicons
+                          name={isFailed ? "alert-circle-outline" : "checkmark-done"}
+                          size={11}
+                          color={isMine ? "#CFE2FF" : palette.subText}
+                        />
+                      ) : null}
+                      <T weight="regular" color={isMine ? "#DDE9FF" : palette.subText} style={styles.time}>
+                        {timeLabel}
+                        {isPending ? " • sending" : ""}
+                        {isFailed ? " • failed" : ""}
+                      </T>
+                    </View>
                   </View>
                 </View>
               );
@@ -202,29 +315,42 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
               </View>
             }
           />
-        </View>
 
-        <View style={[styles.footerWrap, { bottom: footerBottom }]}> 
-          <View style={[styles.composer, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}> 
-            <TouchableOpacity style={[styles.sideBtn, { backgroundColor: palette.card }]}> 
-              <Ionicons name="add" size={18} color={palette.subText} />
-            </TouchableOpacity>
-            <TextInput
-              placeholder="Type a message"
-              placeholderTextColor={palette.subText}
-              style={[styles.input, { color: palette.text, backgroundColor: palette.card }]}
-              value={draft}
-              onChangeText={setDraft}
-              multiline
-              maxLength={1200}
-            />
-            <TouchableOpacity
-              style={[styles.sendBtn, { backgroundColor: palette.accent, opacity: draft.trim() && !sending ? 1 : 0.5 }]}
-              onPress={handleSend}
-              disabled={!draft.trim() || sending}
-            >
-              <Ionicons name="arrow-up" size={18} color="#fff" />
-            </TouchableOpacity>
+          <View
+            style={[
+              styles.footerWrap,
+              {
+                borderTopColor: palette.borderLight,
+                backgroundColor: palette.surface,
+                paddingBottom: composerBottom,
+              },
+            ]}
+          >
+            <View style={[styles.composer, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+              <TextInput
+                placeholder="Type a message"
+                placeholderTextColor={palette.subText}
+                style={[styles.input, { color: palette.text, backgroundColor: palette.bg }]}
+                value={draft}
+                onChangeText={setDraft}
+                editable={!!resolvedContractId}
+                multiline
+                maxLength={1200}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendBtn,
+                  {
+                    backgroundColor: palette.accent,
+                    opacity: draft.trim() && !sending && !!resolvedContractId ? 1 : 0.45,
+                  },
+                ]}
+                onPress={handleSend}
+                disabled={!draft.trim() || sending || !resolvedContractId}
+              >
+                <Ionicons name="send" size={15} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -233,7 +359,57 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, paddingHorizontal: 14, paddingTop: 10 },
+  header: {
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  avatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarLetter: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  headerName: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  headerMetaRow: {
+    marginTop: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  headerMeta: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
+
+  body: { flex: 1, paddingHorizontal: 12, paddingTop: 8 },
   errorPill: {
     borderWidth: 1,
     borderRadius: 10,
@@ -243,7 +419,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   errorText: { fontSize: 10, lineHeight: 13 },
-  chatContent: { paddingBottom: 16 },
+  chatContent: { paddingBottom: 10 },
   dateWrap: { alignItems: "center", marginVertical: 8 },
   datePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   dateText: { fontSize: 10, lineHeight: 13 },
@@ -251,43 +427,63 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 9,
   },
   rowMine: { justifyContent: "flex-end" },
   rowPeer: { justifyContent: "flex-start" },
   bubbleWrap: { maxWidth: "84%" },
   bubbleWrapMine: { alignItems: "flex-end" },
   bubbleWrapPeer: { alignItems: "flex-start" },
-  senderName: { marginBottom: 2, fontSize: 10, lineHeight: 12 },
-  bubble: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+  roleChip: {
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginBottom: 3,
   },
+  roleChipText: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  bubble: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+  },
+  mineBubble: { borderBottomRightRadius: 6 },
+  peerBubble: { borderBottomLeftRadius: 6 },
   bubbleText: { fontSize: 12, lineHeight: 17 },
-  time: { marginTop: 2, fontSize: 10, lineHeight: 12 },
+  metaRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  time: { fontSize: 9, lineHeight: 12 },
+  peerMiniAvatarFallback: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  peerMiniAvatarLetter: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
+
   footerWrap: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    paddingHorizontal: 10,
+    borderTopWidth: 1,
+    paddingTop: 7,
   },
   composer: {
     borderWidth: 1,
     borderRadius: 16,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 5,
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 8,
-  },
-  sideBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
   },
   sendBtn: {
     width: 36,
@@ -298,11 +494,11 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    minHeight: 34,
-    maxHeight: 96,
+    minHeight: 35,
+    maxHeight: 100,
     borderRadius: 14,
     paddingHorizontal: 11,
-    paddingVertical: 6,
+    paddingVertical: 7,
     fontFamily: "Poppins_400Regular",
     fontSize: 12,
     lineHeight: 16,

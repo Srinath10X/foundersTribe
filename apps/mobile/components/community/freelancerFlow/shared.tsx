@@ -21,7 +21,7 @@ import {
 
 import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
-import { SP, RADIUS, SHADOWS } from "@/components/freelancer/designTokens";
+import { SP, RADIUS } from "@/components/freelancer/designTokens";
 
 export type FlowPalette = {
   bg: string;
@@ -209,7 +209,7 @@ export function SurfaceCard({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { palette } = useFlowPalette();
+  const { palette, isDark } = useFlowPalette();
 
   return (
     <View
@@ -221,6 +221,7 @@ export function SurfaceCard({
           borderRadius: RADIUS.lg,
           padding: SP._16,
         },
+        isDark ? styles.cardShadowDark : styles.cardShadow,
         style,
       ]}
     >
@@ -529,6 +530,20 @@ export const people = {
 };
 
 const styles = StyleSheet.create({
+  cardShadow: {
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  cardShadowDark: {
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
+    elevation: 7,
+  },
   screen: { flex: 1 },
   scrollContent: { paddingBottom: 120 },
   topBar: {

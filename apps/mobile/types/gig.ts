@@ -226,6 +226,12 @@ export interface Contract {
   
   // Joined fields (optional)
   gig?: Gig;
+  proposal?: {
+    id: string;
+    proposed_amount: string;
+    estimated_days: number | null;
+    cover_letter: string | null;
+  };
   founder?: GigFounder;
   freelancer?: UserProfile;
 }
