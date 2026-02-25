@@ -357,15 +357,15 @@ export function PrimaryButton({
   );
 }
 
-export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "my gigs" | "create" | "chat" | "profile"; }) {
+export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "feed" | "create" | "chat" | "profile"; }) {
   const { palette, isDark } = useFlowPalette();
   const router = useRouter();
-  type NavKey = "home" | "my gigs" | "create" | "chat" | "profile";
+  type NavKey = "home" | "feed" | "create" | "chat" | "profile";
   type NavItem = { key: NavKey; icon: keyof typeof Ionicons.glyphMap; label: string; route: string; isCenter?: boolean };
 
   const navItems: NavItem[] = [
     { key: "home", icon: "home", label: "Home", route: "/freelancer-stack" },
-    { key: "my gigs", icon: "briefcase", label: "My Gigs", route: "/freelancer-stack/my-gigs" },
+    { key: "feed", icon: "newspaper", label: "Feed", route: "/freelancer-stack/feed" },
     { key: "create", icon: "add-circle", label: "Post", route: "/freelancer-stack/post-gig", isCenter: true },
     { key: "chat", icon: "chatbubble", label: "Chat", route: "/freelancer-stack/contract-chat" },
     { key: "profile", icon: "person-circle", label: "Profile", route: "/freelancer-stack/founder-profile" },

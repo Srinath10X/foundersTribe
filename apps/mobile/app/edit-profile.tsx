@@ -476,7 +476,7 @@ export default function EditProfileScreen() {
         .map((link) => ({
           platform: (link?.platform || "").trim(),
           label: (link?.label || "").trim(),
-          url: normalizeUrl(link?.url || "") || "",
+          url: (normalizeUrl(link?.url || "") || "").replace(/\s+/g, ""),
         }))
         .filter((link) => !!link.url);
       if (normalizedSocialLinks.length === 0) {
@@ -518,8 +518,8 @@ export default function EditProfileScreen() {
       }
 
       const payload = {
-        display_name: displayName.trim() || undefined,
-        bio: bio.trim() || null,
+        display_name: (displayName.trim() || "").slice(0, 100) || undefined,
+        bio: (bio.trim() || "").slice(0, 5000) || null,
         // Persist storage path, not temporary signed URL.
         photo_url: (photoPath || photoUrl || "").trim() || null,
         linkedin_url: normalizeUrl(linkedinUrl),
@@ -544,8 +544,19 @@ export default function EditProfileScreen() {
         await tribeApi.updateMyProfile(token, payload);
         profileSaved = true;
       } catch (apiErr: any) {
-        profileSaveErrorMsg = apiErr?.message || "Unknown API error";
-        console.warn("[EditProfile] API save failed, using fallback persistence:", apiErr?.message);
+        const rawMsg = apiErr?.message || "Unknown API error";
+        // Extract the field name from Zod validation errors for a friendlier message
+        const fieldMatch = rawMsg.match(/body\.(\S+?):/);
+        if (fieldMatch) {
+          const fieldPath = fieldMatch[1]
+            .replace(/\./g, " > ")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c: string) => c.toUpperCase());
+          profileSaveErrorMsg = `Invalid value in "${fieldPath}". Please check and try again.`;
+        } else {
+          profileSaveErrorMsg = rawMsg;
+        }
+        console.warn("[EditProfile] API save failed, using fallback persistence:", rawMsg);
       }
       await saveCachedForm({
         displayName: displayName.trim(),
@@ -593,10 +604,13 @@ export default function EditProfileScreen() {
         profileSaved ? "Success" : "Saved Locally",
         profileSaved
           ? "Profile updated!"
-          : `Server save failed (${profileSaveErrorMsg || "unknown error"}), but your data is kept locally and in account metadata.`,
-        [
-        { text: "OK", onPress: () => router.back() },
-        ],
+          : `${profileSaveErrorMsg}\n\nYour data has been saved locally. You can try saving again or go back.`,
+        profileSaved
+          ? [{ text: "OK", onPress: () => router.back() }]
+          : [
+              { text: "Go Back", onPress: () => router.back() },
+              { text: "Stay & Fix", style: "cancel" },
+            ],
       );
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save profile");

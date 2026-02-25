@@ -260,10 +260,10 @@ export default function FounderDashboardScreen() {
         ]}
       >
         <T weight="medium" color={palette.text} style={styles.pageTitle}>
-          Freelancer Dashboard
-        </T>
-        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-          Backend live view for hiring, proposals, and contracts
+          Find your{"\n"}
+          <T weight="medium" color="#FF2D55" style={styles.pageTitle}>
+            Freelancer
+          </T>
         </T>
       </View>
 
@@ -398,77 +398,12 @@ export default function FounderDashboardScreen() {
             </SurfaceCard>
             <SurfaceCard style={styles.kpiCard}>
               <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
-                Pending Proposals
-              </T>
-              <T weight="medium" color={palette.text} style={styles.kpiValue}>
-                {proposalSummary.pending}
-              </T>
-            </SurfaceCard>
-            <SurfaceCard style={styles.kpiCard}>
-              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
                 Active Contracts
               </T>
               <T weight="medium" color={palette.text} style={styles.kpiValue}>
                 {activeContracts.length}
               </T>
             </SurfaceCard>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                Hiring Queue
-              </T>
-              <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
-                <T weight="regular" color={palette.accent} style={styles.linkText}>
-                  Manage gigs
-                </T>
-              </TouchableOpacity>
-            </View>
-
-            {loading || proposalLoading ? (
-              <View style={styles.centerWrap}>
-                <ActivityIndicator size="small" color={palette.accent} />
-              </View>
-            ) : gigsNeedingReview.length === 0 ? (
-              <SurfaceCard style={styles.emptyCard}>
-                <Ionicons name="checkmark-done-outline" size={20} color={palette.subText} />
-                <T weight="medium" color={palette.text} style={styles.emptyTitle}>
-                  No proposals awaiting review
-                </T>
-                <T weight="regular" color={palette.subText} style={styles.emptySub}>
-                  New incoming proposals will show here.
-                </T>
-              </SurfaceCard>
-            ) : (
-              <View style={styles.stack}>
-                {gigsNeedingReview.map((item) => (
-                  <TouchableOpacity
-                    key={item.gig.id}
-                    activeOpacity={0.86}
-                    onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${item.gig.id}`)}
-                  >
-                    <SurfaceCard style={styles.gigCard}>
-                      <View style={styles.gigHeaderRow}>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <T weight="medium" color={palette.text} style={styles.gigTitle} numberOfLines={1}>
-                            {item.gig.title}
-                          </T>
-                          <T weight="regular" color={palette.subText} style={styles.gigBudget} numberOfLines={1}>
-                            {formatMoney(item.gig.budget_min, item.gig.budget_max)}
-                          </T>
-                        </View>
-                        <View style={[styles.queuePill, { backgroundColor: "rgba(245,158,11,0.12)" }]}> 
-                          <T weight="medium" color="#F59E0B" style={styles.queueText}>
-                            {item.queueCount} to review
-                          </T>
-                        </View>
-                      </View>
-                    </SurfaceCard>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
           </View>
 
           <View style={styles.section}>
@@ -604,8 +539,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   pageTitle: {
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 24,
+    lineHeight: 32,
     letterSpacing: -0.2,
   },
   pageSubtitle: {
@@ -634,7 +569,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Poppins_400Regular",
     fontSize: 12,
-    lineHeight: 16,
+    padding: 0,
+    textAlignVertical: "center",
   },
   errorCard: {
     paddingVertical: 10,
