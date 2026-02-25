@@ -108,7 +108,28 @@ export default function FreelancerProfileScreen() {
 
     setLoading(true);
     try {
-      const db = await tribeApi.getPublicProfile(session.access_token, profileId);
+      // Try tribe-service API first, then fall back to direct Supabase queries
+      let db: any = null;
+      try {
+        db = await tribeApi.getPublicProfile(session.access_token, profileId);
+      } catch {
+        // Tribe API failed (404 or network error) — query Supabase tables directly
+        const [{ data: tribeRow }, { data: gigRow }] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", profileId).maybeSingle(),
+          supabase.from("user_profiles").select("*").eq("id", profileId).maybeSingle(),
+        ]);
+        // Merge both sources: prefer tribe `profiles` data, fall back to gig `user_profiles`
+        if (tribeRow || gigRow) {
+          db = { ...(gigRow || {}), ...(tribeRow || {}) };
+        }
+      }
+
+      if (!db) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
       const resolvedAvatar =
         (await resolveAvatar(db?.photo_url || db?.avatar_url || null, profileId)) ||
         people.alex;

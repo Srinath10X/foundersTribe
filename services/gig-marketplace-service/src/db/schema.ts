@@ -27,6 +27,7 @@ export const proposalStatusEnum = pgEnum("proposal_status_enum", ["pending", "sh
 export const contractStatusEnum = pgEnum("contract_status_enum", ["active", "completed", "cancelled", "disputed"]);
 export const messageTypeEnum = pgEnum("message_type_enum", ["text", "file", "system"]);
 export const notificationTypeEnum = pgEnum("notification_type_enum", ["new_proposal", "proposal_accepted", "message", "contract_completed"]);
+export const postTypeEnum = pgEnum("post_type_enum", ["work_update", "showcase", "milestone", "hiring", "insight"]);
 
 export const userProfiles = pgTable(
   "user_profiles",
@@ -205,6 +206,41 @@ export const notifications = pgTable("notifications", {
   referenceId: uuid("reference_id"),
   payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
   readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const feedPosts = pgTable("feed_posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  authorId: uuid("author_id").notNull(),
+  content: text("content").notNull(),
+  postType: postTypeEnum("post_type").notNull().default("work_update"),
+  images: jsonb("images").notNull().default(sql`'[]'::jsonb`),
+  tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
+  likesCount: integer("likes_count").notNull().default(0),
+  commentsCount: integer("comments_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const feedPostLikes = pgTable(
+  "feed_post_likes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uniquePostUser: unique("feed_post_likes_post_user_key").on(t.postId, t.userId),
+  }),
+);
+
+export const feedPostComments = pgTable("feed_post_comments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  postId: uuid("post_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  content: text("content").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

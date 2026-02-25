@@ -8,6 +8,7 @@ const migrationFiles = [
     "003_gig_marketplace_rls.sql",
     "004_gig_marketplace_realtime.sql",
     "005_user_profiles_personal_details.sql",
+    "006_feed_posts.sql",
 ];
 function resolveConnectionString() {
     if (process.env.DATABASE_URL)

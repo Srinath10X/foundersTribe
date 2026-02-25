@@ -10,15 +10,15 @@ export default function FreelancerFlowLayout() {
   const router = useRouter();
   const { palette } = useFlowPalette();
 
-  const activeLabel: "home" | "my gigs" | "create" | "chat" | "profile" =
+  const activeLabel: "home" | "feed" | "create" | "chat" | "profile" =
     pathname.includes("/contract-chat")
       ? "chat"
       : pathname.includes("/post-gig")
         ? "create"
         : pathname.includes("/freelancer-profile") || pathname.includes("/founder-profile")
           ? "profile"
-          : pathname.includes("/my-gigs") || pathname.includes("/gig-details")
-            ? "my gigs"
+          : pathname.includes("/feed")
+            ? "feed"
             : "home";
 
   const hideTabBar =
@@ -30,7 +30,8 @@ export default function FreelancerFlowLayout() {
     pathname.includes("/review-proposals") ||
     pathname.includes("/leave-review") ||
     pathname.includes("/freelancer-profile") ||
-    pathname.includes("/freelancer-profile-2");
+    pathname.includes("/freelancer-profile-2") ||
+    pathname.includes("/my-gigs");
 
   return (
     <View style={styles.container}>

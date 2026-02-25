@@ -21,6 +21,7 @@ export type UserRole = "founder" | "freelancer" | "both";
 export type AvailabilityStatus = "open" | "busy" | "inactive";
 export type Gender = "male" | "female" | "non_binary" | "prefer_not_to_say" | "other";
 export type NotificationType = "new_proposal" | "proposal_accepted" | "message" | "contract_completed";
+export type FeedPostType = "work_update" | "showcase" | "milestone" | "hiring" | "insight";
 
 // ------------------------------------------
 // User/Profile Types
@@ -351,6 +352,74 @@ export interface NotificationFilters {
 }
 
 export type PaginatedNotifications = PaginatedResponse<Notification>;
+
+// ------------------------------------------
+// Feed Types
+// ------------------------------------------
+
+/** Minimal author info embedded in feed post joins */
+export interface FeedAuthor {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  handle: string | null;
+}
+
+export interface FeedPost {
+  id: string;
+  author_id: string;
+  content: string;
+  post_type: FeedPostType;
+  images: string[];
+  tags: string[];
+  likes_count: number;
+  comments_count: number;
+  is_liked: boolean;
+  created_at: string;
+  updated_at: string;
+
+  // Joined fields
+  author?: FeedAuthor;
+}
+
+export interface FeedPostCreateInput {
+  content: string;
+  post_type?: FeedPostType;
+  images?: string[];
+  tags?: string[];
+}
+
+export interface FeedFilters {
+  post_type?: FeedPostType;
+  author_id?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export type PaginatedFeedPosts = PaginatedResponse<FeedPost>;
+
+export interface FeedComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+
+  // Joined fields
+  user?: FeedAuthor;
+}
+
+export interface FeedCommentCreateInput {
+  content: string;
+}
+
+export interface FeedCommentFilters {
+  limit?: number;
+  cursor?: string;
+}
+
+export type PaginatedFeedComments = PaginatedResponse<FeedComment>;
 
 // ------------------------------------------
 // API Response Types

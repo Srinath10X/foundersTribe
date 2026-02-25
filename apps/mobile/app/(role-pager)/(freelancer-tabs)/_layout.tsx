@@ -82,6 +82,12 @@ export default function FreelancerTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="create-post"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
