@@ -13,6 +13,7 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { useContracts, useGig, useMyProposals } from "@/hooks/useGig";
+import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
 
 function statusLabel(status?: string) {
   if (status === "in_progress") return "In Progress";
@@ -54,6 +55,7 @@ export default function GigDetailsScreen() {
         : palette.accentSoft;
 
   const tags = item?.gig_tags?.map((t) => t.tags?.label).filter(Boolean) || [];
+  const parsedContent = parseGigDescription(item?.description || "");
   const budgetText = item
     ? `₹${Number(item.budget_min || 0).toLocaleString()} - ₹${Number(item.budget_max || 0).toLocaleString()}`
     : "-";
@@ -118,7 +120,7 @@ export default function GigDetailsScreen() {
               <View style={styles.metaItem}>
                 <Ionicons name="time-outline" size={13} color={palette.subText} />
                 <T weight="regular" color={palette.subText} style={styles.metaText}>
-                  {item?.published_at ? new Date(item.published_at).toLocaleDateString() : "Flexible"}
+                  {formatTimeline(parsedContent.timelineValue, parsedContent.timelineUnit)}
                 </T>
               </View>
               <View style={styles.metaItem}>
@@ -149,8 +151,42 @@ export default function GigDetailsScreen() {
               Project Overview
             </T>
             <T weight="regular" color={palette.subText} style={styles.sectionBody}>
-              {item?.description || "No description available."}
+              {parsedContent.projectOverview || "No description available."}
             </T>
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.card}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Deliverables
+            </T>
+            {parsedContent.deliverables.length > 0 ? (
+              parsedContent.deliverables.map((entry, idx) => (
+                <T key={`deliverable-${idx}`} weight="regular" color={palette.subText} style={styles.sectionBody}>
+                  - {entry}
+                </T>
+              ))
+            ) : (
+              <T weight="regular" color={palette.subText} style={styles.sectionBody}>
+                No deliverables listed.
+              </T>
+            )}
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.card}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Screening Questions
+            </T>
+            {parsedContent.screeningQuestions.length > 0 ? (
+              parsedContent.screeningQuestions.map((entry, idx) => (
+                <T key={`question-${idx}`} weight="regular" color={palette.subText} style={styles.sectionBody}>
+                  {idx + 1}. {entry}
+                </T>
+              ))
+            ) : (
+              <T weight="regular" color={palette.subText} style={styles.sectionBody}>
+                No screening questions provided.
+              </T>
+            )}
           </SurfaceCard>
 
           {tags.length > 0 ? (

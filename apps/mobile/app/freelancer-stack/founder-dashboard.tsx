@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -18,8 +19,18 @@ import {
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-import { useMyGigs } from "@/hooks/useGig";
+import { useContracts, useMyGigs } from "@/hooks/useGig";
+import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
+import gigApi from "@/lib/gigService";
 import { SearchAccount, searchAll } from "@/lib/searchService";
+import type { Gig, Proposal } from "@/types/gig";
+
+type ProposalSummary = {
+  total: number;
+  pending: number;
+  shortlisted: number;
+  byGigPending: Record<string, number>;
+};
 
 const popularCategories = [
   { id: 1, title: "Graphic Designer", icon: "color-palette" as const, color: "#FF7A00", bg: "rgba(255,122,0,0.12)" },
@@ -28,21 +39,171 @@ const popularCategories = [
   { id: 4, title: "Financial Pro", icon: "briefcase" as const, color: "#34C759", bg: "rgba(52,199,89,0.12)" },
 ];
 
+function formatMoney(min?: number | null, max?: number | null) {
+  const low = Number(min || 0).toLocaleString();
+  const high = Number(max || 0).toLocaleString();
+  return `INR ${low} - ${high}`;
+}
+
+function statusTone(status: Gig["status"]) {
+  if (status === "open") {
+    return { label: "Hiring", color: "#34C759", bg: "rgba(52,199,89,0.12)" };
+  }
+  if (status === "in_progress") {
+    return {
+      label: "In progress",
+      color: "#2A63F6",
+      bg: "rgba(42,99,246,0.12)",
+    };
+  }
+  if (status === "completed") {
+    return { label: "Completed", color: "#5FA876", bg: "rgba(95,168,118,0.12)" };
+  }
+  return { label: "Draft", color: "#8E8E93", bg: "rgba(142,142,147,0.12)" };
+}
+
 export default function FounderDashboardScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
   const insets = useSafeAreaInsets();
 
+  const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [searchResults, setSearchResults] = useState<SearchAccount[]>([]);
   const [searching, setSearching] = useState(false);
+  const [proposalLoading, setProposalLoading] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [proposalSummary, setProposalSummary] = useState<ProposalSummary>({
+    total: 0,
+    pending: 0,
+    shortlisted: 0,
+    byGigPending: {},
+  });
 
-  const { data: gigsData, isLoading: gigsLoading } = useMyGigs({ limit: 4 });
+  const {
+    data: gigsData,
+    isLoading: gigsLoading,
+    isRefetching: gigsRefetching,
+    error: gigsError,
+    refetch: refetchGigs,
+  } = useMyGigs({ limit: 40 });
+
+  const {
+    data: contractsData,
+    isLoading: contractsLoading,
+    isRefetching: contractsRefetching,
+    error: contractsError,
+    refetch: refetchContracts,
+  } = useContracts({ limit: 40 });
+
+  const gigs = useMemo(() => gigsData?.items ?? [], [gigsData?.items]);
+  const contracts = useMemo(() => contractsData?.items ?? [], [contractsData?.items]);
+
+  const loadProposalSummary = useCallback(async (sourceGigs: Gig[]) => {
+    if (!sourceGigs.length) {
+      setProposalSummary({
+        total: 0,
+        pending: 0,
+        shortlisted: 0,
+        byGigPending: {},
+      });
+      setProposalError(null);
+      return;
+    }
+
+    // Limit batched requests to avoid flooding the API for large founder accounts.
+    const targetGigs = sourceGigs.slice(0, 20);
+    setProposalLoading(true);
+    setProposalError(null);
+
+    try {
+      const responses = await Promise.all(
+        targetGigs.map((gig) => gigApi.getGigProposals(gig.id, { limit: 50 })),
+      );
+
+      let total = 0;
+      let pending = 0;
+      let shortlisted = 0;
+      const byGigPending: Record<string, number> = {};
+
+      responses.forEach((res, index) => {
+        const gigId = targetGigs[index]?.id;
+        const proposals = res.items ?? [];
+        total += proposals.length;
+
+        const pendingForGig = proposals.filter(
+          (proposal: Proposal) =>
+            proposal.status === "pending" || proposal.status === "shortlisted",
+        ).length;
+
+        if (gigId) {
+          byGigPending[gigId] = pendingForGig;
+        }
+
+        proposals.forEach((proposal: Proposal) => {
+          if (proposal.status === "pending") pending += 1;
+          if (proposal.status === "shortlisted") shortlisted += 1;
+        });
+      });
+
+      setProposalSummary({ total, pending, shortlisted, byGigPending });
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message?: unknown }).message || "")
+          : "";
+      setProposalError(message || "Failed to load proposal insights.");
+    } finally {
+      setProposalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProposalSummary(gigs);
+  }, [gigs, loadProposalSummary]);
+
   const activeGigs = useMemo(
-    () => (gigsData?.items ?? []).filter((g) => g.status === "open" || g.status === "in_progress"),
-    [gigsData],
+    () => gigs.filter((g) => g.status === "open" || g.status === "in_progress"),
+    [gigs],
+  );
+  const openGigs = useMemo(() => gigs.filter((g) => g.status === "open").length, [gigs]);
+  const activeContracts = useMemo(
+    () => contracts.filter((c) => c.status === "active"),
+    [contracts],
+  );
+  const contractByGigId = useMemo(() => {
+    const map: Record<string, (typeof contracts)[number]> = {};
+    contracts.forEach((contract) => {
+      if (!contract?.gig_id) return;
+      const existing = map[contract.gig_id];
+      if (!existing) {
+        map[contract.gig_id] = contract;
+        return;
+      }
+      const existingTs = new Date(existing.updated_at || existing.created_at).getTime();
+      const currentTs = new Date(contract.updated_at || contract.created_at).getTime();
+      if (currentTs > existingTs) {
+        map[contract.gig_id] = contract;
+      }
+    });
+    return map;
+  }, [contracts]);
+
+  const gigsNeedingReview = useMemo(
+    () =>
+      activeGigs
+        .map((gig) => ({
+          gig,
+          queueCount: proposalSummary.byGigPending[gig.id] || 0,
+        }))
+        .filter((item) => item.queueCount > 0)
+        .sort((a, b) => b.queueCount - a.queueCount)
+        .slice(0, 4),
+    [activeGigs, proposalSummary.byGigPending],
   );
 
+  const hasError = Boolean(gigsError || contractsError || proposalError);
+  const loading = gigsLoading || contractsLoading;
   const isSearching = searchText.trim().length > 0;
 
   const handleSearch = useCallback(async (query: string) => {
@@ -54,8 +215,7 @@ export default function FounderDashboardScreen() {
     try {
       const results = await searchAll(query);
       setSearchResults(results.accounts ?? []);
-    } catch (err) {
-      console.error("Search error:", err);
+    } catch {
       setSearchResults([]);
     } finally {
       setSearching(false);
@@ -67,20 +227,51 @@ export default function FounderDashboardScreen() {
       handleSearch(searchText);
     }, 280);
     return () => clearTimeout(timer);
-  }, [searchText, handleSearch]);
+  }, [handleSearch, searchText]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const gigsResult = await refetchGigs();
+      await refetchContracts();
+      const latestGigs = gigsResult.data?.items ?? gigs;
+      await loadProposalSummary(latestGigs);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [gigs, loadProposalSummary, refetchContracts, refetchGigs]);
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + 10,
+            borderBottomColor: palette.borderLight,
+            backgroundColor: palette.bg,
+          },
+        ]}
+      >
         <T weight="medium" color={palette.text} style={styles.pageTitle}>
           Freelancer Dashboard
         </T>
         <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-          Find, shortlist, and manage talent
+          Backend live view for hiring, proposals, and contracts
         </T>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing || gigsRefetching || contractsRefetching}
+            onRefresh={onRefresh}
+            tintColor={palette.accent}
+          />
+        }
+      >
         <View style={styles.content}>
           <View style={[styles.searchBox, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
             <Ionicons name="search" size={15} color={palette.subText} />
@@ -127,7 +318,7 @@ export default function FounderDashboardScreen() {
                 </SurfaceCard>
               ) : (
                 <View style={styles.stack}>
-                  {searchResults.map((item) => (
+                  {searchResults.slice(0, 6).map((item) => (
                     <TouchableOpacity
                       key={item.id}
                       activeOpacity={0.86}
@@ -161,92 +352,233 @@ export default function FounderDashboardScreen() {
               )}
             </View>
           ) : (
-            <>
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                    Popular Categories
-                  </T>
-                </View>
-                <View style={styles.categoriesGrid}>
-                  {popularCategories.map((cat) => (
-                    <TouchableOpacity key={cat.id} activeOpacity={0.86} style={[styles.categoryCell, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}> 
-                      <View style={[styles.categoryIcon, { backgroundColor: cat.bg }]}> 
-                        <Ionicons name={cat.icon} size={14} color={cat.color} />
-                      </View>
-                      <T weight="medium" color={palette.text} style={styles.categoryTitle} numberOfLines={1}>
-                        {cat.title}
-                      </T>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                  Popular Categories
+                </T>
               </View>
-
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                    Active Gigs
-                  </T>
-                  <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
-                    <T weight="regular" color={palette.accent} style={styles.linkText}>
-                      See all
+              <View style={styles.categoriesGrid}>
+                {popularCategories.map((cat) => (
+                  <TouchableOpacity key={cat.id} activeOpacity={0.86} style={[styles.categoryCell, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
+                    <View style={[styles.categoryIcon, { backgroundColor: cat.bg }]}>
+                      <Ionicons name={cat.icon} size={14} color={cat.color} />
+                    </View>
+                    <T weight="medium" color={palette.text} style={styles.categoryTitle} numberOfLines={1}>
+                      {cat.title}
                     </T>
                   </TouchableOpacity>
-                </View>
-
-                {gigsLoading ? (
-                  <View style={styles.centerWrap}>
-                    <ActivityIndicator size="small" color={palette.accent} />
-                  </View>
-                ) : activeGigs.length === 0 ? (
-                  <SurfaceCard style={styles.emptyCard}>
-                    <Ionicons name="briefcase-outline" size={22} color={palette.subText} />
-                    <T weight="medium" color={palette.text} style={styles.emptyTitle}>
-                      No active gigs yet
-                    </T>
-                    <T weight="regular" color={palette.subText} style={styles.emptySub}>
-                      Create your first gig to start receiving proposals.
-                    </T>
-                  </SurfaceCard>
-                ) : (
-                  <View style={styles.stack}>
-                    {activeGigs.map((gig) => {
-                      const hiring = gig.status === "open";
-                      return (
-                        <TouchableOpacity
-                          key={gig.id}
-                          activeOpacity={0.86}
-                          onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
-                        >
-                          <SurfaceCard style={styles.gigCard}>
-                            <View style={styles.gigHeaderRow}>
-                              <View style={{ flex: 1, minWidth: 0 }}>
-                                <T weight="medium" color={palette.text} style={styles.gigTitle} numberOfLines={1}>
-                                  {gig.title}
-                                </T>
-                                <T weight="regular" color={palette.subText} style={styles.gigBudget} numberOfLines={1}>
-                                  ₹{Number(gig.budget_min).toLocaleString()} - ₹{Number(gig.budget_max).toLocaleString()}
-                                </T>
-                              </View>
-                              <View style={[styles.statusPill, { backgroundColor: hiring ? "rgba(52,199,89,0.12)" : "rgba(42,99,246,0.12)" }]}> 
-                                <T weight="medium" color={hiring ? "#34C759" : "#2A63F6"} style={styles.statusText}>
-                                  {hiring ? "Hiring" : "In progress"}
-                                </T>
-                              </View>
-                            </View>
-                            <View style={[styles.rowDivider, { backgroundColor: palette.borderLight }]} />
-                            <T weight="regular" color={palette.subText} style={styles.gigMeta}>
-                              {gig.proposals_count} proposal{gig.proposals_count !== 1 ? "s" : ""}
-                            </T>
-                          </SurfaceCard>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
+                ))}
               </View>
-            </>
+            </View>
           )}
+
+          {hasError ? (
+            <SurfaceCard style={styles.errorCard}>
+              <T weight="regular" color={palette.accent} style={styles.errorText}>
+                Some dashboard data failed to load. Pull to refresh.
+              </T>
+            </SurfaceCard>
+          ) : null}
+
+          <View style={styles.kpiRow}>
+            <SurfaceCard style={styles.kpiCard}>
+              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
+                Open Gigs
+              </T>
+              <T weight="medium" color={palette.text} style={styles.kpiValue}>
+                {openGigs}
+              </T>
+            </SurfaceCard>
+            <SurfaceCard style={styles.kpiCard}>
+              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
+                Pending Proposals
+              </T>
+              <T weight="medium" color={palette.text} style={styles.kpiValue}>
+                {proposalSummary.pending}
+              </T>
+            </SurfaceCard>
+            <SurfaceCard style={styles.kpiCard}>
+              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
+                Active Contracts
+              </T>
+              <T weight="medium" color={palette.text} style={styles.kpiValue}>
+                {activeContracts.length}
+              </T>
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                Hiring Queue
+              </T>
+              <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
+                <T weight="regular" color={palette.accent} style={styles.linkText}>
+                  Manage gigs
+                </T>
+              </TouchableOpacity>
+            </View>
+
+            {loading || proposalLoading ? (
+              <View style={styles.centerWrap}>
+                <ActivityIndicator size="small" color={palette.accent} />
+              </View>
+            ) : gigsNeedingReview.length === 0 ? (
+              <SurfaceCard style={styles.emptyCard}>
+                <Ionicons name="checkmark-done-outline" size={20} color={palette.subText} />
+                <T weight="medium" color={palette.text} style={styles.emptyTitle}>
+                  No proposals awaiting review
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.emptySub}>
+                  New incoming proposals will show here.
+                </T>
+              </SurfaceCard>
+            ) : (
+              <View style={styles.stack}>
+                {gigsNeedingReview.map((item) => (
+                  <TouchableOpacity
+                    key={item.gig.id}
+                    activeOpacity={0.86}
+                    onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${item.gig.id}`)}
+                  >
+                    <SurfaceCard style={styles.gigCard}>
+                      <View style={styles.gigHeaderRow}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <T weight="medium" color={palette.text} style={styles.gigTitle} numberOfLines={1}>
+                            {item.gig.title}
+                          </T>
+                          <T weight="regular" color={palette.subText} style={styles.gigBudget} numberOfLines={1}>
+                            {formatMoney(item.gig.budget_min, item.gig.budget_max)}
+                          </T>
+                        </View>
+                        <View style={[styles.queuePill, { backgroundColor: "rgba(245,158,11,0.12)" }]}> 
+                          <T weight="medium" color="#F59E0B" style={styles.queueText}>
+                            {item.queueCount} to review
+                          </T>
+                        </View>
+                      </View>
+                    </SurfaceCard>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                Active Gigs
+              </T>
+              <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
+                <T weight="regular" color={palette.accent} style={styles.linkText}>
+                  See all
+                </T>
+              </TouchableOpacity>
+            </View>
+
+            {loading ? (
+              <View style={styles.centerWrap}>
+                <ActivityIndicator size="small" color={palette.accent} />
+              </View>
+            ) : activeGigs.length === 0 ? (
+              <SurfaceCard style={styles.emptyCard}>
+                <Ionicons name="briefcase-outline" size={22} color={palette.subText} />
+                <T weight="medium" color={palette.text} style={styles.emptyTitle}>
+                  No active gigs yet
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.emptySub}>
+                  Create your first gig to start receiving proposals.
+                </T>
+              </SurfaceCard>
+            ) : (
+              <View style={styles.stack}>
+                {activeGigs.slice(0, 4).map((gig) => {
+                  const tone = statusTone(gig.status);
+                  const linkedContract = contractByGigId[gig.id];
+                  const hasAcceptedProposal = Boolean(linkedContract);
+                  const parsedContent = parseGigDescription(gig.description);
+                  const timeline = formatTimeline(
+                    parsedContent.timelineValue,
+                    parsedContent.timelineUnit,
+                  );
+                  return (
+                    <TouchableOpacity
+                      key={gig.id}
+                      activeOpacity={0.86}
+                      onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
+                    >
+                      <SurfaceCard style={styles.gigCard}>
+                        <View style={styles.gigHeaderRow}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <T weight="medium" color={palette.text} style={styles.gigTitle} numberOfLines={1}>
+                              {gig.title}
+                            </T>
+                            <T weight="regular" color={palette.subText} style={styles.gigBudget} numberOfLines={1}>
+                              {formatMoney(gig.budget_min, gig.budget_max)}
+                            </T>
+                          </View>
+                          <View style={[styles.statusPill, { backgroundColor: tone.bg }]}> 
+                            <T weight="medium" color={tone.color} style={styles.statusText}>
+                              {tone.label}
+                            </T>
+                          </View>
+                        </View>
+                        <View style={[styles.rowDivider, { backgroundColor: palette.borderLight }]} />
+                        <View style={styles.gigFooter}>
+                          {!hasAcceptedProposal ? (
+                            <T weight="regular" color={palette.subText} style={styles.gigMeta}>
+                              {gig.proposals_count || 0} proposal{gig.proposals_count === 1 ? "" : "s"}
+                              {" · "}
+                              {proposalSummary.byGigPending[gig.id] || 0} pending review
+                              {" · "}
+                              {timeline}
+                            </T>
+                          ) : null}
+                          <View style={styles.gigActions}>
+                            {hasAcceptedProposal ? (
+                              <TouchableOpacity
+                                style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
+                                onPress={() =>
+                                  nav.push(
+                                    `/freelancer-stack/contract-chat-thread?contractId=${linkedContract?.id}&title=${encodeURIComponent(
+                                      `${gig.title} • Contract Chat`,
+                                    )}`,
+                                  )
+                                }
+                              >
+                                <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
+                                  Chat
+                                </T>
+                              </TouchableOpacity>
+                            ) : (
+                              <TouchableOpacity
+                                style={[styles.actionBtn, { backgroundColor: palette.border }]}
+                                onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
+                              >
+                                <T weight="medium" color={palette.text} style={styles.actionBtnText}>
+                                  Proposals
+                                </T>
+                              </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                              style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
+                              onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
+                            >
+                              <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
+                                View Details
+                              </T>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </SurfaceCard>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
         </View>
       </ScrollView>
     </FlowScreen>
@@ -291,6 +623,32 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
     fontSize: 12,
     lineHeight: 16,
+  },
+  errorCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  errorText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  kpiRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  kpiCard: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  kpiLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  kpiValue: {
+    marginTop: 4,
+    fontSize: 16,
+    lineHeight: 20,
   },
   section: {
     gap: 8,
@@ -401,11 +759,36 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 13,
   },
+  queuePill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  queueText: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
   rowDivider: {
     height: 1,
     marginVertical: 10,
   },
   gigMeta: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  gigFooter: {
+    gap: 8,
+  },
+  gigActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  actionBtnText: {
     fontSize: 11,
     lineHeight: 14,
   },

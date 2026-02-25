@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import { FlowScreen, SurfaceCard, T, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { useGig, useMyProposals, useSubmitProposal } from "@/hooks/useGig";
+import { parseGigDescription } from "@/lib/gigContent";
 
 export default function FreelancerSendProposalScreen() {
   const { palette } = useFlowPalette();
@@ -26,6 +27,20 @@ export default function FreelancerSendProposalScreen() {
   const [portfolioLink, setPortfolioLink] = useState("");
   const [milestonePlan, setMilestonePlan] = useState("");
   const [coverNote, setCoverNote] = useState("");
+  const [screeningAnswers, setScreeningAnswers] = useState<string[]>([]);
+
+  const screeningQuestions = useMemo(
+    () => parseGigDescription(gig?.description || "").screeningQuestions,
+    [gig?.description],
+  );
+
+  useEffect(() => {
+    if (screeningQuestions.length === 0) {
+      setScreeningAnswers([]);
+      return;
+    }
+    setScreeningAnswers((prev) => screeningQuestions.map((_, idx) => prev[idx] || ""));
+  }, [screeningQuestions]);
 
   const suggestedBudget = gig
     ? `${Number(gig.budget_min || 0).toLocaleString()}-${Number(gig.budget_max || 0).toLocaleString()}`
@@ -59,6 +74,13 @@ export default function FreelancerSendProposalScreen() {
       Alert.alert("Cover note too short", "Please provide at least 20 characters in cover note.");
       return;
     }
+    if (
+      screeningQuestions.length > 0 &&
+      screeningAnswers.some((answer) => answer.trim().length < 5)
+    ) {
+      Alert.alert("Incomplete answers", "Please answer all screening questions.");
+      return;
+    }
     if (existingBlocksSubmit) {
       Alert.alert("Already submitted", "You have already submitted a proposal for this gig.");
       return;
@@ -77,6 +99,12 @@ export default function FreelancerSendProposalScreen() {
         return;
       }
 
+      const screeningBlock = screeningQuestions.length > 0
+        ? `\n\nScreening Answers:\n${screeningQuestions
+            .map((question, index) => `${index + 1}. ${question}\nA: ${screeningAnswers[index]?.trim() || "-"}`)
+            .join("\n\n")}`
+        : "";
+
       await submitProposal.mutateAsync({
         gigId,
         data: {
@@ -85,6 +113,7 @@ export default function FreelancerSendProposalScreen() {
             milestonePlan.trim() ? `\n\nMilestones:\n${milestonePlan.trim()}` : "",
             portfolioLink.trim() ? `\n\nPortfolio: ${portfolioLink.trim()}` : "",
             availability.trim() ? `\n\nAvailability: ${availability.trim()}` : "",
+            screeningBlock,
           ].join(""),
           proposed_amount: proposedAmount,
           estimated_days: Number.isFinite(estimatedDays) && estimatedDays > 0 ? estimatedDays : undefined,
@@ -248,6 +277,36 @@ export default function FreelancerSendProposalScreen() {
             />
           </SurfaceCard>
 
+          {screeningQuestions.length > 0 ? (
+            <SurfaceCard style={styles.formCard}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                Screening Questions
+              </T>
+              {screeningQuestions.map((question, index) => (
+                <View key={`question-${index}`} style={styles.screeningBlock}>
+                  <T weight="medium" color={palette.subText} style={styles.label}>
+                    {index + 1}. {question}
+                  </T>
+                  <TextInput
+                    multiline
+                    textAlignVertical="top"
+                    value={screeningAnswers[index] || ""}
+                    onChangeText={(value) =>
+                      setScreeningAnswers((prev) => {
+                        const next = [...prev];
+                        next[index] = value;
+                        return next;
+                      })
+                    }
+                    placeholder="Write your answer"
+                    placeholderTextColor={palette.subText}
+                    style={[styles.textareaSmall, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+                  />
+                </View>
+              ))}
+            </SurfaceCard>
+          ) : null}
+
           {existingProposal ? (
             <SurfaceCard style={styles.formCard}>
               <T weight="medium" color={palette.text} style={styles.sectionTitle}>
@@ -392,6 +451,9 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_500Medium",
     fontSize: 13,
     lineHeight: 18,
+  },
+  screeningBlock: {
+    marginTop: 6,
   },
   submitBtn: {
     marginTop: 2,

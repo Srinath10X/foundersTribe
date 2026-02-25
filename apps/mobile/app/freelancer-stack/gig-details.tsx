@@ -14,7 +14,8 @@ import {
 } from "@/components/community/freelancerFlow/shared";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { useGig } from "@/hooks/useGig";
+import { useContracts, useGig } from "@/hooks/useGig";
+import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
 
 export default function GigDetailsScreen() {
   const { palette } = useFlowPalette();
@@ -22,8 +23,11 @@ export default function GigDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
 
   const { data: gig, isLoading, error, refetch } = useGig(id);
+  const { data: contractsData } = useContracts({ limit: 100 });
 
   const tags = gig?.gig_tags?.map((gt) => gt.tags?.label).filter(Boolean) ?? [];
+  const parsedContent = parseGigDescription(gig?.description || "");
+  const isLockedForEdit = Boolean((contractsData?.items ?? []).some((c) => c.gig_id === gig?.id));
 
   const statusTone =
     gig?.status === "open"
@@ -121,12 +125,14 @@ export default function GigDetailsScreen() {
           <T weight="medium" color={palette.text} style={styles.pageTitle}>Gig Details</T>
           <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Review requirements and status</T>
         </View>
-        <TouchableOpacity
-          style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-          onPress={() => nav.push(`/freelancer-stack/post-gig?id=${gig.id}`)}
-        >
-          <Ionicons name="pencil" size={14} color={palette.text} />
-        </TouchableOpacity>
+        {isLockedForEdit ? null : (
+          <TouchableOpacity
+            style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+            onPress={() => nav.push(`/freelancer-stack/post-gig?id=${gig.id}`)}
+          >
+            <Ionicons name="pencil" size={14} color={palette.text} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -157,16 +163,48 @@ export default function GigDetailsScreen() {
               </T>
             </SurfaceCard>
             <SurfaceCard style={styles.kpiCard}>
-              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>Type</T>
+              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>Timeline</T>
               <T weight="medium" color={palette.text} style={styles.kpiValue}>
-                {gig.budget_type === "hourly" ? "Hourly" : "Fixed"}
+                {formatTimeline(parsedContent.timelineValue, parsedContent.timelineUnit)}
               </T>
             </SurfaceCard>
           </View>
 
           <SurfaceCard style={styles.card}>
-            <T weight="medium" color={palette.text} style={styles.blockTitle}>Description</T>
-            <T weight="regular" color={palette.subText} style={styles.blockBody}>{gig.description}</T>
+            <T weight="medium" color={palette.text} style={styles.blockTitle}>Project Overview</T>
+            <T weight="regular" color={palette.subText} style={styles.blockBody}>
+              {parsedContent.projectOverview || "No project overview provided."}
+            </T>
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.card}>
+            <T weight="medium" color={palette.text} style={styles.blockTitle}>Deliverables</T>
+            {parsedContent.deliverables.length > 0 ? (
+              parsedContent.deliverables.map((item, idx) => (
+                <T key={`deliverable-${idx}`} weight="regular" color={palette.subText} style={styles.blockBody}>
+                  - {item}
+                </T>
+              ))
+            ) : (
+              <T weight="regular" color={palette.subText} style={styles.blockBody}>
+                No deliverables listed.
+              </T>
+            )}
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.card}>
+            <T weight="medium" color={palette.text} style={styles.blockTitle}>Screening Questions</T>
+            {parsedContent.screeningQuestions.length > 0 ? (
+              parsedContent.screeningQuestions.map((item, idx) => (
+                <T key={`question-${idx}`} weight="regular" color={palette.subText} style={styles.blockBody}>
+                  {idx + 1}. {item}
+                </T>
+              ))
+            ) : (
+              <T weight="regular" color={palette.subText} style={styles.blockBody}>
+                No screening questions added.
+              </T>
+            )}
           </SurfaceCard>
 
           <SurfaceCard style={styles.card}>
