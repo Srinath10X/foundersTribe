@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import {
@@ -13,32 +13,38 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { useAuth } from "@/context/AuthContext";
-import { EmptyState } from "@/components/freelancer/EmptyState";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { searchAccounts } from "@/lib/searchService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
 const STORAGE_BUCKET = "tribe-media";
 
-type PublicProfile = {
+type PreviousWork = { company?: string; role?: string; duration?: string };
+type SocialLink = { platform?: string; url?: string; label?: string };
+
+type PublicProfileData = {
   id: string;
   display_name: string;
   username?: string | null;
   bio?: string | null;
   avatar_url?: string | null;
   photo_url?: string | null;
-  role?: string | null;
   user_type?: string | null;
+  contact?: string | null;
+  address?: string | null;
   location?: string | null;
-  rating?: number | string | null;
-  hourly_rate?: number | string | null;
-  skills?: string[] | null;
+  linkedin_url?: string | null;
+  role?: string | null;
+  previous_works?: PreviousWork[] | null;
+  social_links?: SocialLink[] | null;
+  completed_gigs?: { title?: string; description?: string }[] | null;
 };
 
 async function resolveAvatar(candidate: unknown, userId: string): Promise<string | null> {
-  if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) return candidate;
+  if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
+    return candidate;
+  }
 
   if (typeof candidate === "string" && candidate.trim()) {
     const { data } = await supabase.storage
@@ -61,103 +67,96 @@ async function resolveAvatar(candidate: unknown, userId: string): Promise<string
   return data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : null;
 }
 
+function FieldRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string | null }) {
+  const { palette } = useFlowPalette();
+  if (!value) return null;
+
+  return (
+    <View style={styles.fieldRow}>
+      <View style={[styles.fieldIcon, { backgroundColor: palette.accentSoft }]}>
+        <Ionicons name={icon} size={13} color={palette.accent} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <T weight="regular" color={palette.subText} style={styles.fieldLabel}>
+          {label}
+        </T>
+        <T weight="medium" color={palette.text} style={styles.fieldValue} numberOfLines={2}>
+          {value}
+        </T>
+      </View>
+    </View>
+  );
+}
+
 export default function FreelancerProfileScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
   const { session } = useAuth();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
-  const [freelancer, setFreelancer] = useState<PublicProfile | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<PublicProfileData | null>(null);
 
-  const loadFreelancer = useCallback(async () => {
-    const freelancerId = typeof id === "string" ? id : "";
-    if (!freelancerId) {
-      setFreelancer(null);
+  const loadProfile = useCallback(async () => {
+    const profileId = typeof id === "string" ? id : "";
+    if (!profileId || !session?.access_token) {
+      setProfile(null);
       setLoading(false);
       return;
     }
 
     setLoading(true);
-
-    const fallback = searchAccounts("").find((item) => item.id === freelancerId) || null;
-
-    if (!session?.access_token) {
-      setFreelancer(
-        fallback
-          ? {
-              id: fallback.id,
-              display_name: fallback.display_name,
-              username: fallback.username,
-              bio: fallback.bio,
-              avatar_url: fallback.avatar_url,
-              role: "freelancer",
-              skills: fallback.skills,
-              rating: fallback.rating,
-              hourly_rate: fallback.hourly_rate,
-            }
-          : null,
-      );
-      setLoading(false);
-      return;
-    }
-
     try {
-      const raw = await tribeApi.getPublicProfile(session.access_token, freelancerId);
-      const avatar =
-        (await resolveAvatar(raw?.photo_url || raw?.avatar_url || null, freelancerId)) ||
-        fallback?.avatar_url ||
+      const db = await tribeApi.getPublicProfile(session.access_token, profileId);
+      const resolvedAvatar =
+        (await resolveAvatar(db?.photo_url || db?.avatar_url || null, profileId)) ||
         people.alex;
 
-      setFreelancer({
-        id: freelancerId,
-        display_name: raw?.display_name || raw?.full_name || fallback?.display_name || "Freelancer",
-        username: raw?.username || raw?.handle || fallback?.username || null,
-        bio: raw?.bio ?? fallback?.bio ?? null,
-        avatar_url: avatar,
-        photo_url: avatar,
-        role: raw?.role || raw?.user_type || "freelancer",
-        user_type: raw?.user_type || null,
-        location: typeof raw?.location === "string" ? raw.location : null,
-        rating: raw?.rating ?? fallback?.rating ?? null,
-        hourly_rate: raw?.hourly_rate ?? fallback?.hourly_rate ?? null,
-        skills: Array.isArray(raw?.skills)
-          ? raw.skills
-          : Array.isArray(fallback?.skills)
-            ? fallback.skills
-            : [],
-      });
+      const merged: PublicProfileData = {
+        id: profileId,
+        display_name: db?.display_name || db?.full_name || "Freelancer",
+        username: db?.username || db?.handle || null,
+        bio: db?.bio ?? null,
+        avatar_url: resolvedAvatar,
+        photo_url: resolvedAvatar,
+        user_type: db?.user_type || "freelancer",
+        contact: db?.contact ?? null,
+        address: db?.address ?? null,
+        location:
+          typeof db?.location === "string"
+            ? db.location
+            : db?.location && typeof db.location === "object"
+              ? [db.location.city, db.location.state, db.location.country].filter(Boolean).join(", ")
+              : null,
+        linkedin_url: db?.linkedin_url ?? null,
+        role: db?.role ?? null,
+        previous_works: Array.isArray(db?.previous_works) ? db.previous_works : [],
+        social_links: Array.isArray(db?.social_links) ? db.social_links : [],
+        completed_gigs: Array.isArray(db?.completed_gigs) ? db.completed_gigs : [],
+      };
+
+      setProfile(merged);
     } catch {
-      setFreelancer(
-        fallback
-          ? {
-              id: fallback.id,
-              display_name: fallback.display_name,
-              username: fallback.username,
-              bio: fallback.bio,
-              avatar_url: fallback.avatar_url || people.alex,
-              photo_url: fallback.avatar_url || people.alex,
-              role: "freelancer",
-              skills: fallback.skills,
-              rating: fallback.rating,
-              hourly_rate: fallback.hourly_rate,
-            }
-          : null,
-      );
+      setProfile(null);
     } finally {
       setLoading(false);
     }
   }, [id, session?.access_token]);
 
   useEffect(() => {
-    loadFreelancer();
-  }, [loadFreelancer]);
+    loadProfile();
+  }, [loadProfile]);
 
-  const skills = useMemo(() => freelancer?.skills ?? [], [freelancer?.skills]);
-  const ratingValue = Number(freelancer?.rating);
-  const rateValue = Number(freelancer?.hourly_rate);
-  const ratingDisplay = Number.isFinite(ratingValue) && ratingValue > 0 ? `${ratingValue.toFixed(1)} / 5` : "N/A";
-  const rateDisplay = Number.isFinite(rateValue) && rateValue > 0 ? `INR ${rateValue}/hr` : "N/A";
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadProfile();
+    setRefreshing(false);
+  }, [loadProfile]);
+
+  const works = profile?.previous_works || [];
+  const previousWorks = (Array.isArray(profile?.completed_gigs) ? profile.completed_gigs : []) || [];
+  const links = (profile?.social_links || []).filter((x) => x?.url);
 
   if (loading) {
     return (
@@ -171,12 +170,12 @@ export default function FreelancerProfileScreen() {
             <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>View profile details</T>
           </View>
         </View>
-        <View style={styles.contentPad}><LoadingState rows={4} /></View>
+        <View style={styles.loadingWrap}><LoadingState rows={5} /></View>
       </FlowScreen>
     );
   }
 
-  if (!freelancer) {
+  if (!profile) {
     return (
       <FlowScreen>
         <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
@@ -188,12 +187,8 @@ export default function FreelancerProfileScreen() {
             <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>View profile details</T>
           </View>
         </View>
-        <View style={styles.contentPad}>
-          <ErrorState
-            title="Freelancer not found"
-            message="The profile couldn't be loaded."
-            onRetry={loadFreelancer}
-          />
+        <View style={styles.loadingWrap}>
+          <ErrorState title="Freelancer not found" message="The profile couldn't be loaded." onRetry={loadProfile} />
         </View>
       </FlowScreen>
     );
@@ -211,57 +206,121 @@ export default function FreelancerProfileScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollPad}>
-        <View style={styles.contentPad}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
+      >
+        <View style={styles.content}>
           <SurfaceCard style={styles.heroCard}>
-            <View style={styles.head}>
-              <View style={styles.avatarWrap}>
-                <Avatar source={freelancer.photo_url || freelancer.avatar_url || people.alex} size={72} />
-                <View style={[styles.online, { borderColor: palette.surface }]} />
-              </View>
+            <View style={styles.heroTop}>
+              <Avatar source={profile.photo_url || profile.avatar_url || people.alex} size={64} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>{freelancer.display_name}</T>
-                <T weight="regular" color={palette.subText} style={styles.role} numberOfLines={1}>
-                  {freelancer.role || freelancer.user_type || "freelancer"}
+                <T weight="medium" color={palette.text} style={styles.heroName} numberOfLines={1}>
+                  {profile.display_name || "Freelancer"}
                 </T>
-                {freelancer.bio ? (
-                  <T weight="regular" color={palette.subText} style={styles.bio} numberOfLines={2}>{freelancer.bio}</T>
-                ) : null}
+                <T weight="regular" color={palette.subText} style={styles.heroMeta} numberOfLines={1}>
+                  @{profile.username || "user"}
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.heroMeta} numberOfLines={1}>
+                  {profile.user_type || profile.role || "freelancer"}
+                </T>
               </View>
+            </View>
+
+            <T weight="regular" color={palette.subText} style={styles.bioText}>
+              {profile.bio || "No bio added yet."}
+            </T>
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.sectionCard}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Personal Details
+            </T>
+            <View style={styles.sectionStack}>
+              <FieldRow icon="call-outline" label="Phone" value={profile.contact} />
+              <FieldRow icon="location-outline" label="Address" value={profile.address} />
+              <FieldRow icon="navigate-outline" label="Location" value={profile.location} />
+              <FieldRow icon="logo-linkedin" label="LinkedIn" value={profile.linkedin_url} />
+              <FieldRow icon="briefcase-outline" label="Role" value={profile.role} />
             </View>
           </SurfaceCard>
 
-          <View style={styles.statsRow}>
-            <SurfaceCard style={styles.statCard}>
-              <T weight="regular" color={palette.subText} style={styles.statLabel}>Rating</T>
-              <T weight="medium" color={palette.text} style={styles.statValue}>{ratingDisplay}</T>
-            </SurfaceCard>
-            <SurfaceCard style={styles.statCard}>
-              <T weight="regular" color={palette.subText} style={styles.statLabel}>Hourly Rate</T>
-              <T weight="medium" color={palette.text} style={styles.statValue}>{rateDisplay}</T>
-            </SurfaceCard>
-          </View>
+          <SurfaceCard style={styles.sectionCard}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Experience
+            </T>
+            <View style={styles.sectionStack}>
+              {works.length === 0 ? (
+                <T weight="regular" color={palette.subText} style={styles.emptyText}>
+                  No experience items added yet.
+                </T>
+              ) : (
+                works.slice(0, 4).map((work, index) => (
+                  <View key={`${work.company || "work"}-${index}`} style={[styles.workItem, { borderColor: palette.borderLight }]}> 
+                    <T weight="medium" color={palette.text} style={styles.workRole} numberOfLines={1}>
+                      {work.role || "Role"}
+                    </T>
+                    <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
+                      {work.company || "Company"}
+                    </T>
+                    <T weight="regular" color={palette.subText} style={styles.workDuration} numberOfLines={1}>
+                      {work.duration || "Duration"}
+                    </T>
+                  </View>
+                ))
+              )}
+            </View>
+          </SurfaceCard>
 
-          {skills.length > 0 ? (
-            <SurfaceCard style={styles.sectionCard}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>Top Skills</T>
-              <View style={styles.tags}>
-                {skills.map((skill) => (
-                  <View key={skill} style={[styles.tag, { backgroundColor: palette.border }]}> 
-                    <T weight="regular" color={palette.subText} style={styles.tagText}>{skill}</T>
+          <SurfaceCard style={styles.sectionCard}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Previous Works
+            </T>
+            <View style={styles.sectionStack}>
+              {previousWorks.length === 0 ? (
+                <T weight="regular" color={palette.subText} style={styles.emptyText}>
+                  No previous works added yet.
+                </T>
+              ) : (
+                previousWorks.slice(0, 4).map((work, index) => (
+                  <View key={`prev-${index}`} style={[styles.workItem, { borderColor: palette.borderLight }]}> 
+                    <T weight="medium" color={palette.text} style={styles.workRole}>
+                      {String(work?.title || "Work")}
+                    </T>
+                    <T weight="regular" color={palette.subText} style={styles.workCompany}>
+                      {String(work?.description || "Description")}
+                    </T>
+                  </View>
+                ))
+              )}
+            </View>
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.sectionCard}>
+            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              Social Links
+            </T>
+            {links.length === 0 ? (
+              <T weight="regular" color={palette.subText} style={styles.emptyText}>
+                No social links added.
+              </T>
+            ) : (
+              <View style={styles.linksWrap}>
+                {links.slice(0, 6).map((item, index) => (
+                  <View
+                    key={`${item.platform || "link"}-${index}`}
+                    style={[styles.linkPill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+                  >
+                    <Ionicons name="link-outline" size={13} color={palette.subText} />
+                    <T weight="regular" color={palette.text} style={styles.linkText} numberOfLines={1}>
+                      {item.label || item.platform || "Link"}
+                    </T>
                   </View>
                 ))}
               </View>
-            </SurfaceCard>
-          ) : (
-            <SurfaceCard style={styles.sectionCard}>
-              <EmptyState
-                icon="construct-outline"
-                title="No skills listed"
-                subtitle="This freelancer hasn't added skills to their profile yet."
-              />
-            </SurfaceCard>
-          )}
+            )}
+          </SurfaceCard>
         </View>
       </ScrollView>
     </FlowScreen>
@@ -286,33 +345,130 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pageTitle: { fontSize: 20, lineHeight: 26, letterSpacing: -0.2 },
-  pageSubtitle: { marginTop: 1, fontSize: 12, lineHeight: 16 },
-  scrollPad: { paddingBottom: 100 },
-  contentPad: { paddingHorizontal: 18, paddingTop: 14, gap: 8 },
-  heroCard: { padding: 12 },
-  head: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatarWrap: { position: "relative" },
-  online: {
-    position: "absolute",
-    right: 1,
-    bottom: 1,
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    borderWidth: 2,
-    backgroundColor: "#5FA876",
+  pageTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.2,
   },
-  name: { fontSize: 14, lineHeight: 19 },
-  role: { marginTop: 2, fontSize: 11, lineHeight: 14, textTransform: "capitalize" },
-  bio: { marginTop: 2, fontSize: 11, lineHeight: 15 },
-  statsRow: { flexDirection: "row", gap: 8 },
-  statCard: { flex: 1, padding: 10 },
-  statLabel: { fontSize: 10, lineHeight: 13 },
-  statValue: { marginTop: 4, fontSize: 13, lineHeight: 17 },
-  sectionCard: { padding: 12 },
-  sectionTitle: { fontSize: 13, lineHeight: 17 },
-  tags: { marginTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  tag: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4 },
-  tagText: { fontSize: 10, lineHeight: 13 },
+  pageSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  loadingWrap: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+  },
+  scrollContent: {
+    paddingBottom: 120,
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    gap: 12,
+  },
+  heroCard: {
+    padding: 14,
+    borderRadius: 14,
+  },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  heroName: {
+    fontSize: 15,
+    lineHeight: 19,
+    letterSpacing: -0.2,
+  },
+  heroMeta: {
+    marginTop: 1,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  bioText: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  sectionCard: {
+    padding: 14,
+    borderRadius: 14,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    letterSpacing: -0.2,
+  },
+  sectionStack: {
+    marginTop: 10,
+    gap: 10,
+  },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  fieldIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fieldLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  fieldValue: {
+    marginTop: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  workItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  workRole: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  workCompany: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  workDuration: {
+    marginTop: 1,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  linksWrap: {
+    marginTop: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  linkPill: {
+    borderWidth: 1,
+    borderRadius: 999,
+    height: 30,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    maxWidth: "100%",
+  },
+  linkText: {
+    fontSize: 11,
+    lineHeight: 14,
+    maxWidth: 170,
+  },
+  emptyText: {
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 14,
+  },
 });
