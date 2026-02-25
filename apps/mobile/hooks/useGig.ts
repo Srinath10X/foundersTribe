@@ -30,8 +30,6 @@ import {
   useMutation,
   useInfiniteQuery,
   useQueryClient,
-  type UseQueryOptions,
-  type UseMutationOptions,
 } from "@tanstack/react-query";
 import gigService, { GigServiceError } from "@/lib/gigService";
 import type {
@@ -40,6 +38,9 @@ import type {
   GigUpdateInput,
   GigFilters,
   PaginatedGigs,
+  FreelancerService,
+  FreelancerServiceFilters,
+  PaginatedFreelancerServices,
   FreelancerStats,
   Contract,
   ContractFilters,
@@ -48,6 +49,11 @@ import type {
   MessageListParams,
   PaginatedContracts,
   PaginatedMessages,
+  PaginatedServiceRequestMessages,
+  ServiceMessageRequest,
+  ServiceRequestFilters,
+  PaginatedServiceRequests,
+  ServiceRequestMessage,
   Proposal,
   ProposalCreateInput,
   ProposalFilters,
@@ -55,7 +61,6 @@ import type {
   Rating,
   RatingCreateInput,
   Testimonial,
-  Notification,
   NotificationFilters,
   PaginatedNotifications,
   UserProfile,
@@ -73,6 +78,19 @@ export const queryKeys = {
     mine: (filters?: GigFilters) => ["gigs", "me", filters] as const,
     detail: (id: string) => ["gigs", id] as const,
     stats: () => ["gigs", "stats"] as const,
+  },
+  services: {
+    all: ["services"] as const,
+    list: (filters?: FreelancerServiceFilters) => ["services", "list", filters] as const,
+    mine: () => ["services", "me"] as const,
+    forFreelancer: (freelancerId: string) => ["services", "freelancer", freelancerId] as const,
+  },
+  serviceRequests: {
+    all: ["service-requests"] as const,
+    list: (filters?: ServiceRequestFilters, scope = "global") =>
+      ["service-requests", "list", scope, filters] as const,
+    detail: (id: string) => ["service-requests", id] as const,
+    messages: (id: string, params?: MessageListParams) => ["service-requests", id, "messages", params] as const,
   },
   proposals: {
     all: ["proposals"] as const,
@@ -198,6 +216,58 @@ export function useDeleteGig() {
       queryClient.removeQueries({ queryKey: queryKeys.gigs.detail(id) });
       // Invalidate lists
       queryClient.invalidateQueries({ queryKey: queryKeys.gigs.all });
+    },
+  });
+}
+
+// ============================================================
+// FREELANCER SERVICE CATALOG HOOKS
+// ============================================================
+
+export function useFreelancerServices(filters?: FreelancerServiceFilters, enabled = true) {
+  return useQuery<PaginatedFreelancerServices, GigServiceError>({
+    queryKey: queryKeys.services.list(filters),
+    queryFn: () => gigService.getFreelancerServices(filters),
+    enabled,
+  });
+}
+
+export function useMyFreelancerServices(enabled = true) {
+  return useQuery<FreelancerService[], GigServiceError>({
+    queryKey: queryKeys.services.mine(),
+    queryFn: () => gigService.getMyFreelancerServices(),
+    enabled,
+  });
+}
+
+export function useFreelancerServicesByUser(freelancerId: string | null | undefined, enabled = true) {
+  return useQuery<FreelancerService[], GigServiceError>({
+    queryKey: queryKeys.services.forFreelancer(freelancerId || ""),
+    queryFn: () => gigService.getFreelancerServicesByUser(freelancerId || ""),
+    enabled: enabled && !!freelancerId,
+  });
+}
+
+export function useUpdateMyFreelancerServices() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    FreelancerService[],
+    GigServiceError,
+    {
+      services: {
+        service_name: string;
+        description?: string | null;
+        cost_amount: number;
+        cost_currency?: string;
+        delivery_time_value: number;
+        delivery_time_unit: "days" | "weeks";
+        is_active?: boolean;
+      }[];
+    }
+  >({
+    mutationFn: (payload) => gigService.updateMyFreelancerServices(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.services.all });
     },
   });
 }
@@ -352,6 +422,77 @@ export function useApproveContract() {
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(updatedContract.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.gigs.all });
+    },
+  });
+}
+
+// ============================================================
+// SERVICE REQUEST CHAT HOOKS
+// ============================================================
+
+export function useServiceRequests(filters?: ServiceRequestFilters, enabled = true, scope = "global") {
+  return useQuery<PaginatedServiceRequests, GigServiceError>({
+    queryKey: queryKeys.serviceRequests.list(filters, scope),
+    queryFn: () => gigService.getServiceRequests(filters),
+    enabled,
+    staleTime: 15_000,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
+  });
+}
+
+export function useCreateServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ServiceMessageRequest,
+    GigServiceError,
+    { freelancer_id: string; service_id?: string; message?: string }
+  >({
+    mutationFn: (payload) => gigService.createServiceRequest(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
+    },
+  });
+}
+
+export function useServiceRequestMessages(
+  requestId: string | null | undefined,
+  params?: MessageListParams,
+  enabled = true,
+) {
+  return useQuery<PaginatedServiceRequestMessages, GigServiceError>({
+    queryKey: queryKeys.serviceRequests.messages(requestId || "", params),
+    queryFn: () => gigService.getServiceRequestMessages(requestId || "", params),
+    enabled: enabled && !!requestId,
+  });
+}
+
+export function useSendServiceRequestMessage() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ServiceRequestMessage,
+    GigServiceError,
+    {
+      requestId: string;
+      data: MessageCreateInput;
+    }
+  >({
+    mutationFn: ({ requestId, data }) => gigService.sendServiceRequestMessage(requestId, data),
+    onSuccess: (_message, variables) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.messages(variables.requestId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.all });
+    },
+  });
+}
+
+export function useMarkServiceRequestMessagesRead() {
+  const queryClient = useQueryClient();
+  return useMutation<void, GigServiceError, string>({
+    mutationFn: (requestId) => gigService.markServiceRequestMessagesRead(requestId),
+    onSuccess: (_res, requestId) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.messages(requestId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.all });
     },
   });
 }

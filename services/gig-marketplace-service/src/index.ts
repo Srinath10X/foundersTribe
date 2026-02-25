@@ -17,6 +17,7 @@ import contractMessagesRoutes from "./routes/contractMessages.js";
 import contractRatingsRoutes from "./routes/contractRatings.js";
 import notificationsRoutes from "./routes/notifications.js";
 import usersRoutes from "./routes/users.js";
+import servicesRoutes from "./routes/services.js";
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use("/api/contracts/:id/messages", contractMessagesRoutes);
 app.use("/api/contracts/:id/rate", contractRatingsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/services", servicesRoutes);
 
 app.use(errorHandler);
 

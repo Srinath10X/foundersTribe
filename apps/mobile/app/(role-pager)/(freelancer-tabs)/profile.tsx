@@ -443,6 +443,16 @@ export default function FreelancerProfileScreen() {
                 Edit Profile
               </T>
             </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.86}
+              style={[styles.manageServicesBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+              onPress={() => router.push("/(role-pager)/(freelancer-tabs)/my-services")}
+            >
+              <Ionicons name="briefcase-outline" size={14} color={palette.text} />
+              <T weight="medium" color={palette.text} style={styles.manageServicesText}>
+                Manage Services
+              </T>
+            </TouchableOpacity>
           </SurfaceCard>
 
           <SurfaceCard style={styles.sectionCard}>
@@ -584,7 +594,7 @@ export default function FreelancerProfileScreen() {
             style={[styles.logoutBtn, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}
             onPress={async () => {
               await supabase.auth.signOut();
-              router.replace("/");
+              router.replace("/login");
             }}
           >
             <Ionicons name="log-out-outline" size={15} color={palette.accent} />
@@ -664,6 +674,20 @@ const styles = StyleSheet.create({
   editBtnText: {
     fontSize: 12,
     lineHeight: 16,
+  },
+  manageServicesBtn: {
+    marginTop: 8,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  manageServicesText: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   sectionCard: {
     padding: 14,

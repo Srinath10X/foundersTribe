@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useContractRealtimeChat } from "@/hooks/useContractRealtimeChat";
+import { useServiceRequestRealtimeChat } from "@/hooks/useServiceRequestRealtimeChat";
 
 import { Avatar, FlowScreen, T, useFlowNav, useFlowPalette } from "./shared";
 
@@ -25,6 +26,7 @@ type ThreadScreenProps = {
   threadId?: string;
   title?: string;
   avatar?: string;
+  threadKind?: "contract" | "service";
 };
 
 function formatDayLabel(dateInput: string): string {
@@ -81,7 +83,7 @@ function inferViewerRole(pathname: string): ViewerRole {
   return "founder";
 }
 
-export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenProps) {
+export default function ThreadScreen({ threadId, title, avatar, threadKind = "contract" }: ThreadScreenProps) {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
   const insets = useSafeAreaInsets();
@@ -90,8 +92,16 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
 
   const [draft, setDraft] = useState("");
 
+  const contractThread = useContractRealtimeChat({
+    contractId: threadKind === "contract" ? threadId : undefined,
+    allowAutoResolve: threadKind === "contract",
+  });
+  const serviceThread = useServiceRequestRealtimeChat({
+    requestId: threadKind === "service" ? threadId : undefined,
+  });
+  const activeThread = threadKind === "service" ? serviceThread : contractThread;
+  const resolvedContractId = threadKind === "service" ? serviceThread.requestId : contractThread.contractId;
   const {
-    contractId: resolvedContractId,
     isRealtimeConnected,
     currentUserId,
     viewerRole,
@@ -102,7 +112,7 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     error,
     sendTextMessage,
     retryFailedMessage,
-  } = useContractRealtimeChat({ contractId: threadId });
+  } = activeThread;
 
   const resolvedViewerRole = viewerRole || inferViewerRole(pathname);
   const peerRoleLabel = resolvedViewerRole === "founder" ? "Freelancer" : "Founder";

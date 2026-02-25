@@ -19,11 +19,11 @@ import {
 
 import { Avatar, FlowScreen, T, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { useAuth } from "@/context/AuthContext";
-import { useContracts } from "@/hooks/useGig";
+import { useContracts, useServiceRequests } from "@/hooks/useGig";
 import contractApi from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
-import type { Contract, ContractMessage, MessageType } from "@/types/gig";
+import type { Contract, ContractMessage, MessageType, ServiceMessageRequest } from "@/types/gig";
 
 type ChatFilter = "all" | "unread" | "read";
 const STORAGE_BUCKET = "tribe-media";
@@ -150,11 +150,25 @@ export default function FreelancerMessagesScreen() {
   const keyboardVerticalOffset = Platform.OS === "ios" ? 88 : 0;
 
   const { data, isLoading, error, isRefetching, refetch } = useContracts({ limit: 200 });
+  const {
+    data: serviceRequestsData,
+    isLoading: serviceRequestsLoading,
+    refetch: refetchServiceRequests,
+  } = useServiceRequests(
+    { limit: 100 },
+    true,
+    session?.user?.id || currentUserId || "session",
+  );
   const contracts = useMemo(() => {
     const all = data?.items ?? [];
     if (!currentUserId) return all;
     return all.filter((contract) => contract?.freelancer_id === currentUserId);
   }, [currentUserId, data?.items]);
+  const serviceRequests = useMemo(() => {
+    const all = serviceRequestsData?.items ?? [];
+    if (!currentUserId) return all;
+    return all.filter((request) => request.founder_id === currentUserId || request.freelancer_id === currentUserId);
+  }, [currentUserId, serviceRequestsData?.items]);
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ChatFilter>("all");
@@ -164,6 +178,7 @@ export default function FreelancerMessagesScreen() {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [pushBanner, setPushBanner] = useState<PushBannerState | null>(null);
   const pushBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serviceRequestsRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showPushBanner = useCallback((nextBanner: PushBannerState) => {
     setPushBanner(nextBanner);
@@ -179,6 +194,37 @@ export default function FreelancerMessagesScreen() {
       if (pushBannerTimerRef.current) clearTimeout(pushBannerTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (serviceRequestsRefetchTimerRef.current) clearTimeout(serviceRequestsRefetchTimerRef.current);
+    };
+  }, []);
+
+  const scheduleServiceRequestsRefetch = useCallback(() => {
+    if (serviceRequestsRefetchTimerRef.current) return;
+    serviceRequestsRefetchTimerRef.current = setTimeout(() => {
+      serviceRequestsRefetchTimerRef.current = null;
+      refetchServiceRequests().catch(() => undefined);
+    }, 900);
+  }, [refetchServiceRequests]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    refetchServiceRequests().catch(() => undefined);
+  }, [currentUserId, refetchServiceRequests]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        refetchServiceRequests().catch(() => undefined);
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [currentUserId, refetchServiceRequests]);
 
   useEffect(() => {
     const userId = currentUserId;
@@ -366,21 +412,23 @@ export default function FreelancerMessagesScreen() {
 
   useEffect(() => {
     const token = session?.access_token;
-    if (!token || contracts.length === 0) return;
+    if (!token || (contracts.length === 0 && serviceRequests.length === 0)) return;
 
-    const founderIds = Array.from(
-      new Set(
-        contracts
-          .map((contract) => contract.founder_id)
-          .filter((id) => Boolean(id) && !publicProfilesByUserId[id]),
+    const candidateIds = [
+      ...contracts.map((contract) => contract.founder_id),
+      ...serviceRequests.map((request) =>
+        request.founder_id === currentUserId ? request.freelancer_id : request.founder_id,
       ),
+    ];
+    const profileIds = Array.from(
+      new Set(candidateIds.filter((id) => Boolean(id) && !publicProfilesByUserId[id])),
     );
-    if (founderIds.length === 0) return;
+    if (profileIds.length === 0) return;
 
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        founderIds.map(async (userId) => {
+        profileIds.map(async (userId) => {
           try {
             const raw = await tribeApi.getPublicProfile(token, userId);
             const avatar = await resolveAvatar(raw?.photo_url || raw?.avatar_url || null, userId);
@@ -411,17 +459,63 @@ export default function FreelancerMessagesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [contracts, publicProfilesByUserId, session?.access_token]);
+  }, [contracts, currentUserId, publicProfilesByUserId, serviceRequests, session?.access_token]);
+
+  useEffect(() => {
+    const userId = currentUserId;
+    if (!userId) return;
+
+    const requestConfig = {
+      schema: "public" as const,
+      table: "service_message_requests" as const,
+    };
+    const messageConfig = {
+      schema: "public" as const,
+      table: "service_request_messages" as const,
+    };
+
+    const channel = supabase.channel(`freelancer-service-requests-realtime:${userId}:${Date.now()}`);
+
+    channel.on("postgres_changes", { ...requestConfig, event: "INSERT", filter: `founder_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...requestConfig, event: "UPDATE", filter: `founder_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...requestConfig, event: "INSERT", filter: `freelancer_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...requestConfig, event: "UPDATE", filter: `freelancer_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...messageConfig, event: "INSERT", filter: `recipient_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...messageConfig, event: "INSERT", filter: `sender_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...messageConfig, event: "UPDATE", filter: `recipient_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, scheduleServiceRequestsRefetch]);
 
   const statusCounts = useMemo(() => {
-    const unread = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) > 0).length;
-    const read = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) === 0).length;
+    const contractUnread = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) > 0).length;
+    const contractRead = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) === 0).length;
+    const requestUnread = serviceRequests.filter((request) => (request.unread_count || 0) > 0).length;
+    const requestRead = serviceRequests.filter((request) => (request.unread_count || 0) === 0).length;
     return {
-      all: contracts.length,
-      unread,
-      read,
+      all: contracts.length + serviceRequests.length,
+      unread: contractUnread + requestUnread,
+      read: contractRead + requestRead,
     };
-  }, [chatMetaByContractId, contracts]);
+  }, [chatMetaByContractId, contracts, serviceRequests]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -465,6 +559,52 @@ export default function FreelancerMessagesScreen() {
     });
   }, [chatMetaByContractId, contracts, publicProfilesByUserId, query, statusFilter]);
 
+  const filteredServiceRequests = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const sorted = [...serviceRequests].sort(
+      (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
+    );
+
+    return sorted.filter((request) => {
+      const unreadCount = request.unread_count || 0;
+      if (statusFilter === "unread" && unreadCount === 0) return false;
+      if (statusFilter === "read" && unreadCount > 0) return false;
+
+      if (!q) return true;
+      const otherUserId =
+        request.founder_id === currentUserId ? request.freelancer_id : request.founder_id;
+      const profile = publicProfilesByUserId[otherUserId];
+      const person = profile?.display_name || profile?.full_name || profile?.username || "member";
+      const serviceName = request.service?.service_name || "service";
+      const preview = request.last_message_preview || request.request_message || "";
+
+      return (
+        person.toLowerCase().includes(q) ||
+        serviceName.toLowerCase().includes(q) ||
+        preview.toLowerCase().includes(q)
+      );
+    });
+  }, [currentUserId, publicProfilesByUserId, query, serviceRequests, statusFilter]);
+
+  const getServiceCounterparty = useCallback((request: ServiceMessageRequest) => {
+    const otherUserId =
+      request.founder_id === currentUserId ? request.freelancer_id : request.founder_id;
+    const remoteProfile = publicProfilesByUserId[otherUserId];
+    return {
+      id: otherUserId,
+      name:
+        remoteProfile?.display_name ||
+        remoteProfile?.full_name ||
+        remoteProfile?.username ||
+        "Founder",
+      avatar: remoteProfile?.photo_url || remoteProfile?.avatar_url || undefined,
+      role:
+        remoteProfile?.role ||
+        remoteProfile?.user_type ||
+        (request.founder_id === currentUserId ? "Freelancer" : "Founder"),
+    };
+  }, [currentUserId, publicProfilesByUserId]);
+
   const getFounderParty = useCallback((contract: Contract) => {
     const remoteProfile = publicProfilesByUserId[contract.founder_id];
     const founder = contract.founder;
@@ -507,6 +647,20 @@ export default function FreelancerMessagesScreen() {
       );
     },
     [contractsById, getFounderParty, router],
+  );
+
+  const openServiceThread = useCallback(
+    (requestId: string, fallbackName?: string, fallbackAvatar?: string) => {
+      const title = fallbackName || "Service Chat";
+      const avatar = fallbackAvatar || "";
+      setPushBanner(null);
+      router.push(
+        `/(role-pager)/(freelancer-tabs)/thread/${encodeURIComponent(
+          requestId,
+        )}?threadKind=service&title=${encodeURIComponent(title)}&avatar=${encodeURIComponent(avatar)}`,
+      );
+    },
+    [router],
   );
 
   return (
@@ -563,7 +717,16 @@ export default function FreelancerMessagesScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 24 }]}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={palette.accent} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching || serviceRequestsLoading}
+              onRefresh={() => {
+                refetch();
+                refetchServiceRequests();
+              }}
+              tintColor={palette.accent}
+            />
+          }
           ListHeaderComponent={
             <View style={styles.controlsWrap}>
               <View style={[styles.search, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
@@ -615,6 +778,15 @@ export default function FreelancerMessagesScreen() {
                 </View>
               ) : null}
 
+              {serviceRequestsLoading ? (
+                <View style={styles.metaLoadingRow}>
+                  <ActivityIndicator size="small" color={palette.accent} />
+                  <T weight="regular" color={palette.subText} style={styles.metaLoadingText}>
+                    Loading service requests...
+                  </T>
+                </View>
+              ) : null}
+
               {isLoading ? (
                 <View style={styles.metaLoadingRow}>
                   <ActivityIndicator size="small" color={palette.accent} />
@@ -629,18 +801,94 @@ export default function FreelancerMessagesScreen() {
                   {error.message}
                 </T>
               ) : null}
+
+              {filteredServiceRequests.length > 0 ? (
+                <View style={styles.serviceRequestSection}>
+                  <View style={styles.sectionHeadRow}>
+                    <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                      Service Requests
+                    </T>
+                  </View>
+                  <View style={styles.sectionStack}>
+                    {filteredServiceRequests.map((request) => {
+                      const party = getServiceCounterparty(request);
+                      const unreadCount = request.unread_count || 0;
+                      const preview =
+                        request.last_message_preview ||
+                        request.request_message ||
+                        `Discussing ${request.service?.service_name || "service"}`;
+                      const lastTime = formatChatTime(request.last_message_at);
+
+                      return (
+                        <TouchableOpacity
+                          key={request.id}
+                          style={styles.rowPressable}
+                          activeOpacity={0.88}
+                          onPress={() => openServiceThread(request.id, party.name, party.avatar)}
+                        >
+                          <View style={styles.row}>
+                            {party.avatar ? (
+                              <Avatar source={{ uri: party.avatar }} size={44} />
+                            ) : (
+                              <View style={[styles.avatarFallback, { backgroundColor: palette.accentSoft }]}>
+                                <T weight="medium" color={palette.accent} style={styles.avatarLetter}>
+                                  {firstLetter(party.name)}
+                                </T>
+                              </View>
+                            )}
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <View style={styles.topLine}>
+                                <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
+                                  {party.name}
+                                </T>
+                                <T weight="regular" color={unreadCount > 0 ? palette.accent : palette.subText} style={styles.time}>
+                                  {lastTime}
+                                </T>
+                              </View>
+                              <T weight="regular" color={palette.subText} style={styles.roleText} numberOfLines={1}>
+                                {request.service?.service_name || party.role}
+                              </T>
+                              <View style={styles.bottomLine}>
+                                <T
+                                  weight="regular"
+                                  color={unreadCount > 0 ? palette.text : palette.subText}
+                                  style={styles.message}
+                                  numberOfLines={1}
+                                >
+                                  {preview}
+                                </T>
+                                {unreadCount > 0 ? (
+                                  <View style={[styles.badge, { backgroundColor: palette.accent }]}>
+                                    <T weight="medium" color="#fff" style={styles.badgeTxt}>
+                                      {unreadCount > 99 ? "99+" : String(unreadCount)}
+                                    </T>
+                                  </View>
+                                ) : (
+                                  <Ionicons name="checkmark-done" size={15} color="#94A3B8" />
+                                )}
+                              </View>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
-            <View style={styles.emptyCard}>
-              <Ionicons name="chatbubble-ellipses-outline" size={30} color={palette.subText} />
-              <T weight="medium" color={palette.text} style={styles.emptyTitle}>
-                No messages found
-              </T>
-              <T weight="regular" color={palette.subText} style={styles.emptySub}>
-                Try another search term or filter.
-              </T>
-            </View>
+            filteredServiceRequests.length > 0 ? null : (
+              <View style={styles.emptyCard}>
+                <Ionicons name="chatbubble-ellipses-outline" size={30} color={palette.subText} />
+                <T weight="medium" color={palette.text} style={styles.emptyTitle}>
+                  No messages found
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.emptySub}>
+                  Try another search term or filter.
+                </T>
+              </View>
+            )
           }
           ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: palette.borderLight }]} />}
           renderItem={({ item: contract }) => {
@@ -773,6 +1021,22 @@ const styles = StyleSheet.create({
   controlsWrap: {
     gap: 8,
     marginBottom: 8,
+  },
+  serviceRequestSection: {
+    marginTop: 2,
+    gap: 8,
+  },
+  sectionHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  sectionStack: {
+    gap: 8,
   },
   search: {
     height: 42,

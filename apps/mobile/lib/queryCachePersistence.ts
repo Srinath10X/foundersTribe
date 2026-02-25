@@ -21,6 +21,8 @@ type PersistedQueryCacheEnvelope = {
 
 const PERSISTED_QUERY_NAMESPACES = new Set([
   "gigs",
+  "services",
+  "service-requests",
   "proposals",
   "contracts",
   "messages",
@@ -105,4 +107,3 @@ export function subscribePersistedQueryCache(queryClient: QueryClient, ownerId?:
     unsubscribe();
   };
 }
-

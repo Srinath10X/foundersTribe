@@ -29,6 +29,7 @@ export default function FreelancerFlowLayout() {
     pathname.includes("/contract-chat-thread") ||
     pathname.includes("/review-proposals") ||
     pathname.includes("/leave-review") ||
+    pathname.includes("/service-search") ||
     pathname.includes("/freelancer-profile") ||
     pathname.includes("/freelancer-profile-2");
 

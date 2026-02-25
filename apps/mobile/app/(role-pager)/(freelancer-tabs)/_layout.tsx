@@ -100,6 +100,13 @@ export default function FreelancerTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="my-services"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Profile",
