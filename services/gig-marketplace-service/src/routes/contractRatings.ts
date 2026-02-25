@@ -1,9 +1,18 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate.js";
-import { createRatingSchema } from "../schemas/ratingSchemas.js";
+import { createRatingSchema, getMyRatingSchema } from "../schemas/ratingSchemas.js";
 import * as ratingService from "../services/ratingService.js";
 
 const router = Router({ mergeParams: true });
+
+router.get("/", validate(getMyRatingSchema), async (req, res, next) => {
+  try {
+    const data = await ratingService.getMyRatingForContract(req.db, req.params.id as string, req.user.id);
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/", validate(createRatingSchema), async (req, res, next) => {
   try {

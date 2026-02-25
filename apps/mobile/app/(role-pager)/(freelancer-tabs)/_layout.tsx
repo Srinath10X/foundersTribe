@@ -68,18 +68,35 @@ export default function FreelancerTabLayout() {
         name="gig-details"
         options={{
           href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen
         name="contract-details"
         options={{
           href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen
         name="send-proposal"
         options={{
           href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="my-gigs"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="founder-profile"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen

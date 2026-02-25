@@ -51,17 +51,22 @@ import {
   Poppins_700Bold,
   useFonts as usePoppinsFonts,
 } from "@expo-google-fonts/poppins";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  restorePersistedQueryCache,
+  subscribePersistedQueryCache,
+} from "@/lib/queryCachePersistence";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60, // 1 minute
-      gcTime: 1000 * 60 * 5, // 5 minutes (formerly cacheTime)
+      staleTime: 1000 * 60 * 2, // 2 minutes
+      gcTime: 1000 * 60 * 60, // 60 minutes
       retry: 2,
       refetchOnWindowFocus: false, // not relevant for mobile but explicit
+      refetchOnReconnect: true,
     },
     mutations: {
       retry: 0,
@@ -83,6 +88,46 @@ const BlackTheme = {
     border: "#1a1a1a",
   },
 };
+
+function QueryCacheBridge({ children }: { children: React.ReactNode }) {
+  const { session, isLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const ownerId = session?.user?.id || "anon";
+  const previousOwnerRef = useRef<string | null>(null);
+  const [hydratedOwner, setHydratedOwner] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const previousOwner = previousOwnerRef.current;
+    if (previousOwner && previousOwner !== ownerId) {
+      queryClient.clear();
+    }
+    previousOwnerRef.current = ownerId;
+    setHydratedOwner(null);
+
+    (async () => {
+      await restorePersistedQueryCache(queryClient, ownerId);
+      if (!cancelled) {
+        setHydratedOwner(ownerId);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerId, queryClient]);
+
+  useEffect(() => {
+    if (hydratedOwner !== ownerId) return;
+    return subscribePersistedQueryCache(queryClient, ownerId);
+  }, [hydratedOwner, ownerId, queryClient]);
+
+  if (isLoading || hydratedOwner !== ownerId) {
+    return <BrandingView />;
+  }
+
+  return <>{children}</>;
+}
 
 
 function RootLayoutNav() {
@@ -250,9 +295,11 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ThemeProvider>
-          <RoleProvider>
-            <RootLayoutNav />
-          </RoleProvider>
+          <QueryCacheBridge>
+            <RoleProvider>
+              <RootLayoutNav />
+            </RoleProvider>
+          </QueryCacheBridge>
         </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>

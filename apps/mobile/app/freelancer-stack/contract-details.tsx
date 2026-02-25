@@ -15,7 +15,7 @@ import {
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
-import { useApproveContract, useCompleteContract, useContract } from "@/hooks/useGig";
+import { useApproveContract, useCompleteContract, useContract, useMyContractRating } from "@/hooks/useGig";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -177,6 +177,8 @@ export default function ContractDetailsScreen() {
   );
 
   const isFounderViewer = user?.id ? user.id === contract?.founder_id : true;
+  const canCheckReviewStatus = Boolean(contractId && isFounderViewer && contract?.status === "completed");
+  const { data: myRating, isLoading: reviewStatusLoading } = useMyContractRating(contractId, canCheckReviewStatus);
   const counterparty = isFounderViewer ? contract?.freelancer : contract?.founder;
   const counterpartyId = isFounderViewer ? contract?.freelancer_id : contract?.founder_id;
   const [counterpartyProfile, setCounterpartyProfile] = useState<{
@@ -505,9 +507,10 @@ export default function ContractDetailsScreen() {
 
             {contract.status === "completed" && isFounderViewer ? (
               <PrimaryButton
-                label="Leave a Review"
+                label={myRating ? "Review Submitted" : reviewStatusLoading ? "Checking Review..." : "Leave a Review"}
                 icon="star-outline"
                 onPress={() => nav.push(`/freelancer-stack/leave-review?contractId=${contract.id}&revieweeId=${contract.freelancer_id}`)}
+                disabled={Boolean(myRating) || reviewStatusLoading}
                 style={{ marginTop: 8 }}
               />
             ) : null}

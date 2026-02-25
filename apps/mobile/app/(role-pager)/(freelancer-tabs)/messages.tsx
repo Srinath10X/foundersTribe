@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
@@ -40,6 +41,11 @@ type ContractChatMeta = {
   lastMessageAt: string | null;
   unreadCount: number;
 };
+const chatMetaCacheByContractId = new Map<string, ContractChatMeta>();
+
+function getMetaCacheKey(ownerId: string | null | undefined, contractId: string) {
+  return `${ownerId || "anon"}::${contractId}`;
+}
 
 type PushBannerState = {
   contractId: string;
@@ -89,6 +95,12 @@ function normalizeMessageBody(body: string | null, type: MessageType) {
   return "No messages yet";
 }
 
+function getLastActivityTs(meta: ContractChatMeta | undefined, contract: Contract) {
+  const raw = meta?.lastMessageAt || contract.updated_at || contract.created_at;
+  const ts = new Date(raw).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
 function firstLetter(name: string) {
   const value = name.trim();
   if (!value) return "F";
@@ -135,6 +147,7 @@ export default function FreelancerMessagesScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { session } = useAuth();
   const currentUserId = session?.user?.id || "";
+  const keyboardVerticalOffset = Platform.OS === "ios" ? 88 : 0;
 
   const { data, isLoading, error, isRefetching, refetch } = useContracts({ limit: 200 });
   const contracts = useMemo(() => {
@@ -175,14 +188,33 @@ export default function FreelancerMessagesScreen() {
       return;
     }
 
+    const cachedSeed: Record<string, ContractChatMeta> = {};
+    contracts.forEach((contract) => {
+      const cacheKey = getMetaCacheKey(userId, contract.id);
+      const cached = chatMetaCacheByContractId.get(cacheKey);
+      if (cached) {
+        cachedSeed[contract.id] = cached;
+      }
+    });
+    setChatMetaByContractId((prev) => ({ ...cachedSeed, ...prev }));
+
+    const contractsMissingMeta = contracts.filter((contract) => {
+      const cacheKey = getMetaCacheKey(userId, contract.id);
+      return !chatMetaCacheByContractId.has(cacheKey);
+    });
+    if (contractsMissingMeta.length === 0) {
+      setMetaLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setMetaLoading(true);
 
     (async () => {
       const entries = await Promise.all(
-        contracts.map(async (contract) => {
+        contractsMissingMeta.map(async (contract) => {
           try {
-            const res = await contractApi.getContractMessages(contract.id, { limit: 30 });
+            const res = await contractApi.getContractMessages(contract.id, { limit: 20 });
             const ordered = [...(res.items || [])].sort(
               (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
             );
@@ -214,7 +246,12 @@ export default function FreelancerMessagesScreen() {
       );
 
       if (cancelled) return;
-      setChatMetaByContractId(Object.fromEntries(entries));
+      const merged = Object.fromEntries(entries);
+      Object.entries(merged).forEach(([contractId, meta]) => {
+        const cacheKey = getMetaCacheKey(userId, contractId);
+        chatMetaCacheByContractId.set(cacheKey, meta as ContractChatMeta);
+      });
+      setChatMetaByContractId((prev) => ({ ...prev, ...merged }));
       setMetaLoading(false);
     })();
 
@@ -258,13 +295,16 @@ export default function FreelancerMessagesScreen() {
             lastMessageAt: null,
             unreadCount: 0,
           };
+          const nextMeta: ContractChatMeta = {
+            lastMessage: nextPreview,
+            lastMessageAt: incoming.created_at || previous.lastMessageAt,
+            unreadCount: isIncomingMessage ? previous.unreadCount + 1 : previous.unreadCount,
+          };
+          const cacheKey = getMetaCacheKey(userId, incoming.contract_id);
+          chatMetaCacheByContractId.set(cacheKey, nextMeta);
           return {
             ...prev,
-            [incoming.contract_id]: {
-              lastMessage: nextPreview,
-              lastMessageAt: incoming.created_at || previous.lastMessageAt,
-              unreadCount: isIncomingMessage ? previous.unreadCount + 1 : previous.unreadCount,
-            },
+            [incoming.contract_id]: nextMeta,
           };
         });
 
@@ -300,12 +340,15 @@ export default function FreelancerMessagesScreen() {
         setChatMetaByContractId((prev) => {
           const existing = prev[next.contract_id];
           if (!existing) return prev;
+          const nextMeta: ContractChatMeta = {
+            ...existing,
+            unreadCount: Math.max(0, existing.unreadCount - 1),
+          };
+          const cacheKey = getMetaCacheKey(userId, next.contract_id);
+          chatMetaCacheByContractId.set(cacheKey, nextMeta);
           return {
             ...prev,
-            [next.contract_id]: {
-              ...existing,
-              unreadCount: Math.max(0, existing.unreadCount - 1),
-            },
+            [next.contract_id]: nextMeta,
           };
         });
       },
@@ -411,12 +454,14 @@ export default function FreelancerMessagesScreen() {
     });
 
     return [...bySearch].sort((a, b) => {
+      const aTs = getLastActivityTs(chatMetaByContractId[a.id], a);
+      const bTs = getLastActivityTs(chatMetaByContractId[b.id], b);
+      if (aTs !== bTs) return bTs - aTs;
+
       const unreadA = chatMetaByContractId[a.id]?.unreadCount || 0;
       const unreadB = chatMetaByContractId[b.id]?.unreadCount || 0;
       if (unreadA !== unreadB) return unreadB - unreadA;
-      const aTs = new Date(chatMetaByContractId[a.id]?.lastMessageAt || a.updated_at || a.created_at).getTime();
-      const bTs = new Date(chatMetaByContractId[b.id]?.lastMessageAt || b.updated_at || b.created_at).getTime();
-      return bTs - aTs;
+      return 0;
     });
   }, [chatMetaByContractId, contracts, publicProfilesByUserId, query, statusFilter]);
 
@@ -466,185 +511,194 @@ export default function FreelancerMessagesScreen() {
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
-        <T weight="medium" color={palette.text} style={styles.pageTitle}>
-          Messages
-        </T>
-        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-          Your recent conversations
-        </T>
-        <View style={styles.liveRow}>
-          <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
-          <T weight="regular" color={palette.subText} style={styles.liveText}>
-            {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        enabled
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
+        <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+          <T weight="medium" color={palette.text} style={styles.pageTitle}>
+            Messages
           </T>
-        </View>
-      </View>
-
-      {pushBanner ? (
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => openThread(pushBanner.contractId, pushBanner.senderName)}
-          style={[
-            styles.pushBanner,
-            {
-              borderColor: palette.borderLight,
-              backgroundColor: palette.surface,
-            },
-          ]}
-        >
-          <View style={[styles.pushDot, { backgroundColor: palette.accent }]} />
-          <View style={styles.pushContent}>
-            <T weight="medium" color={palette.text} style={styles.pushTitle} numberOfLines={1}>
-              {pushBanner.senderName}
-            </T>
-            <T weight="regular" color={palette.subText} style={styles.pushPreview} numberOfLines={1}>
-              {pushBanner.preview}
+          <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
+            Your recent conversations
+          </T>
+          <View style={styles.liveRow}>
+            <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
+            <T weight="regular" color={palette.subText} style={styles.liveText}>
+              {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
             </T>
           </View>
-          <Ionicons name="chevron-forward" size={14} color={palette.subText} />
-        </TouchableOpacity>
-      ) : null}
+        </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 24 }]}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={palette.accent} />}
-        ListHeaderComponent={
-          <View style={styles.controlsWrap}>
-            <View style={[styles.search, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
-              <Ionicons name="search" size={15} color={palette.subText} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search messages"
-                placeholderTextColor={palette.subText}
-                style={[styles.searchInput, { color: palette.text }]}
-              />
-              {query.length > 0 ? (
-                <TouchableOpacity onPress={() => setQuery("")}>
-                  <Ionicons name="close-circle" size={16} color={palette.subText} />
-                </TouchableOpacity>
+        {pushBanner ? (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => openThread(pushBanner.contractId, pushBanner.senderName)}
+            style={[
+              styles.pushBanner,
+              {
+                borderColor: palette.borderLight,
+                backgroundColor: palette.surface,
+              },
+            ]}
+          >
+            <View style={[styles.pushDot, { backgroundColor: palette.accent }]} />
+            <View style={styles.pushContent}>
+              <T weight="medium" color={palette.text} style={styles.pushTitle} numberOfLines={1}>
+                {pushBanner.senderName}
+              </T>
+              <T weight="regular" color={palette.subText} style={styles.pushPreview} numberOfLines={1}>
+                {pushBanner.preview}
+              </T>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={palette.subText} />
+          </TouchableOpacity>
+        ) : null}
+
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 24 }]}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={palette.accent} />}
+          ListHeaderComponent={
+            <View style={styles.controlsWrap}>
+              <View style={[styles.search, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
+                <Ionicons name="search" size={15} color={palette.subText} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search messages"
+                  placeholderTextColor={palette.subText}
+                  style={[styles.searchInput, { color: palette.text }]}
+                />
+                {query.length > 0 ? (
+                  <TouchableOpacity onPress={() => setQuery("")}>
+                    <Ionicons name="close-circle" size={16} color={palette.subText} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
+                {chatFilters.map((item) => {
+                  const active = statusFilter === item.key;
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      activeOpacity={0.86}
+                      onPress={() => setStatusFilter(item.key)}
+                      style={[
+                        styles.filterChip,
+                        {
+                          backgroundColor: active ? palette.accentSoft : palette.surface,
+                          borderColor: active ? palette.accent : palette.borderLight,
+                        },
+                      ]}
+                    >
+                      <T weight="regular" color={active ? palette.accent : palette.subText} style={styles.filterText}>
+                        {item.label} ({statusCounts[item.key]})
+                      </T>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {metaLoading ? (
+                <View style={styles.metaLoadingRow}>
+                  <ActivityIndicator size="small" color={palette.accent} />
+                  <T weight="regular" color={palette.subText} style={styles.metaLoadingText}>
+                    Updating unread counts...
+                  </T>
+                </View>
+              ) : null}
+
+              {isLoading ? (
+                <View style={styles.metaLoadingRow}>
+                  <ActivityIndicator size="small" color={palette.accent} />
+                  <T weight="regular" color={palette.subText} style={styles.metaLoadingText}>
+                    Loading conversations...
+                  </T>
+                </View>
+              ) : null}
+
+              {error ? (
+                <T weight="regular" color={palette.accent} style={styles.metaLoadingText}>
+                  {error.message}
+                </T>
               ) : null}
             </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersScroll}>
-              {chatFilters.map((item) => {
-                const active = statusFilter === item.key;
-                return (
-                  <TouchableOpacity
-                    key={item.key}
-                    activeOpacity={0.86}
-                    onPress={() => setStatusFilter(item.key)}
-                    style={[
-                      styles.filterChip,
-                      {
-                        backgroundColor: active ? palette.accentSoft : palette.surface,
-                        borderColor: active ? palette.accent : palette.borderLight,
-                      },
-                    ]}
-                  >
-                    <T weight="regular" color={active ? palette.accent : palette.subText} style={styles.filterText}>
-                      {item.label} ({statusCounts[item.key]})
-                    </T>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {metaLoading ? (
-              <View style={styles.metaLoadingRow}>
-                <ActivityIndicator size="small" color={palette.accent} />
-                <T weight="regular" color={palette.subText} style={styles.metaLoadingText}>
-                  Updating unread counts...
-                </T>
-              </View>
-            ) : null}
-
-            {isLoading ? (
-              <View style={styles.metaLoadingRow}>
-                <ActivityIndicator size="small" color={palette.accent} />
-                <T weight="regular" color={palette.subText} style={styles.metaLoadingText}>
-                  Loading conversations...
-                </T>
-              </View>
-            ) : null}
-
-            {error ? (
-              <T weight="regular" color={palette.accent} style={styles.metaLoadingText}>
-                {error.message}
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyCard}>
+              <Ionicons name="chatbubble-ellipses-outline" size={30} color={palette.subText} />
+              <T weight="medium" color={palette.text} style={styles.emptyTitle}>
+                No messages found
               </T>
-            ) : null}
-          </View>
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <Ionicons name="chatbubble-ellipses-outline" size={30} color={palette.subText} />
-            <T weight="medium" color={palette.text} style={styles.emptyTitle}>
-              No messages found
-            </T>
-            <T weight="regular" color={palette.subText} style={styles.emptySub}>
-              Try another search term or filter.
-            </T>
-          </View>
-        }
-        ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: palette.borderLight }]} />}
-        renderItem={({ item: contract }) => {
-          const party = getFounderParty(contract);
-          const meta = chatMetaByContractId[contract.id];
-          const unreadCount = meta?.unreadCount || 0;
-          const lastMessage = meta?.lastMessage || `No messages yet • ${contract.gig?.title || "Contract"}`;
-          const lastTime = formatChatTime(meta?.lastMessageAt || contract.updated_at || contract.created_at);
+              <T weight="regular" color={palette.subText} style={styles.emptySub}>
+                Try another search term or filter.
+              </T>
+            </View>
+          }
+          ItemSeparatorComponent={() => <View style={[styles.separator, { backgroundColor: palette.borderLight }]} />}
+          renderItem={({ item: contract }) => {
+            const party = getFounderParty(contract);
+            const meta = chatMetaByContractId[contract.id];
+            const unreadCount = meta?.unreadCount || 0;
+            const lastMessage = meta?.lastMessage || `No messages yet • ${contract.gig?.title || "Contract"}`;
+            const lastTime = formatChatTime(meta?.lastMessageAt || contract.updated_at || contract.created_at);
 
-          return (
-            <TouchableOpacity
-              style={styles.rowPressable}
-              activeOpacity={0.88}
-              onPress={() => openThread(contract.id, party.name, party.avatar)}
-            >
-              <View style={styles.row}>
-                {party.avatar ? (
-                  <Avatar source={{ uri: party.avatar }} size={44} />
-                ) : (
-                  <View style={[styles.avatarFallback, { backgroundColor: palette.accentSoft }]}>
-                    <T weight="medium" color={palette.accent} style={styles.avatarLetter}>
-                      {firstLetter(party.name)}
+            return (
+              <TouchableOpacity
+                style={styles.rowPressable}
+                activeOpacity={0.88}
+                onPress={() => openThread(contract.id, party.name, party.avatar)}
+              >
+                <View style={styles.row}>
+                  {party.avatar ? (
+                    <Avatar source={{ uri: party.avatar }} size={44} />
+                  ) : (
+                    <View style={[styles.avatarFallback, { backgroundColor: palette.accentSoft }]}>
+                      <T weight="medium" color={palette.accent} style={styles.avatarLetter}>
+                        {firstLetter(party.name)}
+                      </T>
+                    </View>
+                  )}
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={styles.topLine}>
+                      <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
+                        {party.name}
+                      </T>
+                      <T weight="regular" color={unreadCount > 0 ? palette.accent : palette.subText} style={styles.time}>
+                        {lastTime}
+                      </T>
+                    </View>
+                    <T weight="regular" color={palette.subText} style={styles.roleText} numberOfLines={1}>
+                      {party.role}
                     </T>
-                  </View>
-                )}
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={styles.topLine}>
-                    <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
-                      {party.name}
-                    </T>
-                    <T weight="regular" color={unreadCount > 0 ? palette.accent : palette.subText} style={styles.time}>
-                      {lastTime}
-                    </T>
-                  </View>
-                  <T weight="regular" color={palette.subText} style={styles.roleText} numberOfLines={1}>
-                    {party.role}
-                  </T>
-                  <View style={styles.bottomLine}>
-                    <T weight="regular" color={unreadCount > 0 ? palette.text : palette.subText} style={styles.message} numberOfLines={1}>
-                      {lastMessage}
-                    </T>
-                    {unreadCount > 0 ? (
-                      <View style={[styles.badge, { backgroundColor: palette.accent }]}>
-                        <T weight="medium" color="#fff" style={styles.badgeTxt}>
-                          {unreadCount > 99 ? "99+" : String(unreadCount)}
-                        </T>
-                      </View>
-                    ) : (
-                      <Ionicons name="checkmark-done" size={15} color="#94A3B8" />
-                    )}
+                    <View style={styles.bottomLine}>
+                      <T weight="regular" color={unreadCount > 0 ? palette.text : palette.subText} style={styles.message} numberOfLines={1}>
+                        {lastMessage}
+                      </T>
+                      {unreadCount > 0 ? (
+                        <View style={[styles.badge, { backgroundColor: palette.accent }]}>
+                          <T weight="medium" color="#fff" style={styles.badgeTxt}>
+                            {unreadCount > 99 ? "99+" : String(unreadCount)}
+                          </T>
+                        </View>
+                      ) : (
+                        <Ionicons name="checkmark-done" size={15} color="#94A3B8" />
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-      />
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </KeyboardAvoidingView>
     </FlowScreen>
   );
 }

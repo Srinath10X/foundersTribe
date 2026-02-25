@@ -2,6 +2,6 @@ import React from "react";
 
 import FounderProfileContent from "@/components/community/freelancerFlow/FounderProfileContent";
 
-export default function FounderProfileScreen() {
+export default function FreelancerTabsFounderProfileRoute() {
   return <FounderProfileContent />;
 }

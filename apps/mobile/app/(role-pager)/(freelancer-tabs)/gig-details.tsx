@@ -200,7 +200,7 @@ export default function GigDetailsScreen() {
   const ctaDisabled = !!myProposal && !acceptedContract;
   const ctaLabel = myProposal
     ? acceptedContract
-      ? "Open Contract"
+      ? "View Contract"
       : "Already Submitted"
     : "Send Proposal";
 

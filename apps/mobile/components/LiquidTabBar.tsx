@@ -37,6 +37,13 @@ const ICON_SIZE = 22;
 const ICON_LABEL_GAP = 3;
 const SPRING_CONFIG = { damping: 18, stiffness: 200, mass: 0.8 };
 const PRESS_SPRING = { damping: 15, stiffness: 300 };
+const HIDDEN_ROUTE_NAME_SEGMENTS = [
+  "thread/",
+  "contract-chat-thread",
+  "my-gigs",
+  "gig-details",
+  "send-proposal",
+];
 
 type AllowedUserType = "founder" | "freelancer" | "both";
 const parseUserType = (raw: unknown): AllowedUserType | null => {
@@ -523,8 +530,9 @@ export default function LiquidTabBar({
     const style = activeOptions?.tabBarStyle;
     const styleList = Array.isArray(style) ? style : [style];
     const hiddenByStyle = styleList.some((entry) => entry?.display === "none");
-    const hiddenByRouteName =
-      activeRoute.name.includes("thread/") || activeRoute.name.includes("contract-chat-thread");
+    const hiddenByRouteName = HIDDEN_ROUTE_NAME_SEGMENTS.some((segment) =>
+      activeRoute.name.includes(segment),
+    );
     return hiddenByStyle || hiddenByRouteName;
   }, [descriptors, state.index, state.routes]);
 

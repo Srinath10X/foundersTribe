@@ -288,6 +288,7 @@ export default function TalentDashboardScreen() {
   const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
   const { session } = useAuth();
+  const currentUserId = session?.user?.id || "";
   const [refreshing, setRefreshing] = useState(false);
   const [headerName, setHeaderName] = useState("User");
   const [headerRole, setHeaderRole] = useState("Freelancer");
@@ -395,7 +396,9 @@ export default function TalentDashboardScreen() {
     session?.user?.user_metadata,
   ]);
 
-  const activeContracts = contractsData?.items || [];
+  const activeContracts = (contractsData?.items || []).filter(
+    (contract) => !currentUserId || contract.freelancer_id === currentUserId,
+  );
   const proposalItems = myProposalsData?.items || [];
   const pendingProposals = proposalItems.filter((p) => p.status === "pending" || p.status === "shortlisted");
 
@@ -570,10 +573,10 @@ export default function TalentDashboardScreen() {
               <View style={styles.heroBottom}>
                 <View style={styles.heroActions}>
                   <QuickAction
-                    icon="document-text-outline"
-                    label="Contracts"
+                    icon="briefcase-outline"
+                    label="My Gigs"
                     onPress={() =>
-                      router.push("/(role-pager)/(freelancer-tabs)/messages" as any)
+                      router.push("/(role-pager)/(freelancer-tabs)/my-gigs" as any)
                     }
                   />
                   <QuickAction

@@ -3,6 +3,7 @@ import { usePathname } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -93,8 +94,6 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     contractId: resolvedContractId,
     isRealtimeConnected,
     currentUserId,
-    founderId,
-    freelancerId,
     viewerRole,
     counterpartyProfile,
     messages,
@@ -106,14 +105,16 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
   } = useContractRealtimeChat({ contractId: threadId });
 
   const resolvedViewerRole = viewerRole || inferViewerRole(pathname);
-  const myRoleLabel = resolvedViewerRole === "founder" ? "Founder" : "Freelancer";
   const peerRoleLabel = resolvedViewerRole === "founder" ? "Freelancer" : "Founder";
 
   const participantName = counterpartyProfile?.name || title || peerRoleLabel;
   const participantAvatar = counterpartyProfile?.avatar || avatar || null;
   const participantRole = counterpartyProfile?.role || peerRoleLabel;
+  const counterpartyId = counterpartyProfile?.id || "";
   const rows = useMemo(() => buildRows(messages || []), [messages]);
-  const composerBottom = Math.max(8, insets.bottom);
+  const composerBottom = Platform.OS === "ios" ? Math.max(8, insets.bottom) : 8;
+  const androidKeyboardGap = 16;
+  const [androidKeyboardOffset, setAndroidKeyboardOffset] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -122,6 +123,23 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     return () => clearTimeout(timer);
   }, [rows.length]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const showSub = Keyboard.addListener("keyboardDidShow", (event) => {
+      const keyboardHeight = event.endCoordinates?.height || 0;
+      setAndroidKeyboardOffset(Math.max(0, keyboardHeight - insets.bottom));
+    });
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+      setAndroidKeyboardOffset(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [insets.bottom]);
+
   const handleSend = async () => {
     const body = draft.trim();
     if (!body) return;
@@ -129,15 +147,13 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
     await sendTextMessage(body);
   };
 
-  const roleForMessage = (message: any, isMine: boolean) => {
-    if (isMine) return myRoleLabel;
-
-    if (resolvedViewerRole === "founder") return "Freelancer";
-    if (resolvedViewerRole === "freelancer") return "Founder";
-
-    if (founderId && message.sender_id === founderId) return "Founder";
-    if (freelancerId && message.sender_id === freelancerId) return "Freelancer";
-    return peerRoleLabel;
+  const openProfile = () => {
+    if (!counterpartyId) return;
+    if (resolvedViewerRole === "freelancer") {
+      nav.push(`/(role-pager)/(freelancer-tabs)/founder-profile?id=${encodeURIComponent(counterpartyId)}&compact=1`);
+      return;
+    }
+    nav.push(`/freelancer-stack/freelancer-profile?id=${encodeURIComponent(counterpartyId)}`);
   };
 
   return (
@@ -165,7 +181,12 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
             <Ionicons name="arrow-back" size={17} color={palette.text} />
           </TouchableOpacity>
 
-          <View style={styles.headerMain}>
+          <TouchableOpacity
+            activeOpacity={0.86}
+            onPress={openProfile}
+            disabled={!counterpartyId}
+            style={styles.headerMain}
+          >
             {participantAvatar ? (
               <Avatar source={{ uri: participantAvatar }} size={36} />
             ) : (
@@ -187,13 +208,18 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                 </T>
               </View>
             </View>
-          </View>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.iconBtn, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
-            onPress={() => {}}
+            onPress={openProfile}
+            disabled={!counterpartyId}
           >
-            <Ionicons name="ellipsis-vertical" size={15} color={palette.subText} />
+            <Ionicons
+              name="person-circle-outline"
+              size={18}
+              color={counterpartyId ? palette.text : palette.subText}
+            />
           </TouchableOpacity>
         </View>
 
@@ -229,7 +255,6 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
 
               const { message, showAvatar } = item;
               const isMine = message.sender_id === currentUserId;
-              const roleTag = roleForMessage(message, isMine);
               const timeLabel = new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
               const isPending = !!message.pending;
               const isFailed = !!message.failed;
@@ -254,19 +279,20 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                     <View style={{ width: 24 }} />
                   )}
 
-                  <View style={[styles.bubbleWrap, isMine ? styles.bubbleWrapMine : styles.bubbleWrapPeer]}>
-                    <View
+                  <View style={[styles.bubbleWrap, isMine ? styles.bubbleWrapMine : styles.bubbleWrapPeer, isMine && showAvatar ? { marginRight: 4 } : null, isMine ]}>
+                    {/* <View
                       style={[
                         styles.roleChip,
                         {
-                          backgroundColor: isMine ? "rgba(255,255,255,0.2)" : palette.border,
+                          backgroundColor: palette.surface,
+                          borderColor: palette.borderLight,
                         },
                       ]}
                     >
-                      <T weight="regular" color={isMine ? "#fff" : palette.subText} style={styles.roleChipText}>
+                      <T weight="medium" color={palette.text} style={styles.roleChipText}>
                         {roleTag}
                       </T>
-                    </View>
+                    </View> */}
 
                     <TouchableOpacity
                       activeOpacity={isFailed ? 0.72 : 1}
@@ -293,11 +319,11 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                       {isMine ? (
                         <Ionicons
                           name={isFailed ? "alert-circle-outline" : "checkmark-done"}
-                          size={11}
-                          color={isMine ? "#CFE2FF" : palette.subText}
+                          size={12}
+                          color={palette.subText}
                         />
                       ) : null}
-                      <T weight="regular" color={isMine ? "#DDE9FF" : palette.subText} style={styles.time}>
+                      <T weight="regular" color={palette.subText} style={styles.time}>
                         {timeLabel}
                         {isPending ? " • sending" : ""}
                         {isFailed ? " • failed" : ""}
@@ -323,6 +349,10 @@ export default function ThreadScreen({ threadId, title, avatar }: ThreadScreenPr
                 borderTopColor: palette.borderLight,
                 backgroundColor: palette.surface,
                 paddingBottom: composerBottom,
+                marginBottom:
+                  Platform.OS === "android" && androidKeyboardOffset > 0
+                    ? androidKeyboardOffset + androidKeyboardGap
+                    : 0,
               },
             ]}
           >
@@ -436,13 +466,14 @@ const styles = StyleSheet.create({
   bubbleWrapPeer: { alignItems: "flex-start" },
   roleChip: {
     borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    marginBottom: 3,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 4,
   },
   roleChipText: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
   },
   bubble: {
     borderRadius: 16,
@@ -454,12 +485,12 @@ const styles = StyleSheet.create({
   peerBubble: { borderBottomLeftRadius: 6 },
   bubbleText: { fontSize: 12, lineHeight: 17 },
   metaRow: {
-    marginTop: 2,
+    marginTop: 3,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  time: { fontSize: 9, lineHeight: 12 },
+  time: { fontSize: 11, lineHeight: 14 },
   peerMiniAvatarFallback: {
     width: 24,
     height: 24,

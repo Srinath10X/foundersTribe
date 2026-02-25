@@ -19,6 +19,7 @@ import {
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { useAuth } from "@/context/AuthContext";
 import { useContracts, useMyGigs } from "@/hooks/useGig";
 import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
 import gigApi from "@/lib/gigService";
@@ -66,6 +67,8 @@ export default function FounderDashboardScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
+  const currentUserId = session?.user?.id || "";
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -97,7 +100,10 @@ export default function FounderDashboardScreen() {
   } = useContracts({ limit: 40 });
 
   const gigs = useMemo(() => gigsData?.items ?? [], [gigsData?.items]);
-  const contracts = useMemo(() => contractsData?.items ?? [], [contractsData?.items]);
+  const contracts = useMemo(
+    () => (contractsData?.items ?? []).filter((contract) => !currentUserId || contract.founder_id === currentUserId),
+    [contractsData?.items, currentUserId],
+  );
 
   const loadProposalSummary = useCallback(async (sourceGigs: Gig[]) => {
     if (!sourceGigs.length) {
@@ -563,10 +569,16 @@ export default function FounderDashboardScreen() {
                             )}
                             <TouchableOpacity
                               style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
-                              onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
+                              onPress={() =>
+                                hasAcceptedProposal && linkedContract?.id
+                                  ? nav.push(
+                                      `/freelancer-stack/contract-details?contractId=${linkedContract.id}`,
+                                    )
+                                  : nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)
+                              }
                             >
                               <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
-                                View Details
+                                {hasAcceptedProposal ? "View Contract" : "View Details"}
                               </T>
                             </TouchableOpacity>
                           </View>

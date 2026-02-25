@@ -23,6 +23,8 @@ import * as tribeApi from "../../lib/tribeApi";
 import { supabase } from "../../lib/supabase";
 
 type TabMode = "my" | "explore";
+const MIN_SYNC_GAP_MS = 4000;
+const RATE_LIMIT_COOLDOWN_MS = 45000;
 
 type TribesTabProps = {
   mode?: TabMode;
@@ -52,8 +54,11 @@ export default function TribesTab({
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInFlightRef = useRef(false);
+  const lastSyncAtRef = useRef(0);
+  const rateLimitUntilRef = useRef(0);
   const tribesCacheKey = `tribes:tab-cache:v1:${userId || "anon"}`;
   const activeTab = mode ?? internalActiveTab;
+  const [rateLimited, setRateLimited] = useState(false);
 
   const setActiveTab = (tab: TabMode) => {
     if (mode === undefined) {
@@ -65,8 +70,14 @@ export default function TribesTab({
 
   /* ── Fetch data ────────────────────────────────────────────── */
 
-  const loadTribes = useCallback(async () => {
+  const loadTribes = useCallback(async (force = false) => {
     if (!token) return;
+    const now = Date.now();
+    if (now < rateLimitUntilRef.current) {
+      setRateLimited(true);
+      return;
+    }
+    if (!force && now - lastSyncAtRef.current < MIN_SYNC_GAP_MS) return;
     if (syncInFlightRef.current) return;
     syncInFlightRef.current = true;
     try {
@@ -76,12 +87,30 @@ export default function TribesTab({
       ]);
       setMyTribes(Array.isArray(my) ? my : []);
       setPublicTribes(Array.isArray(pub) ? pub : []);
+      lastSyncAtRef.current = Date.now();
+      rateLimitUntilRef.current = 0;
+      setRateLimited(false);
     } catch (e: any) {
       console.error("Failed to load tribes:", e.message);
+      const message = String(e?.message || "");
+      if (message.includes("429")) {
+        rateLimitUntilRef.current = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+        setRateLimited(true);
+      }
     } finally {
       syncInFlightRef.current = false;
     }
   }, [token]);
+
+  useEffect(() => {
+    if (!rateLimited) return;
+    const delay = Math.max(0, rateLimitUntilRef.current - Date.now());
+    const timer = setTimeout(() => {
+      setRateLimited(false);
+      loadTribes();
+    }, delay + 250);
+    return () => clearTimeout(timer);
+  }, [loadTribes, rateLimited]);
 
   useEffect(() => {
     if (!userId) return;
@@ -139,7 +168,7 @@ export default function TribesTab({
     if (!token) return;
     const id = setInterval(() => {
       loadTribes();
-    }, 10000);
+    }, 30000);
     return () => clearInterval(id);
   }, [loadTribes, token]);
 
@@ -205,7 +234,7 @@ export default function TribesTab({
     setRefreshing(true);
     setSearchQuery("");
     setSearchResults(null);
-    await loadTribes();
+    await loadTribes(true);
     setRefreshing(false);
   };
 
@@ -370,6 +399,20 @@ export default function TribesTab({
         </Text>
       </View>
 
+      {rateLimited ? (
+        <View
+          style={[
+            styles.rateLimitPill,
+            { backgroundColor: theme.surfaceElevated, borderColor: theme.borderLight },
+          ]}
+        >
+          <Ionicons name="time-outline" size={14} color={theme.text.muted} />
+          <Text style={[styles.rateLimitText, { color: theme.text.secondary }]}>
+            Too many requests. Retrying in a few seconds.
+          </Text>
+        </View>
+      ) : null}
+
       {/* Search Bar */}
       <View
         style={[
@@ -463,6 +506,24 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.xs,
+  },
+  rateLimitPill: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
+  rateLimitText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0,
+    fontFamily: "Poppins_400Regular",
   },
   sectionTitle: {
     fontSize: 14,

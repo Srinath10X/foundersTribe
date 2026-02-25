@@ -329,6 +329,29 @@ export interface Rating {
   updated_at: string;
 }
 
+export interface Testimonial {
+  id: string;
+  contract_id: string;
+  reviewer_id: string;
+  score: number;
+  review_text: string | null;
+  created_at: string;
+  reviewer?: {
+    id: string;
+    full_name: string | null;
+    handle: string | null;
+    avatar_url: string | null;
+    role?: UserRole | null;
+  } | null;
+  contract?: {
+    id: string;
+    gig?: {
+      id: string;
+      title: string | null;
+    } | null;
+  } | null;
+}
+
 export interface RatingCreateInput {
   reviewee_id: string;
   score: number; // 1-5

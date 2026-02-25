@@ -5,11 +5,14 @@ import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
+import { TestimonialCarousel } from "@/components/freelancer/TestimonialCarousel";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useUserTestimonials } from "@/hooks/useGig";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
+import type { Testimonial } from "@/types/gig";
 
 const STORAGE_BUCKET = "tribe-media";
 
@@ -33,6 +36,11 @@ type ProfileData = {
   social_links?: SocialLink[] | null;
   completed_gigs?: { title?: string; description?: string }[] | null;
   updated_at?: string | null;
+};
+type ReviewerProfileLite = {
+  name: string;
+  avatar_url: string | null;
+  role: string | null;
 };
 
 function toTitleCase(value: string) {
@@ -130,6 +138,94 @@ export default function FreelancerProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [storedTestimonials, setStoredTestimonials] = useState<Testimonial[]>([]);
+  const [reviewerProfilesById, setReviewerProfilesById] = useState<Record<string, ReviewerProfileLite>>({});
+  const profileIdForTestimonials = profile?.id || session?.user?.id || "";
+  const { data: testimonials = [], refetch: refetchTestimonials } = useUserTestimonials(
+    profileIdForTestimonials,
+    12,
+    Boolean(profileIdForTestimonials),
+  );
+
+  const loadStoredTestimonials = useCallback(async () => {
+    const revieweeId = profile?.id || session?.user?.id || "";
+    if (!revieweeId) {
+      setStoredTestimonials([]);
+      return;
+    }
+
+    try {
+      const { data: ratingRows, error: ratingError } = await supabase
+        .from("ratings")
+        .select("id, contract_id, reviewer_id, score, review_text, created_at")
+        .eq("reviewee_id", revieweeId)
+        .order("created_at", { ascending: false })
+        .limit(12);
+
+      if (ratingError || !Array.isArray(ratingRows) || ratingRows.length === 0) {
+        setStoredTestimonials([]);
+        return;
+      }
+
+      const reviewerIds = Array.from(
+        new Set(ratingRows.map((row: any) => row?.reviewer_id).filter(Boolean)),
+      ) as string[];
+      const contractIds = Array.from(
+        new Set(ratingRows.map((row: any) => row?.contract_id).filter(Boolean)),
+      ) as string[];
+
+      const [reviewersRes, contractsRes] = await Promise.all([
+        reviewerIds.length
+          ? supabase
+              .from("user_profiles")
+              .select("id, full_name, handle, avatar_url, role")
+              .in("id", reviewerIds)
+          : Promise.resolve({ data: [], error: null } as any),
+        contractIds.length
+          ? supabase
+              .from("contracts")
+              .select("id, gig_id")
+              .in("id", contractIds)
+          : Promise.resolve({ data: [], error: null } as any),
+      ]);
+
+      const gigIds = Array.from(
+        new Set(((contractsRes.data || []) as any[]).map((row) => row?.gig_id).filter(Boolean)),
+      ) as string[];
+      const gigsRes = gigIds.length
+        ? await supabase.from("gigs").select("id, title").in("id", gigIds)
+        : ({ data: [], error: null } as any);
+
+      const reviewerById = new Map(((reviewersRes.data || []) as any[]).map((row) => [row.id, row]));
+      const contractById = new Map(((contractsRes.data || []) as any[]).map((row) => [row.id, row]));
+      const gigById = new Map(((gigsRes.data || []) as any[]).map((row) => [row.id, row]));
+
+      const merged = (ratingRows as any[]).map((row) => {
+        const reviewer = reviewerById.get(row.reviewer_id) || null;
+        const contract = contractById.get(row.contract_id) || null;
+        const gig = contract?.gig_id ? gigById.get(contract.gig_id) : null;
+        return {
+          id: row.id,
+          contract_id: row.contract_id,
+          reviewer_id: row.reviewer_id,
+          score: row.score,
+          review_text: row.review_text,
+          created_at: row.created_at,
+          reviewer,
+          contract: contract
+            ? {
+                id: contract.id,
+                gig: gig ? { id: gig.id, title: gig.title } : null,
+              }
+            : null,
+        } as Testimonial;
+      });
+
+      setStoredTestimonials(merged);
+    } catch {
+      setStoredTestimonials([]);
+    }
+  }, [profile?.id, session?.user?.id]);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -184,17 +280,106 @@ export default function FreelancerProfileScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadProfile();
+    await Promise.allSettled([loadProfile(), refetchTestimonials(), loadStoredTestimonials()]);
     setRefreshing(false);
-  }, [loadProfile]);
+  }, [loadProfile, loadStoredTestimonials, refetchTestimonials]);
 
   React.useEffect(() => {
     loadProfile();
   }, [loadProfile]);
 
+  React.useEffect(() => {
+    if (testimonials.length > 0) return;
+    loadStoredTestimonials();
+  }, [loadStoredTestimonials, testimonials.length]);
+
   const works = profile?.previous_works || [];
   const previousWorks = (Array.isArray(profile?.completed_gigs) ? profile.completed_gigs : []) || [];
   const links = (profile?.social_links || []).filter((x) => x?.url);
+  const testimonialPool = testimonials.length > 0 ? testimonials : storedTestimonials;
+  const founderTestimonials = testimonialPool.filter((item) => {
+    const role = String(item.reviewer?.role || (item as any)?.reviewer_role || "").toLowerCase();
+    return role === "founder" || role === "both";
+  });
+  const testimonialItems = founderTestimonials.length > 0 ? founderTestimonials : testimonialPool;
+  const reviewerIdsToSync = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          testimonialItems
+            .map((item) => String(item.reviewer_id || "").trim())
+            .filter((id) => id.length > 0 && !reviewerProfilesById[id]),
+        ),
+      ),
+    [reviewerProfilesById, testimonialItems],
+  );
+
+  React.useEffect(() => {
+    const token = session?.access_token;
+    if (!token || reviewerIdsToSync.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        reviewerIdsToSync.map(async (reviewerId) => {
+          try {
+            const raw = await tribeApi.getPublicProfile(token, reviewerId);
+            const avatar = await resolveAvatar(raw?.photo_url || raw?.avatar_url || null, reviewerId);
+            const resolvedName =
+              String(raw?.display_name || raw?.full_name || raw?.username || "").trim() || "Member";
+            const resolvedRole =
+              typeof raw?.role === "string"
+                ? raw.role
+                : typeof raw?.user_type === "string"
+                  ? raw.user_type
+                  : null;
+            return [
+              reviewerId,
+              {
+                name: resolvedName,
+                avatar_url: avatar || null,
+                role: resolvedRole,
+              } as ReviewerProfileLite,
+            ] as const;
+          } catch {
+            return [reviewerId, null] as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setReviewerProfilesById((prev) => {
+        const next = { ...prev };
+        entries.forEach(([reviewerId, reviewer]) => {
+          if (reviewer) next[reviewerId] = reviewer;
+        });
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewerIdsToSync, session?.access_token]);
+
+  const testimonialItemsWithTribeProfiles = React.useMemo(
+    () =>
+      testimonialItems.map((item) => {
+        const synced = reviewerProfilesById[item.reviewer_id];
+        if (!synced) return item;
+        return {
+          ...item,
+          reviewer: {
+            id: item.reviewer_id,
+            full_name: synced.name || item.reviewer?.full_name || item.reviewer?.handle || null,
+            handle: item.reviewer?.handle || null,
+            avatar_url: synced.avatar_url || item.reviewer?.avatar_url || null,
+            role: (synced.role as any) || item.reviewer?.role || null,
+          },
+        } as Testimonial;
+      }),
+    [reviewerProfilesById, testimonialItems],
+  );
   const lastUpdatedLabel = profile?.updated_at ? new Date(profile.updated_at).toLocaleDateString() : null;
   const themeOptions: { key: "system" | "light" | "dark"; label: string }[] = [
     { key: "system", label: "System" },
@@ -323,6 +508,12 @@ export default function FreelancerProfileScreen() {
               )}
             </View>
           </SurfaceCard>
+
+          <TestimonialCarousel
+            title="Testimonials"
+            items={testimonialItemsWithTribeProfiles}
+            emptyText="No founder reviews yet."
+          />
 
           <SurfaceCard style={styles.sectionCard}>
             <View style={styles.sectionHeadRow}>

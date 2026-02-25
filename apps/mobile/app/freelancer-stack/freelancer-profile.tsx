@@ -12,10 +12,11 @@ import {
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import { TestimonialCarousel } from "@/components/freelancer/TestimonialCarousel";
 import { useAuth } from "@/context/AuthContext";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { useContracts } from "@/hooks/useGig";
+import { useContracts, useUserTestimonials } from "@/hooks/useGig";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -127,6 +128,12 @@ export default function FreelancerProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<PublicProfileData | null>(null);
+  const targetUserId = (typeof id === "string" && id) || profile?.id || "";
+  const { data: testimonials = [], refetch: refetchTestimonials } = useUserTestimonials(
+    targetUserId,
+    12,
+    Boolean(targetUserId),
+  );
 
   const loadProfile = useCallback(async () => {
     const profileId = typeof id === "string" ? id : "";
@@ -176,13 +183,17 @@ export default function FreelancerProfileScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadProfile();
+    await Promise.allSettled([loadProfile(), refetchTestimonials()]);
     setRefreshing(false);
-  }, [loadProfile]);
+  }, [loadProfile, refetchTestimonials]);
 
   const works = profile?.previous_works || [];
   const previousWorks = (Array.isArray(profile?.completed_gigs) ? profile.completed_gigs : []) || [];
   const links = (profile?.social_links || []).filter((x) => x?.url);
+  const founderTestimonials = testimonials.filter((item) => {
+    const role = String(item.reviewer?.role || "").toLowerCase();
+    return role === "founder" || role === "both";
+  });
   const expCount = works.length;
   const workCount = previousWorks.length;
   const linkCount = links.length;
@@ -421,6 +432,12 @@ export default function FreelancerProfileScreen() {
               )}
             </View>
           </SurfaceCard>
+
+          <TestimonialCarousel
+            title="Testimonials"
+            items={founderTestimonials}
+            emptyText="No founder reviews yet."
+          />
 
           <SurfaceCard style={styles.sectionCard}>
             <View style={styles.sectionHeadRow}>

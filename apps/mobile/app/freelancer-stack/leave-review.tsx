@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
@@ -14,7 +14,12 @@ import {
 } from "@/components/community/freelancerFlow/shared";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { useContract, useSubmitRating } from "@/hooks/useGig";
+import { useAuth } from "@/context/AuthContext";
+import { useContract, useMyContractRating, useSubmitRating } from "@/hooks/useGig";
+import { supabase } from "@/lib/supabase";
+import * as tribeApi from "@/lib/tribeApi";
+
+const STORAGE_BUCKET = "tribe-media";
 
 const ratingLabels: Record<number, string> = {
   1: "Poor",
@@ -24,25 +29,161 @@ const ratingLabels: Record<number, string> = {
   5: "Excellent",
 };
 
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return null;
+}
+
+function formatRole(raw?: string | null, fallback = "Freelancer") {
+  if (!raw) return fallback;
+  if (/^founder$/i.test(raw)) return "Founder";
+  if (/^freelancer$/i.test(raw)) return "Freelancer";
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+async function resolveAvatar(candidate: unknown, userId: string): Promise<string | null> {
+  try {
+    if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
+      return candidate;
+    }
+
+    if (typeof candidate === "string" && candidate.trim()) {
+      const { data } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(candidate.trim(), 60 * 60 * 24 * 30);
+      if (data?.signedUrl) return `${data.signedUrl}&t=${Date.now()}`;
+    }
+
+    if (!userId) return null;
+    const folder = `profiles/${userId}`;
+    const { data: files } = await supabase.storage.from(STORAGE_BUCKET).list(folder, { limit: 20 });
+    if (!Array.isArray(files) || files.length === 0) return null;
+    const preferred = files.find((f) => /^avatar\./i.test(f.name)) || files[0];
+    if (!preferred?.name) return null;
+
+    const { data } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .createSignedUrl(`${folder}/${preferred.name}`, 60 * 60 * 24 * 30);
+    return data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function LeaveReviewScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
-  const { contractId, revieweeId } = useLocalSearchParams<{ contractId?: string; revieweeId?: string }>();
+  const { user } = useAuth();
+  const params = useLocalSearchParams<{ contractId?: string | string[]; revieweeId?: string | string[] }>();
+  const contractId = Array.isArray(params.contractId) ? params.contractId[0] : params.contractId || "";
+  const routeRevieweeId = Array.isArray(params.revieweeId) ? params.revieweeId[0] : params.revieweeId || "";
 
-  const { data: contract, isLoading, error, refetch } = useContract(contractId);
+  const { data: contract, isLoading, error, refetch } = useContract(contractId, !!contractId);
+  const { data: existingRating, isLoading: ratingStatusLoading, refetch: refetchRatingStatus } = useMyContractRating(
+    contractId,
+    !!contractId,
+  );
   const submitRating = useSubmitRating();
 
   const [score, setScore] = useState(4);
   const [reviewText, setReviewText] = useState("");
+  const [revieweeProfile, setRevieweeProfile] = useState<{
+    name: string;
+    avatar: string | null;
+    role: string;
+  } | null>(null);
 
-  const freelancer = contract?.freelancer;
-  const revieweeName = freelancer?.full_name || freelancer?.handle || "Freelancer";
-  const revieweeAvatar = freelancer?.avatar_url;
+  const effectiveRevieweeId = useMemo(() => {
+    if (routeRevieweeId) return routeRevieweeId;
+    if (!contract) return "";
+    return user?.id === contract.founder_id ? contract.freelancer_id : contract.founder_id;
+  }, [contract, routeRevieweeId, user?.id]);
+
+  const revieweeFromContract = useMemo(() => {
+    if (!contract) return null;
+    if (effectiveRevieweeId && effectiveRevieweeId === contract.freelancer_id) return contract.freelancer;
+    if (effectiveRevieweeId && effectiveRevieweeId === contract.founder_id) return contract.founder;
+    return contract.freelancer || contract.founder || null;
+  }, [contract, effectiveRevieweeId]);
+
+  const fallbackRevieweeName =
+    firstString(revieweeFromContract?.full_name, revieweeFromContract?.handle) || "Member";
+  const fallbackRevieweeAvatar = firstString(revieweeFromContract?.avatar_url);
+  const fallbackRevieweeRole =
+    effectiveRevieweeId && effectiveRevieweeId === contract?.founder_id ? "Founder" : "Freelancer";
+
+  const revieweeName = revieweeProfile?.name || fallbackRevieweeName;
+  const revieweeAvatar = revieweeProfile?.avatar || fallbackRevieweeAvatar || null;
+  const revieweeRole = revieweeProfile?.role || fallbackRevieweeRole;
   const gigTitle = contract?.gig?.title || "Contract";
+  const isFounderReviewer = Boolean(user?.id && contract && user.id === contract.founder_id);
+  const isCompletedContract = contract?.status === "completed";
+  const isReviewingFreelancer = Boolean(contract?.freelancer_id && effectiveRevieweeId === contract.freelancer_id);
+
+  useEffect(() => {
+    if (!effectiveRevieweeId) {
+      setRevieweeProfile({
+        name: fallbackRevieweeName,
+        avatar: fallbackRevieweeAvatar || null,
+        role: fallbackRevieweeRole,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const fallback = {
+        name: fallbackRevieweeName,
+        avatar: fallbackRevieweeAvatar || null,
+        role: fallbackRevieweeRole,
+      };
+      const sessionResult = await supabase.auth.getSession().catch(() => null);
+      const accessToken = sessionResult?.data?.session?.access_token || null;
+      if (!accessToken) {
+        if (!cancelled) setRevieweeProfile(fallback);
+        return;
+      }
+
+      try {
+        const raw = await tribeApi.getPublicProfile(accessToken, effectiveRevieweeId);
+        const avatar = await resolveAvatar(
+          raw?.photo_url || raw?.avatar_url || fallback.avatar,
+          effectiveRevieweeId,
+        );
+        if (!cancelled) {
+          setRevieweeProfile({
+            name: firstString(raw?.display_name, raw?.full_name, raw?.username, fallback.name) || fallback.name,
+            avatar: avatar || fallback.avatar,
+            role: formatRole(firstString(raw?.role, raw?.user_type), fallback.role),
+          });
+        }
+      } catch {
+        if (!cancelled) setRevieweeProfile(fallback);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveRevieweeId, fallbackRevieweeAvatar, fallbackRevieweeName, fallbackRevieweeRole]);
 
   const handleSubmit = async () => {
-    if (!contractId || !revieweeId) {
+    if (!contractId || !effectiveRevieweeId) {
       Alert.alert("Error", "Missing contract or reviewee information.");
+      return;
+    }
+    if (!isFounderReviewer || !isCompletedContract || !isReviewingFreelancer) {
+      Alert.alert("Review unavailable", "Only founders can review freelancers after contract completion.");
+      return;
+    }
+    if (existingRating?.id) {
+      Alert.alert("Already reviewed", "You have already submitted a review for this contract.");
       return;
     }
 
@@ -50,11 +191,12 @@ export default function LeaveReviewScreen() {
       await submitRating.mutateAsync({
         contractId,
         data: {
-          reviewee_id: revieweeId,
+          reviewee_id: effectiveRevieweeId,
           score,
           review_text: reviewText.trim() || undefined,
         },
       });
+      await refetchRatingStatus();
       Alert.alert("Review Submitted", "Thank you for your feedback!", [{ text: "OK", onPress: () => nav.back() }]);
     } catch (err: any) {
       Alert.alert("Submit Failed", err?.message || "Could not submit your review. Please try again.");
@@ -97,6 +239,29 @@ export default function LeaveReviewScreen() {
     );
   }
 
+  if (!isFounderReviewer || !isCompletedContract || !isReviewingFreelancer) {
+    return (
+      <FlowScreen>
+        <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+          <TouchableOpacity style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]} onPress={nav.back}>
+            <Ionicons name="close" size={15} color={palette.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <T weight="medium" color={palette.text} style={styles.pageTitle}>Leave a Review</T>
+            <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Share collaboration feedback</T>
+          </View>
+        </View>
+        <View style={styles.content}>
+          <ErrorState
+            title="Review not available"
+            message="Only founders can review freelancers, and only after completed work."
+            onRetry={nav.back}
+          />
+        </View>
+      </FlowScreen>
+    );
+  }
+
   return (
     <FlowScreen scroll={false}>
       <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
@@ -114,7 +279,9 @@ export default function LeaveReviewScreen() {
           <View style={styles.center}>
             <Avatar source={revieweeAvatar ? { uri: revieweeAvatar } : undefined} size={66} />
             <T weight="medium" color={palette.text} style={styles.name}>{revieweeName}</T>
-            <T weight="regular" color={palette.subText} style={styles.role} numberOfLines={1}>{gigTitle}</T>
+            <T weight="regular" color={palette.subText} style={styles.role} numberOfLines={1}>
+              {revieweeRole} • {gigTitle}
+            </T>
           </View>
 
           <T weight="regular" color={palette.text} style={styles.question}>How was your experience?</T>
@@ -148,12 +315,18 @@ export default function LeaveReviewScreen() {
         </SurfaceCard>
 
         <PrimaryButton
-          label="Submit Review"
+          label={existingRating?.id ? "Review Submitted" : ratingStatusLoading ? "Checking Review..." : "Submit Review"}
           onPress={handleSubmit}
           loading={submitRating.isPending}
-          disabled={submitRating.isPending}
+          disabled={submitRating.isPending || ratingStatusLoading || Boolean(existingRating?.id)}
           style={{ marginTop: 6 }}
         />
+
+        {existingRating?.id ? (
+          <T weight="regular" color={palette.subText} style={styles.submittedNote}>
+            You have already submitted a review for this contract.
+          </T>
+        ) : null}
 
         <T weight="regular" color={palette.subText} style={styles.contractId}>
           Contract #{contract.id.substring(0, 8).toUpperCase()}
@@ -204,5 +377,6 @@ const styles = StyleSheet.create({
   },
   noteRow: { marginTop: 8, flexDirection: "row", alignItems: "flex-start", gap: 6 },
   note: { flex: 1, fontSize: 11, lineHeight: 14 },
+  submittedNote: { textAlign: "center", marginTop: 2, fontSize: 11, lineHeight: 14 },
   contractId: { textAlign: "center", marginTop: 4, fontSize: 10, lineHeight: 13 },
 });

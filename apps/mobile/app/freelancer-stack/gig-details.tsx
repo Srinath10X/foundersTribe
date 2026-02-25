@@ -27,7 +27,14 @@ export default function GigDetailsScreen() {
 
   const tags = gig?.gig_tags?.map((gt) => gt.tags?.label).filter(Boolean) ?? [];
   const parsedContent = parseGigDescription(gig?.description || "");
-  const isLockedForEdit = Boolean((contractsData?.items ?? []).some((c) => c.gig_id === gig?.id));
+  const gigContracts = (contractsData?.items ?? []).filter((contract) => contract.gig_id === gig?.id);
+  const existingContract =
+    gigContracts.sort((a, b) => {
+      const aTime = new Date(a.updated_at || a.created_at).getTime();
+      const bTime = new Date(b.updated_at || b.created_at).getTime();
+      return bTime - aTime;
+    })[0] ?? null;
+  const isLockedForEdit = Boolean(existingContract);
 
   const statusTone =
     gig?.status === "open"
@@ -252,7 +259,19 @@ export default function GigDetailsScreen() {
           ) : null}
 
           <View style={styles.actionsWrap}>
-            <PrimaryButton label="View Proposals" onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)} />
+            {existingContract?.id ? (
+              <PrimaryButton
+                label="View Contract"
+                onPress={() =>
+                  nav.push(`/freelancer-stack/contract-details?contractId=${encodeURIComponent(existingContract.id)}`)
+                }
+              />
+            ) : (
+              <PrimaryButton
+                label="View Proposals"
+                onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
+              />
+            )}
           </View>
         </View>
       </ScrollView>

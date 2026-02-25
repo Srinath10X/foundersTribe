@@ -44,6 +44,7 @@ import type {
   PaginatedProposals,
   Rating,
   RatingCreateInput,
+  Testimonial,
   Notification,
   NotificationFilters,
   PaginatedNotifications,
@@ -505,6 +506,29 @@ export const gigService = {
       }
     );
     return response.data!;
+  },
+
+  /**
+   * Get current user's rating for a contract, if already submitted
+   * GET /api/contracts/:contractId/rate
+   */
+  getMyContractRating: async (contractId: string): Promise<Rating | null> => {
+    if (!contractId) return null;
+    const response = await fetchWithAuth<{ data?: Rating | null }>(`/api/contracts/${contractId}/rate`);
+    return response.data ?? null;
+  },
+
+  /**
+   * List testimonials (ratings received) for a user
+   * GET /api/users/:id/testimonials
+   */
+  getUserTestimonials: async (userId: string, limit = 12): Promise<Testimonial[]> => {
+    if (!userId) return [];
+    const query = buildQueryString({ limit });
+    const response = await fetchWithAuth<{ items: Testimonial[] }>(
+      `/api/users/${userId}/testimonials${query}`,
+    );
+    return response.items || [];
   },
 
   // ------------------------------------------

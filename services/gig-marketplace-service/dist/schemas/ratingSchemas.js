@@ -9,3 +9,8 @@ export const createRatingSchema = z.object({
     }),
     query: z.object({}).optional(),
 });
+export const getMyRatingSchema = z.object({
+    params: z.object({ id: uuidSchema }),
+    body: z.object({}).optional(),
+    query: z.object({}).optional(),
+});

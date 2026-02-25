@@ -54,6 +54,7 @@ import type {
   PaginatedProposals,
   Rating,
   RatingCreateInput,
+  Testimonial,
   Notification,
   NotificationFilters,
   PaginatedNotifications,
@@ -91,8 +92,14 @@ export const queryKeys = {
     all: ["notifications"] as const,
     list: (filters?: NotificationFilters) => ["notifications", "list", filters] as const,
   },
+  ratings: {
+    mineForContract: (contractId: string) => ["ratings", "mine", contractId] as const,
+  },
   profile: {
     me: () => ["profile", "me"] as const,
+  },
+  testimonials: {
+    forUser: (userId: string, limit?: number) => ["testimonials", userId, limit] as const,
   },
 };
 
@@ -441,11 +448,37 @@ export function useSubmitRating() {
     { contractId: string; data: RatingCreateInput }
   >({
     mutationFn: ({ contractId, data }) => gigService.submitRating(contractId, data),
-    onSuccess: (_data, { contractId }) => {
+    onSuccess: (_data, { contractId, data }) => {
       // Invalidate contract details (rating changes contract state)
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.detail(contractId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.contracts.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.ratings.mineForContract(contractId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.testimonials.forUser(data.reviewee_id) });
     },
+  });
+}
+
+/**
+ * Fetch current user's rating status for a contract
+ */
+export function useMyContractRating(contractId: string | null | undefined, enabled = true) {
+  return useQuery<Rating | null, GigServiceError>({
+    queryKey: queryKeys.ratings.mineForContract(contractId || ""),
+    queryFn: () => gigService.getMyContractRating(contractId!),
+    enabled: enabled && !!contractId,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+/**
+ * Fetch testimonials (ratings received) for a user
+ */
+export function useUserTestimonials(userId: string | null | undefined, limit = 12, enabled = true) {
+  return useQuery<Testimonial[], GigServiceError>({
+    queryKey: queryKeys.testimonials.forUser(userId || "", limit),
+    queryFn: () => gigService.getUserTestimonials(userId!, limit),
+    enabled: enabled && !!userId,
+    staleTime: 1000 * 60 * 5,
   });
 }
 

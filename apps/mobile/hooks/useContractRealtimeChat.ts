@@ -17,7 +17,16 @@ type Params = {
 
 const OPTIMISTIC_MATCH_WINDOW_MS = 2 * 60 * 1000;
 const COMMITTED_DUPLICATE_WINDOW_MS = 8 * 1000;
+const MESSAGE_CACHE_TTL_MS = 5 * 60 * 1000;
+const READ_SYNC_MIN_GAP_MS = 8000;
 const STORAGE_BUCKET = "tribe-media";
+
+type MessageCacheEntry = {
+  items: ChatMessage[];
+  cachedAt: number;
+};
+
+const messageCacheByContractId = new Map<string, MessageCacheEntry>();
 
 type ViewerRole = "founder" | "freelancer" | null;
 
@@ -144,6 +153,38 @@ function mergeMessages(existing: ChatMessage[], incoming: ChatMessage): ChatMess
   );
 }
 
+function mergeFetchedMessages(existing: ChatMessage[], fetched: ContractMessage[]): ChatMessage[] {
+  let merged: ChatMessage[] = existing.filter((m) => m.pending || m.failed);
+  const ordered = [...fetched].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  ordered.forEach((message) => {
+    merged = mergeMessages(merged, message);
+  });
+  return merged;
+}
+
+function buildMessageCacheKey(ownerId: string | null | undefined, contractId: string) {
+  return `${ownerId || "anon"}::${contractId}`;
+}
+
+function getCachedMessages(cacheKey: string): ChatMessage[] | null {
+  const cached = messageCacheByContractId.get(cacheKey);
+  if (!cached) return null;
+  if (Date.now() - cached.cachedAt > MESSAGE_CACHE_TTL_MS) {
+    messageCacheByContractId.delete(cacheKey);
+    return null;
+  }
+  return cached.items;
+}
+
+function setCachedMessages(cacheKey: string, items: ChatMessage[]) {
+  messageCacheByContractId.set(cacheKey, {
+    items: [...items],
+    cachedAt: Date.now(),
+  });
+}
+
 export function useContractRealtimeChat({ contractId }: Params) {
   const [resolvedContractId, setResolvedContractId] = useState<string | null>(contractId ?? null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -164,7 +205,7 @@ export function useContractRealtimeChat({ contractId }: Params) {
   const syncReadState = useCallback(async () => {
     if (!resolvedContractId) return;
     const now = Date.now();
-    if (now - lastReadSyncAtRef.current < 1500) return;
+    if (now - lastReadSyncAtRef.current < READ_SYNC_MIN_GAP_MS) return;
     lastReadSyncAtRef.current = now;
     try {
       await gigService.markContractMessagesRead(resolvedContractId);
@@ -173,18 +214,23 @@ export function useContractRealtimeChat({ contractId }: Params) {
     }
   }, [resolvedContractId]);
 
-  const loadInitialMessages = useCallback(async (cid: string) => {
-    setLoading(true);
+  const loadInitialMessages = useCallback(async (cid: string, forceRemote = false) => {
     setError(null);
+
     try {
-      const [{ data: sessionData }, list, contract] = await Promise.all([
+      const [{ data: sessionData }, contract] = await Promise.all([
         supabase.auth.getSession(),
-        gigService.getContractMessages(cid, { limit: 100 }),
         gigService.getContract(cid).catch(() => null),
       ]);
       const accessToken = sessionData.session?.access_token || null;
       const loggedInUserId = sessionData.session?.user?.id ?? null;
       setCurrentUserId(loggedInUserId);
+      const cacheKey = buildMessageCacheKey(loggedInUserId, cid);
+      const cachedMessages = forceRemote ? null : getCachedMessages(cacheKey);
+      setLoading(!cachedMessages);
+      if (cachedMessages) {
+        setMessages(cachedMessages);
+      }
 
       if (loggedInUserId && contract) {
         setFounderId(contract.founder_id || null);
@@ -248,11 +294,18 @@ export function useContractRealtimeChat({ contractId }: Params) {
         setCounterpartyProfile(null);
       }
 
-      const ordered = [...list.items].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      );
-      setMessages(ordered);
-      await syncReadState();
+      if (!cachedMessages || forceRemote) {
+        const list = await gigService.getContractMessages(cid, { limit: 100 });
+        const ordered = [...list.items].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+        setMessages((prev) => {
+          const next = mergeFetchedMessages(prev, ordered);
+          setCachedMessages(cacheKey, next);
+          return next;
+        });
+        await syncReadState();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load chat");
     } finally {
@@ -310,7 +363,12 @@ export function useContractRealtimeChat({ contractId }: Params) {
         },
         (payload) => {
           const incoming = payload.new as ContractMessage;
-          setMessages((prev) => mergeMessages(prev, incoming));
+          setMessages((prev) => {
+            const next = mergeMessages(prev, incoming);
+            const cacheKey = buildMessageCacheKey(currentUserId, resolvedContractId);
+            setCachedMessages(cacheKey, next);
+            return next;
+          });
           if (incoming.sender_id !== currentUserId) {
             syncReadState();
           }
@@ -357,7 +415,12 @@ export function useContractRealtimeChat({ contractId }: Params) {
         failed: false,
       };
 
-      setMessages((prev) => mergeMessages(prev, optimistic));
+      setMessages((prev) => {
+        const next = mergeMessages(prev, optimistic);
+        const cacheKey = buildMessageCacheKey(currentUserId, resolvedContractId);
+        setCachedMessages(cacheKey, next);
+        return next;
+      });
 
       try {
         const serverMessage = await gigService.sendContractMessage(resolvedContractId, {
@@ -366,11 +429,19 @@ export function useContractRealtimeChat({ contractId }: Params) {
           recipient_id: counterpartyId || undefined,
           metadata: { client_message_id: clientMessageId },
         });
-        setMessages((prev) => mergeMessages(prev, serverMessage));
+        setMessages((prev) => {
+          const next = mergeMessages(prev, serverMessage);
+          const cacheKey = buildMessageCacheKey(currentUserId, resolvedContractId);
+          setCachedMessages(cacheKey, next);
+          return next;
+        });
       } catch (e) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === localId ? { ...m, pending: false, failed: true } : m)),
-        );
+        setMessages((prev) => {
+          const next = prev.map((m) => (m.id === localId ? { ...m, pending: false, failed: true } : m));
+          const cacheKey = buildMessageCacheKey(currentUserId, resolvedContractId);
+          setCachedMessages(cacheKey, next);
+          return next;
+        });
         setError(e instanceof Error ? e.message : "Failed to send message");
       } finally {
         setSending(false);
@@ -383,10 +454,16 @@ export function useContractRealtimeChat({ contractId }: Params) {
   const retryFailedMessage = useCallback(
     async (msg: ChatMessage) => {
       if (!msg.failed || msg.message_type !== "text" || !msg.body) return;
-      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      if (!resolvedContractId) return;
+      setMessages((prev) => {
+        const next = prev.filter((m) => m.id !== msg.id);
+        const cacheKey = buildMessageCacheKey(currentUserId, resolvedContractId);
+        setCachedMessages(cacheKey, next);
+        return next;
+      });
       await sendTextMessage(msg.body);
     },
-    [sendTextMessage],
+    [currentUserId, resolvedContractId, sendTextMessage],
   );
 
   return useMemo(
@@ -404,7 +481,8 @@ export function useContractRealtimeChat({ contractId }: Params) {
       counterpartyProfile,
       sendTextMessage,
       retryFailedMessage,
-      refresh: () => (resolvedContractId ? loadInitialMessages(resolvedContractId) : Promise.resolve()),
+      refresh: (forceRemote = false) =>
+        (resolvedContractId ? loadInitialMessages(resolvedContractId, forceRemote) : Promise.resolve()),
     }),
     [
       resolvedContractId,

@@ -36,3 +36,12 @@ export const getUserProfileSchema = z.object({
     body: z.object({}).optional(),
     query: z.object({}).optional(),
 });
+export const getUserTestimonialsSchema = z.object({
+    params: z.object({
+        id: z.string().uuid(),
+    }),
+    body: z.object({}).optional(),
+    query: z.object({
+        limit: z.coerce.number().int().positive().max(30).optional(),
+    }).optional(),
+});
