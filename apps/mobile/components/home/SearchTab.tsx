@@ -11,12 +11,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { PeopleList } from "@/components/PeopleList";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { memo, useCallback, useEffect, useState, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Keyboard,
   LayoutChangeEvent,
   Platform,
   Pressable,
@@ -27,12 +26,11 @@ import {
   View,
 } from "react-native";
 import Animated, {
-  FadeIn,
   FadeInDown,
-  FadeInUp,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from "react-native-reanimated";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -49,6 +47,15 @@ const S = {
   xl: 24,
   xxl: 32,
 } as const;
+
+const SEARCH_PLACEHOLDERS = [
+  "Search people, articles, communities...",
+  "Find a graphic designer...",
+  "Discover startup articles...",
+  "Search for communities...",
+  "Find a content writer...",
+  "Explore tech founders...",
+];
 
 type ResultTab = "all" | "people" | "articles" | "communities";
 
@@ -88,6 +95,28 @@ const UniversalSearchBar = memo(function UniversalSearchBar({
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
+  // Rotating placeholder animation
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const placeholderOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    if (query.length > 0) return;
+
+    const interval = setInterval(() => {
+      placeholderOpacity.value = withTiming(0, { duration: 300 });
+      setTimeout(() => {
+        setPlaceholderIdx((prev) => (prev + 1) % SEARCH_PLACEHOLDERS.length);
+        placeholderOpacity.value = withTiming(1, { duration: 300 });
+      }, 300);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [query.length]);
+
+  const placeholderAnimStyle = useAnimatedStyle(() => ({
+    opacity: placeholderOpacity.value,
+  }));
+
   const barBg = isDark
     ? isFocused ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.05)"
     : isFocused ? "rgba(0,0,0,0.05)" : "rgba(0,0,0,0.03)";
@@ -111,26 +140,37 @@ const UniversalSearchBar = memo(function UniversalSearchBar({
           size={20}
           color={isFocused ? theme.brand.primary : theme.text.tertiary}
         />
-        <TextInput
-          ref={inputRef}
-          style={[searchBarStyles.input, { color: theme.text.primary }]}
-          placeholder="Search people, articles, communities..."
-          placeholderTextColor={theme.text.muted}
-          value={query}
-          onChangeText={onChangeQuery}
-          returnKeyType="search"
-          onSubmitEditing={onSubmit}
-          onFocus={() => {
-            setIsFocused(true);
-            onFocusChange?.(true);
-          }}
-          onBlur={() => {
-            setIsFocused(false);
-            onFocusChange?.(false);
-          }}
-          autoFocus={autoFocus}
-          underlineColorAndroid="transparent"
-        />
+        <View style={searchBarStyles.inputWrap}>
+          <TextInput
+            ref={inputRef}
+            style={[searchBarStyles.input, { color: theme.text.primary }]}
+            placeholder=""
+            value={query}
+            onChangeText={onChangeQuery}
+            returnKeyType="search"
+            onSubmitEditing={onSubmit}
+            onFocus={() => {
+              setIsFocused(true);
+              onFocusChange?.(true);
+            }}
+            onBlur={() => {
+              setIsFocused(false);
+              onFocusChange?.(false);
+            }}
+            autoFocus={autoFocus}
+            underlineColorAndroid="transparent"
+          />
+          {query.length === 0 && (
+            <Animated.View
+              style={[searchBarStyles.placeholderOverlay, placeholderAnimStyle]}
+              pointerEvents="none"
+            >
+              <Text style={[searchBarStyles.placeholderText, { color: theme.text.muted }]}>
+                {SEARCH_PLACEHOLDERS[placeholderIdx]}
+              </Text>
+            </Animated.View>
+          )}
+        </View>
         {query.length > 0 ? (
           <Pressable onPress={onClear} hitSlop={8} style={searchBarStyles.clearBtn}>
             <View
@@ -177,17 +217,30 @@ const searchBarStyles = StyleSheet.create({
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: 16,
     paddingHorizontal: S.md,
-    height: 48,
+    height: 52,
     borderWidth: 1,
     gap: 10,
   },
   input: {
-    flex: 1,
     fontSize: 15,
     fontFamily: "Poppins_400Regular",
     paddingVertical: 0,
+    letterSpacing: -0.1,
+  },
+  inputWrap: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  placeholderOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+  },
+  placeholderText: {
+    fontSize: 15,
+    fontFamily: "Poppins_400Regular",
     letterSpacing: -0.1,
   },
   clearBtn: { padding: 4 },
@@ -335,16 +388,16 @@ const ResultTabBar = memo(function ResultTabBar({
 const tabBarStyles = StyleSheet.create({
   wrapper: { borderBottomWidth: StyleSheet.hairlineWidth },
   scrollContent: { paddingHorizontal: S.md },
-  row: { flexDirection: "row", alignItems: "center", height: 44, position: "relative" },
+  row: { flexDirection: "row", alignItems: "center", height: 48, position: "relative" },
   tab: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: S.sm,
-    height: 44,
+    height: 48,
     justifyContent: "center",
     gap: 5,
   },
-  tabText: { fontSize: 13, letterSpacing: -0.1 },
+  tabText: { fontSize: 14, letterSpacing: -0.1 },
   countBadge: {
     fontSize: 10,
     fontFamily: "Poppins_600SemiBold",
@@ -420,34 +473,6 @@ const PersonCard = memo(function PersonCard({
           <Text style={[personStyles.username, { color: theme.text.tertiary }]} numberOfLines={1}>
             @{account.username}
           </Text>
-          {(account.user_type || account.skills?.length) && (
-            <View style={personStyles.roleRow}>
-              {account.user_type && (
-                <View
-                  style={[
-                    personStyles.roleBadge,
-                    {
-                      backgroundColor: isDark ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.08)",
-                    },
-                  ]}
-                >
-                  <Text style={[personStyles.roleText, { color: theme.brand.primary }]}>
-                    {account.user_type}
-                  </Text>
-                </View>
-              )}
-              {account.skills?.[0] && (
-                <Text style={[personStyles.roleHint, { color: theme.text.muted }]} numberOfLines={1}>
-                  {account.skills[0]}
-                </Text>
-              )}
-            </View>
-          )}
-          {account.bio && (
-            <Text style={[personStyles.bio, { color: theme.text.secondary }]} numberOfLines={1}>
-              {account.bio}
-            </Text>
-          )}
           {account.skills && account.skills.length > 0 && (
             <View style={personStyles.skillsRow}>
               {account.skills.slice(0, 3).map((skill) => (
@@ -502,16 +527,6 @@ const personStyles = StyleSheet.create({
   info: { flex: 1, gap: 2 },
   name: { fontSize: 14, fontFamily: "Poppins_600SemiBold", letterSpacing: -0.1 },
   username: { fontSize: 12, fontFamily: "Poppins_400Regular" },
-  roleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
-  roleBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  roleText: {
-    fontSize: 9,
-    fontFamily: "Poppins_600SemiBold",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  roleHint: { fontSize: 10, fontFamily: "Poppins_400Regular" },
-  bio: { fontSize: 12, fontFamily: "Poppins_400Regular", marginTop: 1 },
   skillsRow: { flexDirection: "row", gap: 4, marginTop: 4, flexWrap: "wrap" },
   skillChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   skillText: { fontSize: 10, fontFamily: "Poppins_500Medium" },
@@ -576,7 +591,7 @@ const ArticleResultCard = memo(function ArticleResultCard({
             </Text>
           )}
         </View>
-        {article["Image URL"] && (
+        {article["Image URL"] ? (
           <Image
             source={{ uri: article["Image URL"] }}
             style={[
@@ -587,6 +602,19 @@ const ArticleResultCard = memo(function ArticleResultCard({
             ]}
             contentFit="cover"
           />
+        ) : (
+          <View
+            style={[
+              articleStyles.thumbnail,
+              {
+                backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)",
+                justifyContent: "center",
+                alignItems: "center",
+              },
+            ]}
+          >
+            <Ionicons name="document-text-outline" size={20} color={theme.text.muted} />
+          </View>
         )}
       </Animated.View>
     </Pressable>
@@ -619,7 +647,7 @@ const articleStyles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
     lineHeight: 16,
   },
-  thumbnail: { width: 72, height: 60, borderRadius: 10 },
+  thumbnail: { width: 72, height: 60, borderRadius: 12 },
 });
 
 const CommunityResultCard = memo(function CommunityResultCard({
@@ -667,7 +695,15 @@ const CommunityResultCard = memo(function CommunityResultCard({
             },
           ]}
         >
-          <Ionicons name="people" size={18} color={theme.brand.primary} />
+          {community.avatar_url ? (
+            <Image
+              source={{ uri: community.avatar_url }}
+              style={communityStyles.iconImg}
+              contentFit="cover"
+            />
+          ) : (
+            <Ionicons name="people" size={18} color={theme.brand.primary} />
+          )}
         </View>
         <View style={communityStyles.info}>
           <Text style={[communityStyles.name, { color: theme.text.primary }]} numberOfLines={1}>
@@ -686,9 +722,12 @@ const CommunityResultCard = memo(function CommunityResultCard({
           </Text>
         </View>
         <View
-          style={[communityStyles.joinBtn, { backgroundColor: theme.brand.primary }]}
+          style={[
+            communityStyles.viewBtn,
+            { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
+          ]}
         >
-          <Text style={communityStyles.joinText}>Join</Text>
+          <Ionicons name="arrow-forward" size={14} color={theme.text.secondary} />
         </View>
       </Animated.View>
     </Pressable>
@@ -710,17 +749,20 @@ const communityStyles = StyleSheet.create({
     borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
   },
+  iconImg: { width: 44, height: 44 },
   info: { flex: 1, gap: 2 },
   name: { fontSize: 14, fontFamily: "Poppins_600SemiBold" },
   desc: { fontSize: 12, fontFamily: "Poppins_400Regular" },
   members: { fontSize: 11, fontFamily: "Poppins_400Regular" },
-  joinBtn: {
-    paddingHorizontal: S.sm,
-    paddingVertical: 6,
+  viewBtn: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  joinText: { fontSize: 12, fontFamily: "Poppins_600SemiBold", color: "#fff" },
 });
 
 // ─── Section header in results ───────────────────────────────────────────────
@@ -786,7 +828,7 @@ const IdleArticleCard = memo(function IdleArticleCard({
         style={[
           idleCardStyles.card,
           {
-            backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "#fff",
+            backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.95)",
             borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
           },
           animStyle,
@@ -980,7 +1022,7 @@ const IdleContent = memo(function IdleContent({
         )}
       </Animated.View>
 
-      <View style={{ height: 100 }} />
+      <View style={{ height: 120 }} />
     </ScrollView>
   );
 });
@@ -1027,6 +1069,10 @@ const idleStyles = StyleSheet.create({
   emptyText: { fontSize: 13, fontFamily: "Poppins_400Regular", paddingVertical: S.md },
 });
 
+// ─── List Separator ───────────────────────────────────────────────────────────
+
+const ListSeparator = () => <View style={{ height: S.xs }} />;
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function SearchTab() {
@@ -1050,13 +1096,6 @@ export default function SearchTab() {
   });
 
   const isSearching = searchQuery.trim().length > 0;
-
-  // Reset search on focus
-  useFocusEffect(
-    useCallback(() => {
-      // Don't clear query on focus -- let user keep their search
-    }, [])
-  );
 
   // Load recent on mount + fetch idle articles
   useEffect(() => {
@@ -1144,7 +1183,7 @@ export default function SearchTab() {
 
   const counts = useMemo(
     () => ({
-      all: results.top.length,
+      all: results.accounts.length + results.articles.length + results.communities.length,
       people: results.accounts.length,
       articles: results.articles.length,
       communities: results.communities.length,
@@ -1316,7 +1355,7 @@ export default function SearchTab() {
               renderItem={renderItem}
               keyExtractor={keyExtractor}
               contentContainerStyle={styles.resultsList}
-              ItemSeparatorComponent={() => <View style={{ height: S.xs }} />}
+              ItemSeparatorComponent={ListSeparator}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"

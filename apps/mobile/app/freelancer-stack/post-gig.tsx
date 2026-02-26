@@ -213,18 +213,14 @@ export default function PostGigScreen() {
   const previewPosterName =
     String(tribeProfile?.display_name || "").trim() ||
     myProfile?.full_name ||
-    String(session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || "").trim() ||
-    (session?.user?.email ? session.user.email.split("@")[0] : "") ||
     "You";
   const previewPosterHandle =
     String(tribeProfile?.username || "").trim() ||
     myProfile?.handle ||
-    String(session?.user?.user_metadata?.user_name || session?.user?.user_metadata?.preferred_username || "").trim() ||
     "";
   const previewPosterAvatar =
     String(tribeProfile?.photo_url || tribeProfile?.avatar_url || "").trim() ||
     myProfile?.avatar_url ||
-    String(session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || "").trim() ||
     undefined;
 
   const parsedTimelineValue = Number(timelineValue);

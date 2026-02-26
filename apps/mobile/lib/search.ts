@@ -1,6 +1,24 @@
 import { supabase } from "@/lib/supabase";
-import gigService from "@/lib/gigService";
 import { SearchArticle, SearchAccount, SearchCommunity } from "./searchService";
+
+const STORAGE_BUCKET = "tribe-media";
+
+/**
+ * Resolve a raw avatar value (storage path or URL) to a usable URL.
+ */
+async function resolveAvatarUrl(raw: string | null, userId: string): Promise<string | null> {
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.trim()) {
+    try {
+      const { data } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(raw.trim(), 60 * 60 * 24 * 30);
+      if (data?.signedUrl) return `${data.signedUrl}&t=${Date.now()}`;
+    } catch { /* fall through */ }
+  }
+  return null;
+}
 
 export type { SearchArticle, SearchAccount, SearchCommunity };
 
@@ -18,43 +36,41 @@ export interface SearchCounts {
   communities: number;
 }
 
-const MOCK_COMMUNITIES: SearchCommunity[] = [
-  {
-    id: "1",
-    name: "Fintech Founders",
-    description: "Discuss payments, lending, and financial infrastructure",
-    avatar_url: null,
-    member_count: 1240,
-  },
-  {
-    id: "2",
-    name: "AI Builders",
-    description: "For founders building with AI/ML technologies",
-    avatar_url: null,
-    member_count: 890,
-  },
-  {
-    id: "3",
-    name: "SaaS Growth",
-    description: "Strategies for scaling SaaS products to $1M+ ARR",
-    avatar_url: null,
-    member_count: 2100,
-  },
-  {
-    id: "4",
-    name: "Bootstrapped Founders",
-    description: "Building profitable businesses without VC funding",
-    avatar_url: null,
-    member_count: 567,
-  },
-  {
-    id: "5",
-    name: "Indie Hackers",
-    description: "Launching side projects and validating ideas",
-    avatar_url: null,
-    member_count: 3200,
-  },
-];
+
+async function searchCommunitiesFromDb(query: string): Promise<SearchCommunity[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from("tribes")
+      .select("id, name, description, avatar_url, member_count")
+      .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
+      .order("member_count", { ascending: false })
+      .limit(20);
+
+    if (error) {
+      console.error("Community search error:", error);
+      return [];
+    }
+
+    return Promise.all(
+      (data || []).map(async (t: any) => {
+        const resolvedAvatar = await resolveAvatarUrl(t.avatar_url || null, t.id);
+        return {
+          id: t.id,
+          name: t.name || "Community",
+          description: t.description || null,
+          avatar_url: resolvedAvatar,
+          member_count: t.member_count || 0,
+        };
+      })
+    );
+  } catch (err) {
+    console.error("Community search error:", err);
+    return [];
+  }
+}
 
 async function searchArticlesFromDb(query: string): Promise<SearchArticle[]> {
   const trimmed = query.trim();
@@ -88,54 +104,41 @@ async function searchAccountsFromApi(query: string): Promise<SearchAccount[]> {
   if (!trimmed) return [];
 
   try {
-    const response = await gigService.listUsers({ q: trimmed, limit: 20 });
-    return (response.items || []).map((profile) => ({
-      id: profile.id,
-      display_name: profile.full_name || "User",
-      username: profile.handle || "user",
-      avatar_url: profile.avatar_url || null,
-      bio: profile.bio || null,
-      user_type: profile.role || null,
-    }));
-  } catch (error) {
-    console.warn("API account search failed, falling back to Supabase:", error);
-    try {
-      const { data, error: dbError } = await supabase
-        .from("user_profiles")
-        .select("id, full_name, handle, avatar_url, bio, role")
-        .or(
-          `full_name.ilike.%${trimmed}%,handle.ilike.%${trimmed}%,bio.ilike.%${trimmed}%`
-        )
-        .order("updated_at", { ascending: false })
-        .limit(20);
+    // Query the profiles table (tribe-service) which has user-edited data
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name, username, photo_url, avatar_url, bio")
+      .or(
+        `display_name.ilike.%${trimmed}%,username.ilike.%${trimmed}%,bio.ilike.%${trimmed}%`
+      )
+      .order("updated_at", { ascending: false })
+      .limit(20);
 
-      if (dbError) {
-        console.error("Supabase account search fallback error:", dbError);
-        return [];
-      }
-
-      return (data || []).map((profile: any) => ({
-        id: profile.id,
-        display_name: profile.full_name || "User",
-        username: profile.handle || "user",
-        avatar_url: profile.avatar_url || null,
-        bio: profile.bio || null,
-        user_type: profile.role || null,
-      }));
-    } catch (fallbackError) {
-      console.error("Account search fallback error:", fallbackError);
+    if (error) {
+      console.error("Profile search error:", error);
       return [];
     }
-  }
-}
 
-function searchCommunitiesFromMock(query: string): SearchCommunity[] {
-  const q = query.toLowerCase();
-  return MOCK_COMMUNITIES.filter(
-    (c) =>
-      c.name.toLowerCase().includes(q) ||
-      (c.description && c.description.toLowerCase().includes(q))
-  );
+    // Resolve avatars (storage paths → signed URLs) in parallel
+    return Promise.all(
+      (data || []).map(async (profile: any) => {
+        const rawAvatar = profile.photo_url || profile.avatar_url || null;
+        const resolvedAvatar = await resolveAvatarUrl(rawAvatar, profile.id);
+
+        return {
+          id: profile.id,
+          display_name: profile.display_name || profile.username || "User",
+          username: profile.username || "user",
+          avatar_url: resolvedAvatar,
+          bio: profile.bio || null,
+          user_type: null,
+        };
+      })
+    );
+  } catch (error) {
+    console.error("Account search error:", error);
+    return [];
+  }
 }
 
 export async function searchAll(query: string): Promise<SearchResults> {
@@ -147,7 +150,7 @@ export async function searchAll(query: string): Promise<SearchResults> {
   const [articles, accounts, communities] = await Promise.all([
     searchArticlesFromDb(trimmed),
     searchAccountsFromApi(trimmed),
-    Promise.resolve(searchCommunitiesFromMock(trimmed)),
+    searchCommunitiesFromDb(trimmed),
   ]);
 
   const top: (SearchArticle | SearchAccount | SearchCommunity)[] = [

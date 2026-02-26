@@ -301,12 +301,12 @@ export default function FounderProfileScreen() {
       }
 
       const resolvedAvatar =
-        (await resolveAvatar(db?.photo_url || db?.avatar_url || meta?.avatar_url || meta?.picture || null, userId)) ||
-        people.alex;
+        (await resolveAvatar(db?.photo_url || db?.avatar_url || null, userId)) ||
+        null;
 
       const merged: ProfileData = {
         id: userId,
-        display_name: normalizeName(db?.display_name || meta?.full_name || meta?.name, session?.user?.email),
+        display_name: db?.display_name || db?.username || "User",
         username: db?.username || null,
         bio: db?.bio ?? fallbackProfileData?.bio ?? null,
         avatar_url: resolvedAvatar,
@@ -404,17 +404,17 @@ export default function FounderProfileScreen() {
 
   const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
   const profileStatus =
-    profile?.user_type === "founder"
-      ? "Building Startup"
-      : profile?.user_type === "both"
-        ? "Open to Work + Building"
-        : "Open to Work";
+    profile?.user_type === "both"
+      ? "Open to Work + Building"
+      : profile?.user_type === "freelancer"
+        ? "Open to Work"
+        : "Building";
   const statusHint =
-    profile?.user_type === "founder"
-      ? "Actively seeking collaborators and early users."
-      : profile?.user_type === "both"
-        ? "Open for freelance projects and startup partnerships."
-        : "Open for new projects and high-impact opportunities.";
+    profile?.user_type === "both"
+      ? "Open for freelance projects and startup partnerships."
+      : profile?.user_type === "freelancer"
+        ? "Open for new projects and high-impact opportunities."
+        : "Actively seeking collaborators and early users.";
   const selectAppearance = () => {
     setShowAppearanceModal(true);
   };
@@ -423,7 +423,7 @@ export default function FounderProfileScreen() {
     <FlowScreen scroll={false}>
       <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.surface }]}>
         <T weight="bold" color={palette.text} style={styles.pageTitle}>
-          Founder Profile
+          Profile
         </T>
       </View>
 
@@ -438,22 +438,17 @@ export default function FounderProfileScreen() {
           <View style={styles.heroTop}>
             <View style={styles.avatarSection}>
               <View style={styles.heroAvatarRing}>
-                <Avatar source={profile?.photo_url || people.alex} size={60} />
+                <Avatar source={profile?.photo_url} size={60} />
                 <View style={styles.statusDot} />
               </View>
             </View>
             <View style={styles.heroIdentityText}>
               <T weight="semiBold" color="#FFFFFF" style={styles.heroName} numberOfLines={2}>
-                {profile?.display_name || "Founder"}
+                {profile?.display_name || profile?.username || "User"}
               </T>
               <T weight="regular" color="rgba(255,255,255,0.8)" style={styles.heroMeta} numberOfLines={1}>
                 @{profile?.username || "user"}
               </T>
-              {profile?.role && (
-                <T weight="regular" color="rgba(255,255,255,0.7)" style={styles.heroRole} numberOfLines={1}>
-                  {profile.role}
-                </T>
-              )}
             </View>
             {!isViewingOtherProfile && !isCompactProfile ? (
               <TouchableOpacity

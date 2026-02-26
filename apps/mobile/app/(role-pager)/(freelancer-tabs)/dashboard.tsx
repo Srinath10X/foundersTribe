@@ -292,7 +292,7 @@ export default function TalentDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [headerName, setHeaderName] = useState("User");
   const [headerRole, setHeaderRole] = useState("Freelancer");
-  const [headerAvatar, setHeaderAvatar] = useState<string>(people.alex);
+  const [headerAvatar, setHeaderAvatar] = useState<string | null>(null);
   const [headerBio, setHeaderBio] = useState("");
   const { data: statsData, refetch: refetchStats } = useFreelancerStats();
   const { data: contractsData, refetch: refetchContracts } = useContracts({ status: "active", limit: 20 });
@@ -320,28 +320,22 @@ export default function TalentDashboardScreen() {
           }
         }
 
-        const resolvedName = normalizeHumanName(
+        const resolvedName =
           dbProfile?.display_name ||
-            profileMeta?.display_name ||
-            meta?.full_name ||
-            meta?.name ||
-            "",
-          freshUser?.email || session?.user?.email || "",
-        );
+          dbProfile?.username ||
+          "User";
 
         const resolvedRole = String(
           dbProfile?.role ||
             dbProfile?.user_type ||
             profileMeta?.role ||
-            meta?.user_type ||
-            meta?.role ||
             "Freelancer",
         )
           .replace(/[_-]/g, " ")
           .replace(/\b\w/g, (c) => c.toUpperCase());
 
         const resolvedBio = String(
-          dbProfile?.bio || profileMeta?.bio || meta?.bio || "",
+          dbProfile?.bio || profileMeta?.bio || "",
         ).trim();
 
         const avatarCandidate =
@@ -349,15 +343,13 @@ export default function TalentDashboardScreen() {
           dbProfile?.avatar_url ||
           profileMeta?.photo_url ||
           profileMeta?.avatar_url ||
-          meta?.avatar_url ||
-          meta?.picture ||
           null;
 
         const resolvedAvatar =
           (await resolveAvatarUrl(
             avatarCandidate,
             freshUser?.id || session?.user?.id || "",
-          )) || people.alex;
+          )) || null;
 
         if (!cancelled) {
           setHeaderName(resolvedName);
@@ -367,20 +359,10 @@ export default function TalentDashboardScreen() {
         }
       } catch {
         if (!cancelled) {
-          const meta = session?.user?.user_metadata || {};
-          setHeaderName(
-            normalizeHumanName(
-              meta?.full_name || meta?.name || "",
-              session?.user?.email || "",
-            ),
-          );
-          setHeaderRole(
-            String(meta?.user_type || meta?.role || "Freelancer")
-              .replace(/[_-]/g, " ")
-              .replace(/\b\w/g, (c) => c.toUpperCase()),
-          );
-          setHeaderBio(String(meta?.bio || "").trim());
-          setHeaderAvatar(people.alex);
+          setHeaderName("User");
+          setHeaderRole("Freelancer");
+          setHeaderBio("");
+          setHeaderAvatar(null);
         }
       }
     };
@@ -577,13 +559,6 @@ export default function TalentDashboardScreen() {
                     label="My Gigs"
                     onPress={() =>
                       router.push("/(role-pager)/(freelancer-tabs)/my-gigs" as any)
-                    }
-                  />
-                  <QuickAction
-                    icon="compass-outline"
-                    label="Browse Gigs"
-                    onPress={() =>
-                      router.push("/(role-pager)/(freelancer-tabs)/browse-gigs")
                     }
                   />
                   <QuickAction

@@ -669,7 +669,7 @@ export default function RoomScreen() {
       id: `local-${Date.now()}`,
       content,
       sender_id: currentUserId,
-      user_name: session?.user?.user_metadata?.name,
+      user_name: undefined,
       created_at: new Date().toISOString(),
     });
     setChatMessages((prev) => [...prev, optimisticMsg]);

@@ -265,13 +265,6 @@ export default function PublicProfileScreen() {
                         {profile.location}
                       </T>
                     )}
-                    <View style={styles.badgeRow}>
-                      {roleBadges.map((badge) => (
-                        <View key={badge} style={[styles.badge, { backgroundColor: palette.accentSoft }]}>
-                          <T weight="medium" color={palette.accent} style={styles.badgeText}>{badge}</T>
-                        </View>
-                      ))}
-                    </View>
                   </View>
                 </View>
 

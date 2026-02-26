@@ -22,7 +22,7 @@ export default function GlobalSearchScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <SearchTab />
 
-      <View style={styles.headerContainer}>
+      <View style={styles.headerContainer} pointerEvents="box-none">
         <LinearGradient
           colors={
             isDark
@@ -30,6 +30,7 @@ export default function GlobalSearchScreen() {
               : ["rgba(255,255,255,0.8)", "rgba(255,255,255,0.4)", "transparent"]
           }
           style={styles.headerGradient}
+          pointerEvents="box-none"
         >
           <View style={styles.headerInner}>
             <Image
@@ -51,6 +52,9 @@ export default function GlobalSearchScreen() {
                 },
               ]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => {
+                // TODO: Navigate to notifications screen when available
+              }}
             >
               <Ionicons
                 name="notifications-outline"

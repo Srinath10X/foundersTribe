@@ -294,9 +294,7 @@ export default function MembersScreen() {
     const memberAvatarUrl =
       m?.profiles?.avatar_url ||
       m?.profiles?.photo_url ||
-      (m?.user_id === userId
-        ? session?.user?.user_metadata?.avatar_url || null
-        : null);
+      null;
     const nameDisplay =
       m.profiles?.display_name ||
       m.profiles?.username ||

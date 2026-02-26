@@ -835,9 +835,7 @@ export default function TribeDetailScreen() {
                   const memberAvatarUrl =
                     m?.profiles?.avatar_url ||
                     m?.profiles?.photo_url ||
-                    (m?.user_id === userId
-                      ? session?.user?.user_metadata?.avatar_url || null
-                      : null);
+                    null;
                   return (
                 <View
                   key={m.user_id || m.id}

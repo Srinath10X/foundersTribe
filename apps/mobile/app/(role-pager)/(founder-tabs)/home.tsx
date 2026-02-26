@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
   // Bottom Sub-Tabs
   bottomTabContainer: {
     position: "absolute",
-    bottom: TAB_BAR_HEIGHT + 4,
+    bottom: TAB_BAR_HEIGHT + 2,
     left: 0,
     right: 0,
     zIndex: 100,

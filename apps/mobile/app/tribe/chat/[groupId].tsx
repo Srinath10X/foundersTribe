@@ -911,12 +911,11 @@ export default function GroupChatScreen() {
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
   const currentUserName =
-    session?.user?.user_metadata?.full_name ||
-    session?.user?.user_metadata?.name ||
+    memberProfiles[userId]?.display_name ||
+    memberProfiles[userId]?.username ||
     "You";
   const currentUserAvatarUrl =
     memberProfiles[userId]?.avatar_url ||
-    session?.user?.user_metadata?.avatar_url ||
     null;
   const quickEmojis = ["😀", "🔥", "❤️", "🎉", "👍", "🙏", "🚀"];
   const insertEmoji = (emoji: string) => {

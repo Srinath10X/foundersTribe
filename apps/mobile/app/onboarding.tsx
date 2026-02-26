@@ -38,7 +38,7 @@ export default function Onboarding() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selected, setSelected] = useState<string[]>([]);
-  const [userType, setUserType] = useState<"founder" | "freelancer" | null>(
+  const [userType, setUserType] = useState<"founder" | "freelancer" | "both" | null>(
     null,
   );
   const [loadingCategories, setLoadingCategories] = useState(false);
@@ -79,7 +79,7 @@ export default function Onboarding() {
       setCompletedGigs(Array.isArray(data.completed_gigs) ? data.completed_gigs : []);
       setUserType(
         typeof data.user_type === "string"
-          ? (data.user_type.toLowerCase() as "founder" | "freelancer")
+          ? (data.user_type.toLowerCase() as "founder" | "freelancer" | "both")
           : (data.user_type || null)
       );
 
@@ -207,8 +207,8 @@ export default function Onboarding() {
         location: location.trim() || null,
         role: role.trim() || null,
         completed_gigs: completedGigs,
-        business_ideas: userType === "founder" ? validBusinessIdeas : [],
-        business_idea: userType === "founder" ? validBusinessIdeas[0] || null : null,
+        business_ideas: userType === "founder" || userType === "both" ? validBusinessIdeas : [],
+        business_idea: userType === "founder" || userType === "both" ? validBusinessIdeas[0] || null : null,
         social_links: validSocialLinks,
       });
       setStep(3);
@@ -227,7 +227,7 @@ export default function Onboarding() {
         user_type: userType,
       });
       // Persist the selected role locally for navigation
-      switchRole(userType);
+      switchRole(userType === "both" ? "founder" : userType);
       setStep(2);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save your role");
@@ -270,7 +270,7 @@ export default function Onboarding() {
       const target =
         userType === "freelancer"
           ? "/(role-pager)/(freelancer-tabs)/dashboard"
-          : "/(role-pager)/(founder-tabs)/home";
+          : "/(role-pager)/(founder-tabs)/home"; // "both" also goes to founder home
       setTimeout(() => router.replace(target), 300);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to complete onboarding");
@@ -326,7 +326,7 @@ export default function Onboarding() {
           keyboardType="url"
         />
 
-        {userType === "freelancer" && (
+        {(userType === "freelancer" || userType === "both") && (
           <>
             <Text style={[styles.label, { color: theme.text.secondary }]}>Contact Info</Text>
             <TextInput
@@ -358,7 +358,7 @@ export default function Onboarding() {
         )}
       </View>
 
-      {userType === "founder" ? (
+      {(userType === "founder" || userType === "both") ? (
         <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <View style={styles.rowBetween}>
             <Text style={[styles.sectionTitle, { color: theme.text.primary }]}>Business Ideas</Text>
@@ -544,6 +544,48 @@ export default function Onboarding() {
             founding teams.
           </Text>
           {userType === "freelancer" && (
+            <View style={styles.roleCheckMark}>
+              <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.roleLargeCard,
+            {
+              backgroundColor: theme.surface,
+              borderColor:
+                userType === "both" ? theme.brand.primary : theme.border,
+            },
+          ]}
+          onPress={() => setUserType("both")}
+          activeOpacity={0.8}
+        >
+          <View
+            style={[
+              styles.roleIconCircle,
+              {
+                backgroundColor:
+                  userType === "both"
+                    ? theme.brand.primary
+                    : theme.surfaceElevated,
+              },
+            ]}
+          >
+            <Ionicons
+              name="people"
+              size={32}
+              color={userType === "both" ? "#fff" : theme.text.secondary}
+            />
+          </View>
+          <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
+            Both
+          </Text>
+          <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
+            I'm building a startup and also open to freelance opportunities — the best of both worlds.
+          </Text>
+          {userType === "both" && (
             <View style={styles.roleCheckMark}>
               <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
             </View>

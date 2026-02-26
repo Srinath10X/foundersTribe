@@ -353,12 +353,12 @@ export default function FreelancerProfileScreen() {
       }
 
       const resolvedAvatar =
-        (await resolveAvatar(db?.photo_url || db?.avatar_url || meta?.avatar_url || meta?.picture || null, userId)) ||
-        people.alex;
+        (await resolveAvatar(db?.photo_url || db?.avatar_url || null, userId)) ||
+        null;
 
       const merged: ProfileData = {
         id: userId,
-        display_name: normalizeName(db?.display_name || meta?.full_name || meta?.name, session?.user?.email),
+        display_name: db?.display_name || db?.username || "User",
         username: db?.username || null,
         bio: db?.bio ?? metaProfile?.bio ?? null,
         avatar_url: resolvedAvatar,
@@ -531,7 +531,7 @@ export default function FreelancerProfileScreen() {
           <View style={styles.heroTop}>
             <View style={styles.avatarSection}>
               <View style={styles.heroAvatarRing}>
-                <Avatar source={profile?.photo_url || people.alex} size={60} />
+                <Avatar source={profile?.photo_url || null} size={60} />
                 <View style={styles.statusDot} />
               </View>
             </View>

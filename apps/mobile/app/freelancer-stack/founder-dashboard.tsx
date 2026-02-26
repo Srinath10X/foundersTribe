@@ -24,6 +24,10 @@ import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
 import gigApi from "@/lib/gigService";
 import type { Gig, Proposal } from "@/types/gig";
 
+/* ─── Spacing & Radius constants (8-pt grid) ──────────────────── */
+const SP = { _4: 4, _6: 6, _8: 8, _10: 10, _12: 12, _14: 14, _16: 16, _20: 20, _24: 24 } as const;
+const R = 14; // unified border-radius for all cards/inputs
+
 type ProposalSummary = {
   total: number;
   pending: number;
@@ -55,23 +59,23 @@ function formatMoney(min?: number | null, max?: number | null) {
 
 function statusTone(status: Gig["status"]) {
   if (status === "open") {
-    return { label: "Hiring", color: "#34C759", bg: "rgba(52,199,89,0.12)" };
+    return { label: "Hiring", color: "#34C759", bg: "rgba(52,199,89,0.14)" };
   }
   if (status === "in_progress") {
     return {
       label: "In progress",
       color: "#2A63F6",
-      bg: "rgba(42,99,246,0.12)",
+      bg: "rgba(42,99,246,0.14)",
     };
   }
   if (status === "completed") {
-    return { label: "Completed", color: "#5FA876", bg: "rgba(95,168,118,0.12)" };
+    return { label: "Completed", color: "#5FA876", bg: "rgba(95,168,118,0.14)" };
   }
-  return { label: "Draft", color: "#8E8E93", bg: "rgba(142,142,147,0.12)" };
+  return { label: "Draft", color: "#8E8E93", bg: "rgba(142,142,147,0.10)" };
 }
 
 export default function FounderDashboardScreen() {
-  const { palette } = useFlowPalette();
+  const { palette, isDark } = useFlowPalette();
   const nav = useFlowNav();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
@@ -269,14 +273,14 @@ export default function FounderDashboardScreen() {
         style={[
           styles.header,
           {
-            paddingTop: insets.top + 18,
+            paddingTop: insets.top + 14,
             backgroundColor: palette.bg,
           },
         ]}
       >
-        <T weight="medium" color={palette.text} style={styles.pageTitle}>
+        <T weight="semiBold" color={palette.text} style={styles.pageTitle}>
           Find your{" "}
-          <T weight="medium" color="#FF2D55" style={styles.pageTitle}>
+          <T weight="semiBold" color="#FF2D55" style={styles.pageTitle}>
             Freelancer
           </T>
         </T>
@@ -299,7 +303,7 @@ export default function FounderDashboardScreen() {
             onPress={() => openServiceSearch()}
             style={[styles.searchBox, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
           >
-            <Ionicons name="search" size={16} color={palette.subText} />
+            <Ionicons name="search" size={17} color={palette.subText} />
             <View style={styles.searchInput}>
               {searchText ? (
                 <T weight="regular" color={palette.text} style={styles.searchInputText} numberOfLines={1}>
@@ -313,14 +317,14 @@ export default function FounderDashboardScreen() {
                 </Animated.View>
               )}
             </View>
-            <View>
-              <Ionicons name="arrow-forward-circle" size={20} color={palette.accent} />
+            <View style={styles.searchArrow}>
+              <Ionicons name="arrow-forward" size={14} color={palette.subText} />
             </View>
           </TouchableOpacity>
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              <T weight="semiBold" color={palette.text} style={styles.sectionTitle}>
                 Popular Categories
               </T>
             </View>
@@ -338,13 +342,17 @@ export default function FounderDashboardScreen() {
                     style={[
                       styles.categoryCell,
                       {
-                        borderColor: active ? palette.accent : palette.borderLight,
-                        backgroundColor: active ? palette.accentSoft : palette.surface,
+                        borderColor: active
+                          ? isDark ? "rgba(255,45,85,0.35)" : "rgba(255,45,85,0.25)"
+                          : palette.borderLight,
+                        backgroundColor: active
+                          ? isDark ? "rgba(255,45,85,0.10)" : "rgba(255,45,85,0.06)"
+                          : palette.surface,
                       },
                     ]}
                   >
                     <View style={[styles.categoryIcon, { backgroundColor: cat.bg }]}>
-                      <Ionicons name={cat.icon} size={14} color={cat.color} />
+                      <Ionicons name={cat.icon} size={15} color={cat.color} />
                     </View>
                     <T weight="medium" color={palette.text} style={styles.categoryTitle} numberOfLines={1}>
                       {cat.title}
@@ -365,18 +373,28 @@ export default function FounderDashboardScreen() {
 
           <View style={styles.kpiRow}>
             <SurfaceCard style={styles.kpiCard}>
-              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
-                Open Gigs
-              </T>
-              <T weight="medium" color={palette.text} style={styles.kpiValue}>
+              <View style={styles.kpiHeader}>
+                <T weight="medium" color={palette.subText} style={styles.kpiLabel}>
+                  Open Gigs
+                </T>
+                <View style={[styles.kpiIconWrap, { backgroundColor: isDark ? "rgba(52,199,89,0.16)" : "rgba(52,199,89,0.10)" }]}>
+                  <Ionicons name="briefcase-outline" size={12} color="#34C759" />
+                </View>
+              </View>
+              <T weight="semiBold" color={palette.text} style={styles.kpiValue}>
                 {openGigs}
               </T>
             </SurfaceCard>
             <SurfaceCard style={styles.kpiCard}>
-              <T weight="regular" color={palette.subText} style={styles.kpiLabel}>
-                Active Contracts
-              </T>
-              <T weight="medium" color={palette.text} style={styles.kpiValue}>
+              <View style={styles.kpiHeader}>
+                <T weight="medium" color={palette.subText} style={styles.kpiLabel}>
+                  Active Contracts
+                </T>
+                <View style={[styles.kpiIconWrap, { backgroundColor: isDark ? "rgba(42,99,246,0.16)" : "rgba(42,99,246,0.10)" }]}>
+                  <Ionicons name="document-text-outline" size={12} color="#2A63F6" />
+                </View>
+              </View>
+              <T weight="semiBold" color={palette.text} style={styles.kpiValue}>
                 {activeContracts.length}
               </T>
             </SurfaceCard>
@@ -384,11 +402,11 @@ export default function FounderDashboardScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+              <T weight="semiBold" color={palette.text} style={styles.sectionTitle}>
                 Active Gigs
               </T>
               <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
-                <T weight="regular" color={palette.accent} style={styles.linkText}>
+                <T weight="medium" color={palette.accent} style={styles.linkText}>
                   See all
                 </T>
               </TouchableOpacity>
@@ -420,82 +438,100 @@ export default function FounderDashboardScreen() {
                     parsedContent.timelineUnit,
                   );
                   return (
-                    <TouchableOpacity
-                      key={gig.id}
-                      activeOpacity={0.86}
-                      onPress={() => nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)}
-                    >
-                      <SurfaceCard style={styles.gigCard}>
-                        <View style={styles.gigHeaderRow}>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <T weight="medium" color={palette.text} style={styles.gigTitle} numberOfLines={1}>
-                              {gig.title}
-                            </T>
-                            <T weight="regular" color={palette.subText} style={styles.gigBudget} numberOfLines={1}>
-                              {formatMoney(gig.budget_min, gig.budget_max)}
-                            </T>
-                          </View>
-                          <View style={[styles.statusPill, { backgroundColor: tone.bg }]}> 
-                            <T weight="medium" color={tone.color} style={styles.statusText}>
-                              {tone.label}
-                            </T>
-                          </View>
-                        </View>
-                        <View style={[styles.rowDivider, { backgroundColor: palette.borderLight }]} />
-                        <View style={styles.gigFooter}>
-                          {!hasAcceptedProposal ? (
-                            <T weight="regular" color={palette.subText} style={styles.gigMeta}>
+                    <SurfaceCard key={gig.id} style={styles.gigCard}>
+                      {/* ── Top: status pill ── */}
+                      <View style={[styles.statusPill, { backgroundColor: tone.bg, alignSelf: "flex-start" }]}>
+                        <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: tone.color }} />
+                        <T weight="medium" color={tone.color} style={styles.statusText}>
+                          {tone.label}
+                        </T>
+                      </View>
+
+                      {/* ── Title + budget ── */}
+                      <T weight="semiBold" color={palette.text} style={styles.gigTitle} numberOfLines={2}>
+                        {gig.title}
+                      </T>
+                      <T weight="regular" color={palette.subText} style={styles.gigBudget} numberOfLines={1}>
+                        {formatMoney(gig.budget_min, gig.budget_max)}
+                      </T>
+
+                      {/* ── Meta chips ── */}
+                      {!hasAcceptedProposal ? (
+                        <View style={styles.metaRow}>
+                          <View style={[styles.metaChip, { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }]}>
+                            <Ionicons name="document-text-outline" size={11} color={palette.subText} />
+                            <T weight="regular" color={palette.subText} style={styles.metaChipText}>
                               {gig.proposals_count || 0} proposal{gig.proposals_count === 1 ? "" : "s"}
-                              {" · "}
-                              {proposalSummary.byGigPending[gig.id] || 0} pending review
-                              {" · "}
-                              {timeline}
                             </T>
-                          ) : null}
-                          <View style={styles.gigActions}>
-                            {hasAcceptedProposal ? (
-                              <TouchableOpacity
-                                style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
-                                onPress={() =>
-                                  nav.push(
-                                    `/freelancer-stack/contract-chat-thread?contractId=${linkedContract?.id}&title=${encodeURIComponent(
-                                      `${gig.title} • Contract Chat`,
-                                    )}`,
-                                  )
-                                }
-                              >
-                                <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
-                                  Chat
-                                </T>
-                              </TouchableOpacity>
-                            ) : (
-                              <TouchableOpacity
-                                style={[styles.actionBtn, { backgroundColor: palette.border }]}
-                                onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
-                              >
-                                <T weight="medium" color={palette.text} style={styles.actionBtnText}>
-                                  Proposals
-                                </T>
-                              </TouchableOpacity>
-                            )}
-                            <TouchableOpacity
-                              style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
-                              onPress={() =>
-                                hasAcceptedProposal && linkedContract?.id
-                                  ? nav.push(
-                                      `/freelancer-stack/contract-details?contractId=${linkedContract.id}`,
-                                    )
-                                  : nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)
-                              }
-                            >
-                              <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
-                                {hasAcceptedProposal ? "View Contract" : "View Details"}
-                              </T>
-                            </TouchableOpacity>
                           </View>
+                          {(proposalSummary.byGigPending[gig.id] || 0) > 0 ? (
+                            <View style={[styles.metaChip, { backgroundColor: "rgba(255,149,0,0.10)" }]}>
+                              <Ionicons name="time-outline" size={11} color="#FF9500" />
+                              <T weight="regular" color="#FF9500" style={styles.metaChipText}>
+                                {proposalSummary.byGigPending[gig.id]} pending
+                              </T>
+                            </View>
+                          ) : null}
+                          {timeline ? (
+                            <View style={[styles.metaChip, { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }]}>
+                              <Ionicons name="calendar-outline" size={11} color={palette.subText} />
+                              <T weight="regular" color={palette.subText} style={styles.metaChipText}>
+                                {timeline}
+                              </T>
+                            </View>
+                          ) : null}
                         </View>
-                      </SurfaceCard>
-                    </TouchableOpacity>
+                      ) : null}
+
+                      {/* ── Bottom: actions left + View Gig right ── */}
+                      <View style={[styles.rowDivider, { backgroundColor: palette.borderLight }]} />
+                      <View style={styles.gigBottomRow}>
+                        {hasAcceptedProposal ? (
+                          <TouchableOpacity
+                            style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
+                            activeOpacity={0.8}
+                            onPress={() =>
+                              nav.push(
+                                `/freelancer-stack/contract-chat-thread?contractId=${linkedContract?.id}&title=${encodeURIComponent(
+                                  `${gig.title} • Contract Chat`,
+                                )}`,
+                              )
+                            }
+                          >
+                            <Ionicons name="chatbubble-outline" size={12} color={palette.accent} />
+                            <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
+                              Chat
+                            </T>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.actionBtn, { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" }]}
+                            activeOpacity={0.8}
+                            onPress={() => nav.push(`/freelancer-stack/gig-proposals?gigId=${gig.id}`)}
+                          >
+                            <Ionicons name="people-outline" size={12} color={palette.text} />
+                            <T weight="medium" color={palette.text} style={styles.actionBtnText}>
+                              Proposals
+                            </T>
+                          </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                          style={styles.viewGigBtn}
+                          activeOpacity={0.7}
+                          onPress={() =>
+                            hasAcceptedProposal && linkedContract?.id
+                              ? nav.push(`/freelancer-stack/contract-details?contractId=${linkedContract.id}`)
+                              : nav.push(`/freelancer-stack/gig-details?id=${gig.id}`)
+                          }
+                        >
+                          <T weight="medium" color={palette.accent} style={styles.viewGigText}>
+                            {hasAcceptedProposal ? "View Contract" : "View Gig"}
+                          </T>
+                          <Ionicons name="arrow-forward" size={13} color={palette.accent} />
+                        </TouchableOpacity>
+                      </View>
+                    </SurfaceCard>
                   );
                 })}
               </View>
@@ -509,94 +545,59 @@ export default function FounderDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  /* ── Header ─────────────────────────────────────────────────── */
   header: {
-    paddingHorizontal: 18,
-    paddingBottom: 14,
+    paddingHorizontal: SP._20,
+    paddingBottom: SP._10,
   },
   pageTitle: {
-    fontSize: 26,
-    lineHeight: 34,
-    letterSpacing: -0.3,
+    fontSize: 24,
+    lineHeight: 32,
+    letterSpacing: -0.4,
   },
-  pageSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
-  },
+
+  /* ── Scroll / Content ───────────────────────────────────────── */
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 110,
   },
   content: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    gap: 14,
+    paddingHorizontal: SP._20,
+    paddingTop: SP._12,
+    gap: SP._20,
   },
+
+  /* ── Search ─────────────────────────────────────────────────── */
   searchBox: {
     height: 48,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    borderRadius: R,
+    paddingHorizontal: SP._14,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: SP._10,
   },
   searchInput: {
     flex: 1,
     justifyContent: "center",
   },
   searchInputText: {
-    fontFamily: "Poppins_400Regular",
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 18,
     padding: 0,
     textAlignVertical: "center",
   },
-  filtersCard: {
-    padding: 10,
-    gap: 8,
+  searchArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(128,128,128,0.08)",
   },
-  filterRowWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  filterChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  filterChipText: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  errorCard: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  errorText: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  kpiRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  kpiCard: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-  },
-  kpiLabel: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  kpiValue: {
-    marginTop: 4,
-    fontSize: 16,
-    lineHeight: 20,
-  },
+
+  /* ── Sections ───────────────────────────────────────────────── */
   section: {
-    gap: 8,
+    gap: SP._10,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -604,44 +605,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sectionTitle: {
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  sectionMeta: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
   linkText: {
     fontSize: 12,
     lineHeight: 16,
   },
-  centerWrap: {
-    paddingVertical: 24,
-    alignItems: "center",
-    justifyContent: "center",
+
+  /* ── Error ──────────────────────────────────────────────────── */
+  errorCard: {
+    paddingVertical: SP._10,
+    paddingHorizontal: SP._12,
   },
-  stack: {
-    gap: 8,
+  errorText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
+
+  /* ── Categories ─────────────────────────────────────────────── */
   categoriesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    gap: SP._8,
   },
   categoryCell: {
     width: "48%",
+    flexGrow: 1,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: R,
+    paddingVertical: SP._12,
+    paddingHorizontal: SP._12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
+    gap: SP._10,
   },
   categoryIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -650,110 +653,137 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     flex: 1,
   },
-  freelancerCard: {
-    padding: 10,
+
+  /* ── KPI Stats ──────────────────────────────────────────────── */
+  kpiRow: {
     flexDirection: "row",
+    gap: SP._10,
+  },
+  kpiCard: {
+    flex: 1,
+    paddingVertical: SP._14,
+    paddingHorizontal: SP._14,
+  },
+  kpiHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 10,
   },
-  freelancerName: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  freelancerBio: {
-    marginTop: 2,
+  kpiLabel: {
     fontSize: 11,
     lineHeight: 14,
+    letterSpacing: 0.2,
   },
-  freelancerHint: {
-    marginTop: 2,
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  freelancerRight: {
-    alignItems: "flex-end",
-    gap: 5,
-  },
-  ratingRow: {
-    flexDirection: "row",
+  kpiIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     alignItems: "center",
-    gap: 3,
+    justifyContent: "center",
   },
-  ratingText: {
-    fontSize: 10,
-    lineHeight: 13,
+  kpiValue: {
+    marginTop: SP._8,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+  },
+
+  /* ── Loading / Empty ────────────────────────────────────────── */
+  centerWrap: {
+    paddingVertical: SP._24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyCard: {
+    paddingVertical: SP._24,
+    alignItems: "center",
+    gap: SP._6,
+  },
+  emptyTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  emptySub: {
+    textAlign: "center",
+    fontSize: 12,
+    lineHeight: 16,
+    paddingHorizontal: SP._16,
+  },
+
+  /* ── Gig Cards ──────────────────────────────────────────────── */
+  stack: {
+    gap: SP._10,
   },
   gigCard: {
-    padding: 12,
-  },
-  gigHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    padding: SP._14,
   },
   gigTitle: {
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 14,
+    lineHeight: 19,
+    letterSpacing: -0.15,
   },
   gigBudget: {
-    marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
+    marginTop: SP._4,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  metaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SP._6,
+    marginTop: SP._10,
+  },
+  metaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: SP._8,
+    paddingVertical: SP._4,
+    borderRadius: 8,
+  },
+  metaChipText: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  gigBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  viewGigBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  viewGigText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   statusPill: {
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: SP._10,
+    paddingVertical: SP._4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: SP._4,
   },
   statusText: {
     fontSize: 10,
     lineHeight: 13,
   },
-  queuePill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  queueText: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
   rowDivider: {
-    height: 1,
-    marginVertical: 10,
-  },
-  gigMeta: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  gigFooter: {
-    gap: 8,
-  },
-  gigActions: {
-    flexDirection: "row",
-    gap: 8,
+    height: StyleSheet.hairlineWidth,
+    marginVertical: SP._12,
   },
   actionBtn: {
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingVertical: SP._8,
+    paddingHorizontal: SP._12,
     borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
   },
   actionBtnText: {
     fontSize: 11,
     lineHeight: 14,
-  },
-  emptyCard: {
-    paddingVertical: 18,
-    alignItems: "center",
-    gap: 4,
-  },
-  emptyTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  emptySub: {
-    textAlign: "center",
-    fontSize: 11,
-    lineHeight: 15,
   },
 });

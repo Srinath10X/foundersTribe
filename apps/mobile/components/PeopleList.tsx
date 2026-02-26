@@ -14,7 +14,7 @@ const S = {
 const PEOPLE_CARD_SPACING = S.sm;
 
 function PeopleListBase({ limit = 12 }: { limit?: number }) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const query = useInfiniteUsers(limit);
 
   const data = useMemo(
@@ -33,12 +33,17 @@ function PeopleListBase({ limit = 12 }: { limit?: number }) {
     []
   );
 
+  const skeletonBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)";
+
   if (query.isLoading) {
     return (
       <View style={styles.loadingWrap}>
         <View style={styles.skeletonRow}>
           {Array.from({ length: 3 }).map((_, index) => (
-            <View key={`skeleton-${index}`} style={styles.skeletonCard} />
+            <View
+              key={`skeleton-${index}`}
+              style={[styles.skeletonCard, { backgroundColor: skeletonBg }]}
+            />
           ))}
         </View>
       </View>
@@ -98,6 +103,5 @@ const styles = StyleSheet.create({
     width: PEOPLE_CARD_WIDTH,
     height: PEOPLE_CARD_HEIGHT,
     borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.04)",
   },
 });

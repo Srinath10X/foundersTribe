@@ -1046,7 +1046,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Poppins_400Regular",
     fontSize: 12,
-    lineHeight: 16,
+    textAlignVertical: "center",
+    paddingVertical: 0,
   },
   filtersScroll: {
     gap: 7,

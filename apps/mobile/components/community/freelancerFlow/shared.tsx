@@ -395,7 +395,7 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "feed" | 
         <BlurView
           intensity={Platform.OS === "ios" ? 80 : 100}
           tint={isDark ? "dark" : "light"}
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: glassBackground, borderRadius: 40 }]}
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: glassBackground, borderRadius: 30 }]}
         />
         <LinearGradient
           colors={
@@ -425,16 +425,16 @@ export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "feed" | 
                 {isCenter ? (
                   <View style={styles.centerItemContainer}>
                     <View style={[styles.centerIconBg, { backgroundColor: palette.accent }]}>
-                      <Ionicons name="add" size={22} color="#fff" />
+                      <Ionicons name="add" size={15} color="#fff" />
                     </View>
                   </View>
                 ) : (
-                  <Ionicons name={item.icon} size={22} color={active ? palette.accent : palette.mutedText} />
+                  <Ionicons name={item.icon} size={18} color={active ? palette.accent : palette.mutedText} />
                 )}
                 <T
                   weight={active ? "semiBold" : "medium"}
                   color={isCenter ? palette.mutedText : (active ? palette.accent : palette.mutedText)}
-                  style={{ fontSize: 9, marginTop: 4 }}
+                  style={{ fontSize: 9, marginTop: 2 }}
                 >
                   {item.label}
                 </T>
@@ -496,16 +496,20 @@ export function Avatar({
   source,
   size = 48,
 }: {
-  source?: string | { uri: string };
+  source?: string | { uri: string } | null;
   size?: number;
 }) {
   const uri = typeof source === "string" ? source : source?.uri;
-  return (
+  return uri ? (
     <Image
-      source={uri ? { uri } : undefined}
+      source={{ uri }}
       style={{ width: size, height: size, borderRadius: size / 2 }}
       contentFit="cover"
     />
+  ) : (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: "rgba(150,150,150,0.3)", alignItems: "center", justifyContent: "center" }}>
+      <Ionicons name="person" size={size * 0.5} color="rgba(255,255,255,0.6)" />
+    </View>
   );
 }
 
@@ -570,22 +574,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
-    paddingTop: 10,
-    paddingBottom: Platform.OS === "ios" ? 22 : 14,
+    paddingTop: 5,
+    paddingBottom: Platform.OS === "ios" ? 10 : 8,
   },
   bottomNavContainer: {
     position: "absolute",
     left: 0,
     right: 0,
-    height: 94,
+    height: 70,
     alignItems: "center",
     justifyContent: "flex-end",
     zIndex: 50,
   },
   bottomNavGlass: {
     width: "92%",
-    height: 78,
-    borderRadius: 40,
+    height: 52,
+    borderRadius: 30,
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     zIndex: 1,
@@ -608,9 +612,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   centerIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
   },

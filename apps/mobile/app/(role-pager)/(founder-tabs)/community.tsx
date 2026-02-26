@@ -52,13 +52,13 @@ const SUB_TABS: {
   },
   {
     key: "find-cofounder",
-    label: "Co-Founder",
+    label: "founders",
     icon: "people-outline",
     iconFocused: "people",
   },
   {
     key: "find-freelancer",
-    label: "Freelancer",
+    label: "Freelancers",
     icon: "briefcase-outline",
     iconFocused: "briefcase",
   },
@@ -137,7 +137,7 @@ export default function CommunityScreen() {
     description: string,
     isPublic: boolean,
     avatarUrl?: string,
-    coverUrl?: string,
+    coverUrl?: string
   ) => {
     try {
       await tribeApi.createTribe(authToken, {
@@ -150,7 +150,9 @@ export default function CommunityScreen() {
     } catch (e: any) {
       const msg = String(e?.message || "").toLowerCase();
       const coverFieldIssue =
-        msg.includes("cover_url") || msg.includes("column") || msg.includes("schema");
+        msg.includes("cover_url") ||
+        msg.includes("column") ||
+        msg.includes("schema");
       if (!coverFieldIssue) throw e;
       // Compatibility fallback for environments without cover_url migrated yet.
       await tribeApi.createTribe(authToken, {
@@ -414,7 +416,7 @@ const styles = StyleSheet.create({
   /* Sub-tabs above bottom tab bar */
   subTabContainer: {
     position: "absolute",
-    bottom: TAB_BAR_HEIGHT,
+    bottom: TAB_BAR_HEIGHT + 2,
     left: 0,
     right: 0,
     zIndex: 100,

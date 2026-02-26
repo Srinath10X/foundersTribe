@@ -163,10 +163,6 @@ export default function EditProfileScreen() {
         firstFilledString(
           data.display_name,
           cached?.displayName,
-          freshUser?.user_metadata?.full_name,
-          freshUser?.user_metadata?.name,
-          session?.user?.user_metadata?.full_name,
-          session?.user?.user_metadata?.name,
         ),
       );
       setBio(firstFilledString(data.bio, cached?.bio));
@@ -302,12 +298,7 @@ export default function EditProfileScreen() {
           data: { user },
         } = await supabase.auth.getUser();
         if (user) {
-          setDisplayName(
-            user.user_metadata?.full_name ||
-            user.user_metadata?.name ||
-            user.email?.split("@")[0] ||
-            "",
-          );
+          setDisplayName("");
         }
       } catch (_) { }
     } finally {

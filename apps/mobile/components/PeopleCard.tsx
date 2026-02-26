@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -15,31 +15,26 @@ const S = {
 } as const;
 
 export const PEOPLE_CARD_WIDTH = S.xxl * 4 + S.sm;
-export const PEOPLE_CARD_HEIGHT = S.xxl * 6;
-
-function normalizeRole(role?: string | null): string {
-  const raw = String(role || "").toLowerCase();
-  if (raw.includes("both")) return "Founder + Freelancer";
-  if (raw.includes("founder")) return "Founder";
-  if (raw.includes("freelancer")) return "Freelancer";
-  return "Member";
-}
+export const PEOPLE_CARD_HEIGHT = S.xxl * 5;
 
 function PeopleCardBase({ profile }: { profile: PeopleUser }) {
   const { theme, isDark } = useTheme();
   const router = useRouter();
+  const [imgError, setImgError] = useState(false);
 
   const initials = useMemo(() => {
-    const name = profile.full_name?.trim() || "User";
+    const name = profile.display_name?.trim() || profile.username?.trim() || "U";
     return name
       .split(" ")
       .map((part) => part[0])
       .join("")
       .slice(0, 2)
       .toUpperCase();
-  }, [profile.full_name]);
+  }, [profile.display_name, profile.username]);
 
-  const roleLabel = normalizeRole(profile.role);
+  const handleImgError = useCallback(() => setImgError(true), []);
+
+  const showImage = !!profile.avatar_url && !imgError;
 
   return (
     <Pressable
@@ -67,45 +62,29 @@ function PeopleCardBase({ profile }: { profile: PeopleUser }) {
               { backgroundColor: isDark ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.08)" },
             ]}
           >
-            {profile.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatarImg} contentFit="cover" />
+            {showImage ? (
+              <Image
+                source={{ uri: profile.avatar_url! }}
+                style={styles.avatarImg}
+                contentFit="cover"
+                onError={handleImgError}
+              />
             ) : (
               <Text style={[styles.initials, { color: theme.brand.primary }]}>{initials}</Text>
             )}
           </View>
           <Text style={[styles.name, { color: theme.text.primary }]} numberOfLines={2} ellipsizeMode="tail">
-            {profile.full_name || "User"}
+            {profile.display_name || profile.username || "User"}
           </Text>
-          {profile.handle ? (
+          {profile.username ? (
             <Text
               style={[styles.username, { color: theme.text.muted }]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              @{profile.handle}
+              @{profile.username}
             </Text>
-          ) : (
-            <Text style={[styles.username, { color: "transparent" }]} numberOfLines={1}>
-              _
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.middleSection}>
-          <Text style={[styles.bio, { color: theme.text.tertiary }]} numberOfLines={2} ellipsizeMode="tail">
-            {profile.bio || " "}
-          </Text>
-        </View>
-
-        <View style={styles.footerSection}>
-          <View
-            style={[
-              styles.typeBadge,
-              { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)" },
-            ]}
-          >
-            <Text style={[styles.typeText, { color: theme.text.secondary }]}>{roleLabel}</Text>
-          </View>
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -131,7 +110,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     flexDirection: "column",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
     gap: S.xs,
   },
@@ -141,14 +120,14 @@ const styles = StyleSheet.create({
     gap: S.xs,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
   },
-  avatarImg: { width: 52, height: 52 },
+  avatarImg: { width: 60, height: 60 },
   initials: {
     fontSize: 16,
     fontFamily: "Poppins_700Bold",
@@ -165,33 +144,5 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_400Regular",
     textAlign: "center",
     lineHeight: 14,
-  },
-  middleSection: {
-    width: "100%",
-    alignItems: "center",
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: S.xs,
-  },
-  bio: {
-    fontSize: 10,
-    fontFamily: "Poppins_400Regular",
-    textAlign: "center",
-    lineHeight: 14,
-  },
-  footerSection: {
-    width: "100%",
-    alignItems: "center",
-  },
-  typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  typeText: {
-    fontSize: 9,
-    fontFamily: "Poppins_500Medium",
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
   },
 });

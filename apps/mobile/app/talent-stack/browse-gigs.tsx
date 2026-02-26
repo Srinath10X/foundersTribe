@@ -69,7 +69,7 @@ export default function BrowseGigsScreen() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 18, paddingTop: 12, gap: 10 },
   search: { height: 44, borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 8 },
-  input: { flex: 1, fontFamily: "Poppins_500Medium", fontSize: 14 },
+  input: { flex: 1, fontFamily: "Poppins_500Medium", fontSize: 14, textAlignVertical: "center", paddingVertical: 0 },
   card: { padding: 12 },
   cardHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   title: { fontSize: 19, marginTop: 8 },
