@@ -30,6 +30,10 @@ import type {
   GigUpdateInput,
   GigFilters,
   PaginatedGigs,
+  FreelancerService,
+  FreelancerServiceFilters,
+  FreelancerServiceSearchItem,
+  PaginatedFreelancerServices,
   FreelancerStats,
   Contract,
   ContractFilters,
@@ -38,6 +42,11 @@ import type {
   MessageListParams,
   PaginatedContracts,
   PaginatedMessages,
+  PaginatedServiceRequestMessages,
+  ServiceMessageRequest,
+  ServiceRequestFilters,
+  PaginatedServiceRequests,
+  ServiceRequestMessage,
   Proposal,
   ProposalCreateInput,
   ProposalFilters,
@@ -270,6 +279,157 @@ export const gigService = {
   deleteGig: async (id: string): Promise<void> => {
     await fetchWithAuth(`/api/gigs/${id}`, {
       method: "DELETE",
+    });
+  },
+
+  // ------------------------------------------
+  // FREELANCER SERVICES (CATALOG + REQUEST CHAT)
+  // ------------------------------------------
+
+  /**
+   * Search freelancers by services with cost/time filters
+   * GET /api/services
+   */
+  getFreelancerServices: async (
+    filters?: FreelancerServiceFilters
+  ): Promise<PaginatedFreelancerServices> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: FreelancerServiceSearchItem[]; next_cursor: string | null }>(
+      `/api/services${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
+
+  /**
+   * Fetch active services for a specific freelancer
+   * GET /api/services/freelancers/:id
+   */
+  getFreelancerServicesByUser: async (freelancerId: string): Promise<FreelancerService[]> => {
+    const response = await fetchWithAuth<{ items: FreelancerService[] }>(
+      `/api/services/freelancers/${freelancerId}`,
+    );
+    return response.items || [];
+  },
+
+  /**
+   * Fetch current user's own offered services
+   * GET /api/services/me
+   */
+  getMyFreelancerServices: async (): Promise<FreelancerService[]> => {
+    const response = await fetchWithAuth<{ items: FreelancerService[] }>(`/api/services/me`);
+    return response.items || [];
+  },
+
+  /**
+   * Replace current user's offered services
+   * PUT /api/services/me
+   */
+  updateMyFreelancerServices: async (payload: {
+    services: {
+      service_name: string;
+      description?: string | null;
+      cost_amount: number;
+      cost_currency?: string;
+      delivery_time_value: number;
+      delivery_time_unit: "days" | "weeks";
+      is_active?: boolean;
+    }[];
+  }): Promise<FreelancerService[]> => {
+    const response = await fetchWithAuth<{ items: FreelancerService[] }>(`/api/services/me`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    return response.items || [];
+  },
+
+  /**
+   * Send a founder message request to a freelancer service
+   * POST /api/services/requests
+   */
+  createServiceRequest: async (payload: {
+    freelancer_id: string;
+    service_id?: string;
+    message?: string;
+  }): Promise<ServiceMessageRequest> => {
+    const response = await fetchWithAuth<{ data: ServiceMessageRequest }>(`/api/services/requests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return response.data!;
+  },
+
+  /**
+   * List service message request threads for current user
+   * GET /api/services/requests
+   */
+  getServiceRequests: async (filters?: ServiceRequestFilters): Promise<PaginatedServiceRequests> => {
+    const query = buildQueryString(filters);
+    const response = await fetchWithAuth<{ items: ServiceMessageRequest[]; next_cursor: string | null }>(
+      `/api/services/requests${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
+
+  /**
+   * Get single service request thread
+   * GET /api/services/requests/:id
+   */
+  getServiceRequest: async (requestId: string): Promise<ServiceMessageRequest> => {
+    const response = await fetchWithAuth<{ data: ServiceMessageRequest }>(
+      `/api/services/requests/${requestId}`
+    );
+    return response.data!;
+  },
+
+  /**
+   * List messages in a service request thread
+   * GET /api/services/requests/:id/messages
+   */
+  getServiceRequestMessages: async (
+    requestId: string,
+    params?: MessageListParams
+  ): Promise<PaginatedServiceRequestMessages> => {
+    const query = buildQueryString(params);
+    const response = await fetchWithAuth<{ items: ServiceRequestMessage[]; next_cursor: string | null }>(
+      `/api/services/requests/${requestId}/messages${query}`
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
+
+  /**
+   * Send a message in a service request thread
+   * POST /api/services/requests/:id/messages
+   */
+  sendServiceRequestMessage: async (
+    requestId: string,
+    payload: MessageCreateInput
+  ): Promise<ServiceRequestMessage> => {
+    const response = await fetchWithAuth<{ data: ServiceRequestMessage }>(
+      `/api/services/requests/${requestId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+    return response.data!;
+  },
+
+  /**
+   * Mark service request thread messages as read
+   * POST /api/services/requests/:id/messages/read
+   */
+  markServiceRequestMessagesRead: async (requestId: string): Promise<void> => {
+    await fetchWithAuth(`/api/services/requests/${requestId}/messages/read`, {
+      method: "POST",
     });
   },
 

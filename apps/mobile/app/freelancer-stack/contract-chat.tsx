@@ -28,11 +28,11 @@ import { useAuth } from "@/context/AuthContext";
 import { EmptyState } from "@/components/freelancer/EmptyState";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { useContracts } from "@/hooks/useGig";
+import { useContracts, useServiceRequests } from "@/hooks/useGig";
 import contractApi from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
-import type { Contract, ContractMessage, MessageType } from "@/types/gig";
+import type { Contract, ContractMessage, MessageType, ServiceMessageRequest } from "@/types/gig";
 
 type ChatFilter = "all" | "unread" | "read";
 const STORAGE_BUCKET = "tribe-media";
@@ -165,11 +165,25 @@ export default function ContractChatScreen() {
   const keyboardVerticalOffset = Platform.OS === "ios" ? insets.top + 62 : 0;
 
   const { data, isLoading, error, refetch, isRefetching } = useContracts({ limit: 200 });
+  const {
+    data: serviceRequestsData,
+    isLoading: serviceRequestsLoading,
+    refetch: refetchServiceRequests,
+  } = useServiceRequests(
+    { limit: 100 },
+    true,
+    session?.user?.id || currentUserId || "session",
+  );
   const contracts = useMemo(() => {
     const all = data?.items ?? [];
     if (!currentUserId) return all;
     return all.filter((contract) => contract?.founder_id === currentUserId);
   }, [currentUserId, data?.items]);
+  const serviceRequests = useMemo(() => {
+    const all = serviceRequestsData?.items ?? [];
+    if (!currentUserId) return all;
+    return all.filter((request) => request.founder_id === currentUserId || request.freelancer_id === currentUserId);
+  }, [currentUserId, serviceRequestsData?.items]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ChatFilter>("all");
@@ -179,6 +193,7 @@ export default function ContractChatScreen() {
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [pushBanner, setPushBanner] = useState<PushBannerState | null>(null);
   const pushBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serviceRequestsRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showPushBanner = useCallback((nextBanner: PushBannerState) => {
     setPushBanner(nextBanner);
@@ -201,6 +216,39 @@ export default function ContractChatScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (serviceRequestsRefetchTimerRef.current) {
+        clearTimeout(serviceRequestsRefetchTimerRef.current);
+      }
+    };
+  }, []);
+
+  const scheduleServiceRequestsRefetch = useCallback(() => {
+    if (serviceRequestsRefetchTimerRef.current) return;
+    serviceRequestsRefetchTimerRef.current = setTimeout(() => {
+      serviceRequestsRefetchTimerRef.current = null;
+      refetchServiceRequests().catch(() => undefined);
+    }, 900);
+  }, [refetchServiceRequests]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    refetchServiceRequests().catch(() => undefined);
+  }, [currentUserId, refetchServiceRequests]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        refetchServiceRequests().catch(() => undefined);
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [currentUserId, refetchServiceRequests]);
 
   useEffect(() => {
     const userId = currentUserId;
@@ -394,22 +442,24 @@ export default function ContractChatScreen() {
 
   useEffect(() => {
     const token = session?.access_token;
-    if (!token || contracts.length === 0) return;
+    if (!token || (contracts.length === 0 && serviceRequests.length === 0)) return;
 
-    const freelancerIds = Array.from(
-      new Set(
-        contracts
-          .map((contract) => contract.freelancer_id)
-          .filter((id) => Boolean(id) && !publicProfilesByUserId[id]),
+    const candidateIds = [
+      ...contracts.map((contract) => contract.freelancer_id),
+      ...serviceRequests.map((request) =>
+        request.founder_id === currentUserId ? request.freelancer_id : request.founder_id,
       ),
+    ];
+    const profileIds = Array.from(
+      new Set(candidateIds.filter((id) => Boolean(id) && !publicProfilesByUserId[id])),
     );
 
-    if (freelancerIds.length === 0) return;
+    if (profileIds.length === 0) return;
 
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        freelancerIds.map(async (userId) => {
+        profileIds.map(async (userId) => {
           try {
             const raw = await tribeApi.getPublicProfile(token, userId);
             const avatar = await resolveAvatar(raw?.photo_url || raw?.avatar_url || null, userId);
@@ -440,17 +490,63 @@ export default function ContractChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [contracts, publicProfilesByUserId, session?.access_token]);
+  }, [contracts, currentUserId, publicProfilesByUserId, serviceRequests, session?.access_token]);
+
+  useEffect(() => {
+    const userId = currentUserId;
+    if (!userId) return;
+
+    const requestConfig = {
+      schema: "public" as const,
+      table: "service_message_requests" as const,
+    };
+    const messageConfig = {
+      schema: "public" as const,
+      table: "service_request_messages" as const,
+    };
+
+    const channel = supabase.channel(`founder-service-requests-realtime:${userId}:${Date.now()}`);
+
+    channel.on("postgres_changes", { ...requestConfig, event: "INSERT", filter: `founder_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...requestConfig, event: "UPDATE", filter: `founder_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...requestConfig, event: "INSERT", filter: `freelancer_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...requestConfig, event: "UPDATE", filter: `freelancer_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...messageConfig, event: "INSERT", filter: `recipient_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...messageConfig, event: "INSERT", filter: `sender_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+    channel.on("postgres_changes", { ...messageConfig, event: "UPDATE", filter: `recipient_id=eq.${userId}` }, () => {
+      scheduleServiceRequestsRefetch();
+    });
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, scheduleServiceRequestsRefetch]);
 
   const statusCounts = useMemo(() => {
-    const unread = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) > 0).length;
-    const read = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) === 0).length;
+    const contractUnread = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) > 0).length;
+    const contractRead = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) === 0).length;
+    const requestUnread = serviceRequests.filter((request) => (request.unread_count || 0) > 0).length;
+    const requestRead = serviceRequests.filter((request) => (request.unread_count || 0) === 0).length;
     return {
-      all: contracts.length,
-      unread,
-      read,
+      all: contracts.length + serviceRequests.length,
+      unread: contractUnread + requestUnread,
+      read: contractRead + requestRead,
     };
-  }, [chatMetaByContractId, contracts]);
+  }, [chatMetaByContractId, contracts, serviceRequests]);
 
   const filteredContracts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -507,6 +603,52 @@ export default function ContractChatScreen() {
     return map;
   }, [contracts]);
 
+  const filteredServiceRequests = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const sorted = [...serviceRequests].sort(
+      (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime(),
+    );
+
+    return sorted.filter((request) => {
+      const unreadCount = request.unread_count || 0;
+      if (statusFilter === "unread" && unreadCount === 0) return false;
+      if (statusFilter === "read" && unreadCount > 0) return false;
+
+      if (!query) return true;
+      const otherUserId =
+        request.founder_id === currentUserId ? request.freelancer_id : request.founder_id;
+      const profile = publicProfilesByUserId[otherUserId];
+      const otherName =
+        profile?.display_name || profile?.full_name || profile?.username || "member";
+      const serviceName = request.service?.service_name || "service";
+      const preview = request.last_message_preview || request.request_message || "";
+      return (
+        otherName.toLowerCase().includes(query) ||
+        serviceName.toLowerCase().includes(query) ||
+        preview.toLowerCase().includes(query)
+      );
+    });
+  }, [currentUserId, publicProfilesByUserId, searchQuery, serviceRequests, statusFilter]);
+
+  const getServiceCounterparty = useCallback((request: ServiceMessageRequest) => {
+    const otherUserId =
+      request.founder_id === currentUserId ? request.freelancer_id : request.founder_id;
+    const remoteProfile = publicProfilesByUserId[otherUserId];
+    return {
+      id: otherUserId,
+      name:
+        remoteProfile?.display_name ||
+        remoteProfile?.full_name ||
+        remoteProfile?.username ||
+        "Freelancer",
+      avatar: remoteProfile?.photo_url || remoteProfile?.avatar_url || undefined,
+      role:
+        remoteProfile?.role ||
+        remoteProfile?.user_type ||
+        (request.founder_id === currentUserId ? "Freelancer" : "Founder"),
+    };
+  }, [currentUserId, publicProfilesByUserId]);
+
   const getOtherParty = useCallback((contract: Contract) => {
     const remoteProfile = publicProfilesByUserId[contract.freelancer_id];
     const freelancer = contract.freelancer;
@@ -543,6 +685,18 @@ export default function ContractChatScreen() {
       );
     },
     [contractsById, getOtherParty, nav, pathname],
+  );
+
+  const openServiceRequestChat = useCallback(
+    (requestId: string, fallbackName?: string) => {
+      setPushBanner(null);
+      nav.push(
+        `/freelancer-stack/contract-chat-thread?threadKind=service&requestId=${encodeURIComponent(
+          requestId,
+        )}&title=${encodeURIComponent(fallbackName || "Service Chat")}`,
+      );
+    },
+    [nav],
   );
 
   if (isLoading) {
@@ -660,7 +814,16 @@ export default function ContractChatScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} tintColor={palette.accent} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching || serviceRequestsLoading}
+              onRefresh={() => {
+                refetch();
+                refetchServiceRequests();
+              }}
+              tintColor={palette.accent}
+            />
+          }
           ListHeaderComponent={
             <View style={styles.controlsWrap}>
               <View style={[styles.searchBar, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}> 
@@ -711,18 +874,111 @@ export default function ContractChatScreen() {
                   </T>
                 </View>
               ) : null}
+
+              {serviceRequestsLoading ? (
+                <View style={styles.metaLoadingRow}>
+                  <ActivityIndicator size="small" color={palette.accent} />
+                  <T weight="regular" color={palette.subText} style={styles.metaLoadingText}>
+                    Loading service requests...
+                  </T>
+                </View>
+              ) : null}
+
+              {filteredServiceRequests.length > 0 ? (
+                <View style={styles.serviceRequestSection}>
+                  <View style={styles.sectionHeader}>
+                    <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                      Service Requests
+                    </T>
+                  </View>
+                  <View style={styles.stack}>
+                    {filteredServiceRequests.map((request) => {
+                      const party = getServiceCounterparty(request);
+                      const unreadCount = request.unread_count || 0;
+                      const preview =
+                        request.last_message_preview ||
+                        request.request_message ||
+                        `Discussing ${request.service?.service_name || "service"}`;
+                      const lastTime = formatChatTime(request.last_message_at);
+
+                      return (
+                        <TouchableOpacity
+                          key={request.id}
+                          activeOpacity={0.84}
+                          style={styles.chatRow}
+                          onPress={() => openServiceRequestChat(request.id, party.name)}
+                        >
+                          <View style={styles.avatarWrap}>
+                            {party.avatar ? (
+                              <Avatar source={{ uri: party.avatar }} size={52} />
+                            ) : (
+                              <View style={[styles.avatarFallback, { backgroundColor: palette.accentSoft }]}>
+                                <T weight="medium" color={palette.accent} style={styles.avatarLetter}>
+                                  {firstLetter(party.name)}
+                                </T>
+                              </View>
+                            )}
+                          </View>
+
+                          <View style={styles.rowMain}>
+                            <View style={styles.topLine}>
+                              <T weight="medium" color={palette.text} style={styles.name} numberOfLines={1}>
+                                {party.name}
+                              </T>
+                              <T
+                                weight="regular"
+                                color={unreadCount > 0 ? palette.accent : palette.subText}
+                                style={styles.timeText}
+                              >
+                                {lastTime}
+                              </T>
+                            </View>
+
+                            <T weight="regular" color={palette.subText} style={styles.roleText} numberOfLines={1}>
+                              {request.service?.service_name || party.role}
+                            </T>
+
+                            <View style={styles.bottomLine}>
+                              <T
+                                weight="regular"
+                                color={unreadCount > 0 ? palette.text : palette.subText}
+                                style={styles.preview}
+                                numberOfLines={1}
+                              >
+                                {preview}
+                              </T>
+
+                              {unreadCount > 0 ? (
+                                <View style={[styles.unreadBadge, { backgroundColor: palette.accent }]}>
+                                  <T weight="medium" color="#fff" style={styles.unreadText}>
+                                    {unreadCount > 99 ? "99+" : String(unreadCount)}
+                                  </T>
+                                </View>
+                              ) : (
+                                <Ionicons name="checkmark-done" size={15} color="#94A3B8" />
+                              )}
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
-            <EmptyState
-              icon="chatbubble-outline"
-              title={searchQuery || statusFilter !== "all" ? "No matching chats" : "No chats yet"}
-              subtitle={
-                searchQuery || statusFilter !== "all"
-                  ? "Try another search term or filter."
-                  : "Accept a proposal to start contract conversations."
-              }
-            />
+            filteredServiceRequests.length > 0 ? null : (
+              <EmptyState
+                icon="chatbubble-outline"
+                title={searchQuery || statusFilter !== "all" ? "No matching chats" : "No chats yet"}
+                subtitle={
+                  searchQuery || statusFilter !== "all"
+                    ? "Try another search term or filter."
+                    : "Accept a proposal to start contract conversations."
+                }
+              />
+            )
           }
           renderItem={({ item: contract }) => {
             const party = getOtherParty(contract);
@@ -873,6 +1129,22 @@ const styles = StyleSheet.create({
   controlsWrap: {
     gap: 8,
     marginBottom: 6,
+  },
+  serviceRequestSection: {
+    marginTop: 2,
+    gap: 8,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  stack: {
+    gap: 8,
   },
   searchBar: {
     height: 42,

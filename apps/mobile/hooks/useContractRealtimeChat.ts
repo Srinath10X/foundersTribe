@@ -13,6 +13,7 @@ export type ChatMessage = ContractMessage & {
 
 type Params = {
   contractId?: string;
+  allowAutoResolve?: boolean;
 };
 
 const OPTIMISTIC_MATCH_WINDOW_MS = 2 * 60 * 1000;
@@ -185,7 +186,7 @@ function setCachedMessages(cacheKey: string, items: ChatMessage[]) {
   });
 }
 
-export function useContractRealtimeChat({ contractId }: Params) {
+export function useContractRealtimeChat({ contractId, allowAutoResolve = true }: Params) {
   const [resolvedContractId, setResolvedContractId] = useState<string | null>(contractId ?? null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -321,6 +322,11 @@ export function useContractRealtimeChat({ contractId }: Params) {
         setCounterpartyId(null);
         return;
       }
+      if (!allowAutoResolve) {
+        setResolvedContractId(null);
+        setLoading(false);
+        return;
+      }
       try {
         const res = await gigService.getContracts({ status: "active", limit: 1 });
         if (mounted) {
@@ -341,7 +347,7 @@ export function useContractRealtimeChat({ contractId }: Params) {
     return () => {
       mounted = false;
     };
-  }, [contractId]);
+  }, [allowAutoResolve, contractId]);
 
   useEffect(() => {
     if (!resolvedContractId) return;

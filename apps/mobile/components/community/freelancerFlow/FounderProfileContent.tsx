@@ -602,7 +602,7 @@ export default function FounderProfileScreen() {
                 style={[styles.logoutBtn, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}
                 onPress={async () => {
                   await supabase.auth.signOut();
-                  router.replace("/");
+                  router.replace("/login");
                 }}
               >
                 <Ionicons name="log-out-outline" size={15} color={palette.accent} />

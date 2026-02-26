@@ -22,6 +22,8 @@ export type AvailabilityStatus = "open" | "busy" | "inactive";
 export type Gender = "male" | "female" | "non_binary" | "prefer_not_to_say" | "other";
 export type NotificationType = "new_proposal" | "proposal_accepted" | "message" | "contract_completed";
 export type FeedPostType = "work_update" | "showcase" | "milestone" | "hiring" | "insight";
+export type ServiceDurationUnit = "days" | "weeks";
+export type ServiceRequestStatus = "pending" | "accepted" | "declined" | "cancelled";
 
 // ------------------------------------------
 // User/Profile Types
@@ -109,6 +111,33 @@ export interface GigTag {
 }
 
 // ------------------------------------------
+// Freelancer Service Catalog
+// ------------------------------------------
+
+export interface FreelancerService {
+  id: string;
+  freelancer_id: string;
+  service_name: string;
+  description: string | null;
+  cost_amount: string;
+  cost_currency: string;
+  delivery_time_value: number;
+  delivery_time_unit: ServiceDurationUnit;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FreelancerServiceSearchItem {
+  freelancer_id: string;
+  min_cost_amount: number;
+  min_delivery_days: number;
+  max_delivery_days: number;
+  updated_at: string;
+  services: FreelancerService[];
+}
+
+// ------------------------------------------
 // Gig Types
 // ------------------------------------------
 
@@ -187,12 +216,25 @@ export interface GigFilters {
   cursor?: string;
 }
 
+export interface FreelancerServiceFilters {
+  q?: string;
+  service_name?: string;
+  freelancer_id?: string;
+  min_cost?: number;
+  max_cost?: number;
+  max_delivery_days?: number;
+  sort_by?: "relevance" | "cost_asc" | "cost_desc" | "time_asc" | "time_desc" | "newest";
+  limit?: number;
+  cursor?: string;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   next_cursor: string | null;
 }
 
 export type PaginatedGigs = PaginatedResponse<Gig>;
+export type PaginatedFreelancerServices = PaginatedResponse<FreelancerServiceSearchItem>;
 
 // ------------------------------------------
 // Stats Types
@@ -266,6 +308,20 @@ export interface ContractMessage {
   sender?: UserProfile;
 }
 
+export interface ServiceRequestMessage {
+  id: string;
+  request_id: string;
+  sender_id: string;
+  recipient_id: string | null;
+  message_type: MessageType;
+  body: string | null;
+  file_url: string | null;
+  metadata: Record<string, unknown> | null;
+  read_at: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface MessageCreateInput {
   recipient_id?: string;
   message_type: MessageType;
@@ -280,6 +336,40 @@ export interface MessageListParams {
 }
 
 export type PaginatedMessages = PaginatedResponse<ContractMessage>;
+export type PaginatedServiceRequestMessages = PaginatedResponse<ServiceRequestMessage>;
+
+export interface ServiceMessageRequest {
+  id: string;
+  service_id: string | null;
+  founder_id: string;
+  freelancer_id: string;
+  status: ServiceRequestStatus;
+  request_message: string | null;
+  last_message_preview: string | null;
+  last_message_at: string;
+  unread_founder_count: number;
+  unread_freelancer_count: number;
+  unread_count?: number;
+  created_at: string;
+  updated_at: string;
+  service?: {
+    id: string;
+    service_name: string;
+    description: string | null;
+    cost_amount: string;
+    cost_currency: string;
+    delivery_time_value: number;
+    delivery_time_unit: ServiceDurationUnit;
+    is_active: boolean;
+  } | null;
+}
+
+export interface ServiceRequestFilters {
+  status?: ServiceRequestStatus;
+  limit?: number;
+}
+
+export type PaginatedServiceRequests = PaginatedResponse<ServiceMessageRequest>;
 
 // ------------------------------------------
 // Proposal Types (aligned with backend)

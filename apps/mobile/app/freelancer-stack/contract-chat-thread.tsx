@@ -9,9 +9,18 @@ function asSingleParam(value: string | string[] | undefined): string | undefined
 }
 
 export default function ContractChatThreadScreen() {
-  const params = useLocalSearchParams<{ contractId?: string | string[]; title?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    contractId?: string | string[];
+    requestId?: string | string[];
+    threadKind?: string | string[];
+    title?: string | string[];
+  }>();
   const contractId = asSingleParam(params.contractId);
+  const requestId = asSingleParam(params.requestId);
+  const threadKindRaw = asSingleParam(params.threadKind);
+  const threadKind = threadKindRaw === "service" ? "service" : "contract";
   const title = asSingleParam(params.title);
+  const resolvedId = threadKind === "service" ? requestId : contractId;
 
-  return <ThreadScreen threadId={contractId} title={title} />;
+  return <ThreadScreen threadId={resolvedId} title={title} threadKind={threadKind} />;
 }
