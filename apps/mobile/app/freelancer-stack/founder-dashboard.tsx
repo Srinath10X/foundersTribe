@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -29,6 +30,15 @@ type ProposalSummary = {
   shortlisted: number;
   byGigPending: Record<string, number>;
 };
+
+const SEARCH_PLACEHOLDERS = [
+  "Find your freelancer…",
+  "Find your video editor…",
+  "Find your graphic designer…",
+  "Find your web developer…",
+  "Find your content writer…",
+  "Find your social media manager…",
+];
 
 const popularCategories = [
   { id: 1, title: "Graphic Designer", icon: "color-palette" as const, color: "#FF7A00", bg: "rgba(255,122,0,0.12)" },
@@ -69,6 +79,28 @@ export default function FounderDashboardScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
+
+  // Rotating placeholder animation
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const placeholderFade = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.timing(placeholderFade, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setPlaceholderIdx((prev) => (prev + 1) % SEARCH_PLACEHOLDERS.length);
+        Animated.timing(placeholderFade, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposalSummary, setProposalSummary] = useState<ProposalSummary>({
@@ -237,14 +269,13 @@ export default function FounderDashboardScreen() {
         style={[
           styles.header,
           {
-            paddingTop: insets.top + 10,
-            borderBottomColor: palette.borderLight,
+            paddingTop: insets.top + 18,
             backgroundColor: palette.bg,
           },
         ]}
       >
         <T weight="medium" color={palette.text} style={styles.pageTitle}>
-          Find your{"\n"}
+          Find your{" "}
           <T weight="medium" color="#FF2D55" style={styles.pageTitle}>
             Freelancer
           </T>
@@ -268,11 +299,19 @@ export default function FounderDashboardScreen() {
             onPress={() => openServiceSearch()}
             style={[styles.searchBox, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
           >
-            <Ionicons name="search" size={15} color={palette.subText} />
+            <Ionicons name="search" size={16} color={palette.subText} />
             <View style={styles.searchInput}>
-              <T weight="regular" color={searchText ? palette.text : palette.subText} style={styles.searchInputText} numberOfLines={1}>
-                {searchText || "Search by service (e.g. UI Design, Reel Editing)"}
-              </T>
+              {searchText ? (
+                <T weight="regular" color={palette.text} style={styles.searchInputText} numberOfLines={1}>
+                  {searchText}
+                </T>
+              ) : (
+                <Animated.View style={{ opacity: placeholderFade }}>
+                  <T weight="regular" color={palette.subText} style={styles.searchInputText} numberOfLines={1}>
+                    {SEARCH_PLACEHOLDERS[placeholderIdx]}
+                  </T>
+                </Animated.View>
+              )}
             </View>
             <View>
               <Ionicons name="arrow-forward-circle" size={20} color={palette.accent} />
@@ -472,13 +511,12 @@ export default function FounderDashboardScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 18,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
+    paddingBottom: 14,
   },
   pageTitle: {
-    fontSize: 24,
-    lineHeight: 32,
-    letterSpacing: -0.2,
+    fontSize: 26,
+    lineHeight: 34,
+    letterSpacing: -0.3,
   },
   pageSubtitle: {
     marginTop: 2,
@@ -494,13 +532,13 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   searchBox: {
-    height: 42,
+    height: 48,
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   searchInput: {
     flex: 1,

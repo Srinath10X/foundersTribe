@@ -765,6 +765,21 @@ export const gigService = {
     });
     return response.data!;
   },
+
+  /**
+   * List users with cursor pagination
+   * GET /api/users
+   */
+  listUsers: async (params?: { cursor?: string; limit?: number; q?: string }): Promise<{ items: UserProfile[]; next_cursor: string | null }> => {
+    const query = buildQueryString(params);
+    const response = await fetchWithAuth<{ items: UserProfile[]; next_cursor: string | null }>(
+      `/api/users${query}`,
+    );
+    return {
+      items: response.items || [],
+      next_cursor: response.next_cursor ?? null,
+    };
+  },
 };
 
 // ============================================================

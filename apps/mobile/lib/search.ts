@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import gigService from "@/lib/gigService";
 import { SearchArticle, SearchAccount, SearchCommunity } from "./searchService";
 
 export type { SearchArticle, SearchAccount, SearchCommunity };
@@ -16,51 +17,6 @@ export interface SearchCounts {
   articles: number;
   communities: number;
 }
-
-const MOCK_ACCOUNTS: SearchAccount[] = [
-  {
-    id: "1",
-    display_name: "Sarah Chen",
-    username: "sarahchen",
-    avatar_url: null,
-    bio: "Building the future of fintech | YC W23",
-  },
-  {
-    id: "2",
-    display_name: "Alex Rivera",
-    username: "arivera",
-    avatar_url: null,
-    bio: "Serial entrepreneur & angel investor",
-  },
-  {
-    id: "3",
-    display_name: "Priya Sharma",
-    username: "priyasharma",
-    avatar_url: null,
-    bio: "AI/ML engineer turned founder | Ex-Google",
-  },
-  {
-    id: "4",
-    display_name: "James Wu",
-    username: "jameswu",
-    avatar_url: null,
-    bio: "YC alum, scaling B2B SaaS to $10M ARR",
-  },
-  {
-    id: "5",
-    display_name: "Maria Garcia",
-    username: "mariagarcia",
-    avatar_url: null,
-    bio: "Founder @ FlowHQ | SaaS metrics expert",
-  },
-  {
-    id: "6",
-    display_name: "David Kim",
-    username: "davidkim",
-    avatar_url: null,
-    bio: "Building in public | 3x founder",
-  },
-];
 
 const MOCK_COMMUNITIES: SearchCommunity[] = [
   {
@@ -127,14 +83,50 @@ async function searchArticlesFromDb(query: string): Promise<SearchArticle[]> {
   }
 }
 
-function searchAccountsFromMock(query: string): SearchAccount[] {
-  const q = query.toLowerCase();
-  return MOCK_ACCOUNTS.filter(
-    (a) =>
-      a.display_name.toLowerCase().includes(q) ||
-      a.username.toLowerCase().includes(q) ||
-      (a.bio && a.bio.toLowerCase().includes(q))
-  );
+async function searchAccountsFromApi(query: string): Promise<SearchAccount[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  try {
+    const response = await gigService.listUsers({ q: trimmed, limit: 20 });
+    return (response.items || []).map((profile) => ({
+      id: profile.id,
+      display_name: profile.full_name || "User",
+      username: profile.handle || "user",
+      avatar_url: profile.avatar_url || null,
+      bio: profile.bio || null,
+      user_type: profile.role || null,
+    }));
+  } catch (error) {
+    console.warn("API account search failed, falling back to Supabase:", error);
+    try {
+      const { data, error: dbError } = await supabase
+        .from("user_profiles")
+        .select("id, full_name, handle, avatar_url, bio, role")
+        .or(
+          `full_name.ilike.%${trimmed}%,handle.ilike.%${trimmed}%,bio.ilike.%${trimmed}%`
+        )
+        .order("updated_at", { ascending: false })
+        .limit(20);
+
+      if (dbError) {
+        console.error("Supabase account search fallback error:", dbError);
+        return [];
+      }
+
+      return (data || []).map((profile: any) => ({
+        id: profile.id,
+        display_name: profile.full_name || "User",
+        username: profile.handle || "user",
+        avatar_url: profile.avatar_url || null,
+        bio: profile.bio || null,
+        user_type: profile.role || null,
+      }));
+    } catch (fallbackError) {
+      console.error("Account search fallback error:", fallbackError);
+      return [];
+    }
+  }
 }
 
 function searchCommunitiesFromMock(query: string): SearchCommunity[] {
@@ -154,7 +146,7 @@ export async function searchAll(query: string): Promise<SearchResults> {
 
   const [articles, accounts, communities] = await Promise.all([
     searchArticlesFromDb(trimmed),
-    Promise.resolve(searchAccountsFromMock(trimmed)),
+    searchAccountsFromApi(trimmed),
     Promise.resolve(searchCommunitiesFromMock(trimmed)),
   ]);
 

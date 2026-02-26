@@ -125,7 +125,7 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar barStyle="light-content" />
       <Stack.Screen options={{ headerShown: false }} />
 
       {renderContent()}
@@ -136,21 +136,13 @@ export default function HomeScreen() {
           colors={
             isDark
               ? ["rgba(0,0,0,0.85)", "rgba(0,0,0,0.6)", "transparent"]
-              : [
-                "rgba(255,255,255,0.92)",
-                "rgba(255,255,255,0.6)",
-                "transparent",
-              ]
+              : ["transparent", "transparent", "transparent"]
           }
           style={styles.headerGradient}
         >
           <View style={styles.headerInner}>
             <Image
-              source={
-                isDark
-                  ? require("@/assets/images/logo-dark.png")
-                  : require("@/assets/images/logo-light.png")
-              }
+              source={require("@/assets/images/logo-dark.png")}
               style={styles.brandLogo}
               contentFit="contain"
             />
@@ -168,7 +160,7 @@ export default function HomeScreen() {
               <Ionicons
                 name="notifications-outline"
                 size={20}
-                color={isDark ? "#FFFFFF" : "#000000"}
+                color="#FFFFFF"
               />
             </TouchableOpacity>
           </View>

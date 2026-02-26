@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cursorLimitQuery } from "./common.js";
 
 const nullableText = z.string().trim().max(255).nullable().optional();
 
@@ -39,6 +40,14 @@ export const getUserProfileSchema = z.object({
   params: z.object({}).optional(),
   body: z.object({}).optional(),
   query: z.object({}).optional(),
+});
+
+export const listUsersSchema = z.object({
+  params: z.object({}).optional(),
+  body: z.object({}).optional(),
+  query: cursorLimitQuery.extend({
+    q: z.string().trim().min(1).max(100).optional(),
+  }),
 });
 
 export const getUserTestimonialsSchema = z.object({

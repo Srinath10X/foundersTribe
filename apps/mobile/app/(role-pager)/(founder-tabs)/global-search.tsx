@@ -1,4 +1,4 @@
-import DiscoverTab from "@/components/home/DiscoverTab";
+import SearchTab from "@/components/home/SearchTab";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -20,7 +20,7 @@ export default function GlobalSearchScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
-      <DiscoverTab />
+      <SearchTab />
 
       <View style={styles.headerContainer}>
         <LinearGradient

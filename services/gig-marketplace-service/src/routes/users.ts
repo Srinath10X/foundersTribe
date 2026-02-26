@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate.js";
-import { getUserProfileSchema, getUserTestimonialsSchema, upsertUserProfileSchema } from "../schemas/userProfileSchemas.js";
+import {
+  getUserProfileSchema,
+  getUserTestimonialsSchema,
+  listUsersSchema,
+  upsertUserProfileSchema,
+} from "../schemas/userProfileSchemas.js";
 import * as ratingService from "../services/ratingService.js";
 import * as userProfileService from "../services/userProfileService.js";
 
@@ -19,6 +24,15 @@ router.put("/me", validate(upsertUserProfileSchema), async (req, res, next) => {
   try {
     const data = await userProfileService.upsertMyProfile(req.db, req.user.id, req.body);
     res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/", validate(listUsersSchema), async (req, res, next) => {
+  try {
+    const data = await userProfileService.listUsers(req.db, req.query);
+    res.json(data);
   } catch (err) {
     next(err);
   }

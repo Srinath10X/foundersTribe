@@ -18,6 +18,7 @@ export interface SearchAccount {
   username: string;
   avatar_url: string | null;
   bio: string | null;
+  user_type?: string | null;
   skills?: string[];
   rating?: number;
   hourly_rate?: number;
