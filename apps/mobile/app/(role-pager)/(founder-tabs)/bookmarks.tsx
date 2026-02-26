@@ -24,11 +24,10 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 
-const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
+const { height: windowHeight } = Dimensions.get("window");
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 const HEADER_HEIGHT = Platform.OS === "ios" ? 140 : 120; // Slightly more for better gradient fade
 
-const REEL_WIDTH = windowWidth;
 const REEL_HEIGHT = windowHeight - TAB_BAR_HEIGHT;
 
 interface Article {
@@ -41,6 +40,12 @@ interface Article {
   Category: string | null;
   "Company Name": string | null;
 }
+
+type InteractionRow = {
+  article_id: number | string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+};
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
 
@@ -66,13 +71,54 @@ export default function BookmarksScreen() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
+      if (!user) {
+        setBookmarkedArticles([]);
+        return;
+      }
 
-      const { data: interactions } = await supabase
-        .from("user_interactions")
-        .select("article_id")
-        .eq("user_id", user.id)
-        .eq("bookmarked", true);
+      let interactions: InteractionRow[] | null = null;
+      let interactionsError: any = null;
+
+      // Primary shape
+      {
+        const result = await supabase
+          .from("user_interactions")
+          .select("article_id, updated_at")
+          .eq("user_id", user.id)
+          .eq("bookmarked", true)
+          .order("updated_at", { ascending: false });
+        interactions = (result.data as InteractionRow[] | null) || null;
+        interactionsError = result.error;
+      }
+
+      // Fallback for schemas without updated_at
+      if (interactionsError) {
+        const fallback = await supabase
+          .from("user_interactions")
+          .select("article_id, created_at")
+          .eq("user_id", user.id)
+          .eq("bookmarked", true)
+          .order("created_at", { ascending: false });
+        interactions = (fallback.data as InteractionRow[] | null) || null;
+        interactionsError = fallback.error;
+      }
+
+      // Last fallback: no timestamp ordering
+      if (interactionsError) {
+        const fallback = await supabase
+          .from("user_interactions")
+          .select("article_id")
+          .eq("user_id", user.id)
+          .eq("bookmarked", true);
+        interactions = (fallback.data as InteractionRow[] | null) || null;
+        interactionsError = fallback.error;
+      }
+
+      if (interactionsError) {
+        console.error("Error fetching bookmark interactions:", interactionsError);
+        setBookmarkedArticles([]);
+        return;
+      }
 
       if (!interactions || interactions.length === 0) {
         setBookmarkedArticles([]);
@@ -81,20 +127,104 @@ export default function BookmarksScreen() {
         return;
       }
 
-      const articleIds = interactions.map((i) => i.article_id);
+      const articleIds = Array.from(
+        new Set(
+          interactions
+            .map((i) => i?.article_id)
+            .filter((id): id is number | string => id !== null && id !== undefined),
+        ),
+      );
 
-      const { data: articles } = await supabase
+      if (articleIds.length === 0) {
+        setBookmarkedArticles([]);
+        return;
+      }
+
+      const articleSelect =
+        'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"';
+
+      // Try with raw ids first (works when db stores matching id type).
+      let { data: articles, error: articlesError } = await supabase
         .from("Articles")
-        .select(
-          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"',
-        )
+        .select(articleSelect)
         .in("id", articleIds);
 
-      if (articles) {
-        setBookmarkedArticles(articles);
+      // Fallback: if raw ids returned nothing, retry with numeric ids.
+      if ((!articles || articles.length === 0) && !articlesError) {
+        const numericIds = articleIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isFinite(id));
+
+        if (numericIds.length > 0) {
+          const retry = await supabase
+            .from("Articles")
+            .select(articleSelect)
+            .in("id", numericIds);
+          articles = retry.data || [];
+          articlesError = retry.error;
+        }
+      }
+
+      // Lowercase table/column fallback for environments with snake/lower-case schema.
+      if ((!articles || articles.length === 0) && !articlesError) {
+        const lowerSelect =
+          "id, title, summary, content, image_url, article_link, category, company_name";
+        const lower = await supabase
+          .from("articles")
+          .select(lowerSelect)
+          .in("id", articleIds as any[]);
+        if (!lower.error && Array.isArray(lower.data) && lower.data.length > 0) {
+          articles = lower.data.map((row: any) => ({
+            id: Number(row.id),
+            Title: row.title || "",
+            Summary: row.summary || "",
+            Content: row.content || "",
+            "Image URL": row.image_url || null,
+            "Article Link": row.article_link || "",
+            Category: row.category || null,
+            "Company Name": row.company_name || null,
+          }));
+        }
+      }
+
+      // Final fallback: fetch per-id in case mixed id types break IN query.
+      if ((!articles || articles.length === 0) && !articlesError) {
+        const fallbackRows = await Promise.all(
+          articleIds.map(async (id) => {
+            const { data } = await supabase
+              .from("Articles")
+              .select(articleSelect)
+              .eq("id", id as any)
+              .maybeSingle();
+            return data || null;
+          }),
+        );
+        articles = fallbackRows.filter((row): row is Article => Boolean(row));
+      }
+
+      if (articlesError) {
+        console.error("Error fetching bookmarked articles:", articlesError);
+        setBookmarkedArticles([]);
+        return;
+      }
+
+      if (articles && articles.length > 0) {
+        // Keep same order as saved interactions (latest first).
+        const orderMap = new Map(
+          articleIds.map((id, index) => [String(id), index]),
+        );
+        const ordered = [...articles].sort((a, b) => {
+          const ai = orderMap.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER;
+          const bi = orderMap.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER;
+          return ai - bi;
+        });
+        setBookmarkedArticles(ordered);
+      } else {
+        setBookmarkedArticles([]);
       }
     } catch (error) {
       console.error("Error fetching bookmarks:", error);
+      setBookmarkedArticles([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -135,7 +265,7 @@ export default function BookmarksScreen() {
           End of Collection
         </Text>
         <Text style={[styles.footerSubtitle, { color: theme.text.tertiary }]}>
-          You've seen all your bookmarked articles.
+          You&apos;ve seen all your bookmarked articles.
         </Text>
         <TouchableOpacity
           style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]}
@@ -165,7 +295,7 @@ export default function BookmarksScreen() {
         No saved articles
       </Text>
       <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-        You haven't bookmarked any articles yet.
+        You haven&apos;t bookmarked any articles yet.
       </Text>
       <TouchableOpacity
         style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}

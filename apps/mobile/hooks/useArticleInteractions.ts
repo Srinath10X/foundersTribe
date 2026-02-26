@@ -136,35 +136,17 @@ export function useArticleInteractions(articleId: number) {
         updates: { liked: newLiked },
       });
 
-      // Check if interaction exists
-      const { data: existing } = await supabase
+      const { error: dbError } = await supabase
         .from("user_interactions")
-        .select("liked") // using any column to check existence
-        .eq("user_id", user.id)
-        .eq("article_id", articleId)
-        .maybeSingle();
-
-      let dbError;
-      if (existing) {
-        const { error } = await supabase
-          .from("user_interactions")
-          .update({
+        .upsert(
+          {
+            user_id: user.id,
+            article_id: articleId,
             liked: newLiked,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", user.id)
-          .eq("article_id", articleId);
-        dbError = error;
-      } else {
-        const { error } = await supabase.from("user_interactions").insert({
-          user_id: user.id,
-          article_id: articleId,
-          liked: newLiked,
-          bookmarked: interaction.bookmarked,
-          updated_at: new Date().toISOString(),
-        });
-        dbError = error;
-      }
+            bookmarked: interaction.bookmarked,
+          },
+          { onConflict: "user_id,article_id" }
+        );
 
       if (dbError) throw dbError;
     } catch (error: any) {
@@ -189,35 +171,17 @@ export function useArticleInteractions(articleId: number) {
         updates: { bookmarked: newBookmarked },
       });
 
-      // Check if interaction exists
-      const { data: existing } = await supabase
+      const { error: dbError } = await supabase
         .from("user_interactions")
-        .select("bookmarked")
-        .eq("user_id", user.id)
-        .eq("article_id", articleId)
-        .maybeSingle();
-
-      let dbError;
-      if (existing) {
-        const { error } = await supabase
-          .from("user_interactions")
-          .update({
+        .upsert(
+          {
+            user_id: user.id,
+            article_id: articleId,
+            liked: interaction.liked,
             bookmarked: newBookmarked,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", user.id)
-          .eq("article_id", articleId);
-        dbError = error;
-      } else {
-        const { error } = await supabase.from("user_interactions").insert({
-          user_id: user.id,
-          article_id: articleId,
-          liked: interaction.liked,
-          bookmarked: newBookmarked,
-          updated_at: new Date().toISOString(),
-        });
-        dbError = error;
-      }
+          },
+          { onConflict: "user_id,article_id" }
+        );
 
       if (dbError) throw dbError;
     } catch (error) {

@@ -98,15 +98,16 @@ export async function updateProfile(userId, data) {
 
   const merged = { ...existing, ...data };
   const businessIdeas = parseBusinessIdeas(merged);
+  const compatBusinessIdea =
+    data.business_ideas !== undefined
+      ? (businessIdeas.length ? JSON.stringify(businessIdeas) : null)
+      : data.business_idea;
   const computedPayload = {
     ...data,
     business_ideas: Array.isArray(data.business_ideas)
       ? businessIdeas
       : data.business_ideas,
-    business_idea:
-      data.business_idea !== undefined || data.business_ideas !== undefined
-        ? businessIdeas[0] || null
-        : data.business_idea,
+    business_idea: compatBusinessIdea,
     profile_onboarding_completed: isProfileMinimumComplete(merged),
   };
 
