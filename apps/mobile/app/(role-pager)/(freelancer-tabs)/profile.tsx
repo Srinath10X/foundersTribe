@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
 
+import AppearanceModal from "@/components/AppearanceModal";
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
@@ -234,7 +235,7 @@ function testimonialAvatarSource(item: Testimonial): string | null {
 
 export default function FreelancerProfileScreen() {
   const { palette, isDark } = useFlowPalette();
-  const { setThemeMode } = useTheme();
+  const { themeMode } = useTheme();
   const tabBarHeight = useBottomTabBarHeight();
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
@@ -243,7 +244,7 @@ export default function FreelancerProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showAppearanceOptions, setShowAppearanceOptions] = useState(false);
+  const [showAppearanceModal, setShowAppearanceModal] = useState(false);
   const [storedTestimonials, setStoredTestimonials] = useState<Testimonial[]>([]);
   const [reviewerProfilesById, setReviewerProfilesById] = useState<Record<string, ReviewerProfileLite>>({});
   const testimonialScrollRef = React.useRef<ScrollView | null>(null);
@@ -488,7 +489,7 @@ export default function FreelancerProfileScreen() {
       }),
     [reviewerProfilesById, testimonialItems],
   );
-  const appearanceLabel = isDark ? "Dark" : "Light";
+  const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
   const profileStatus =
     profile?.user_type === "founder"
       ? "Building Startup"
@@ -502,7 +503,7 @@ export default function FreelancerProfileScreen() {
         ? "Open for freelance projects and startup partnerships."
         : "Open for new projects and high-impact opportunities.";
   const selectAppearance = () => {
-    setShowAppearanceOptions((prev) => !prev);
+    setShowAppearanceModal(true);
   };
   const canSlideTestimonials = testimonialItemsWithTribeProfiles.length > 1;
   const testimonialCardWidth = Math.max(260, screenWidth - 72);
@@ -885,41 +886,10 @@ export default function FreelancerProfileScreen() {
                   onPress={selectAppearance}
                   trailingIcon={isDark ? "moon-outline" : "sunny-outline"}
                 />
-
-              {showAppearanceOptions && (
-                <View style={styles.themeSwitchRow}>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    style={[
-                      styles.themeOption,
-                      {
-                        borderColor: !isDark ? "#E23744" : palette.borderLight,
-                        backgroundColor: !isDark ? "rgba(226, 55, 68, 0.1)" : palette.surface,
-                      },
-                    ]}
-                    onPress={() => setThemeMode("light")}
-                  >
-                    <T weight={!isDark ? "medium" : "regular"} color={!isDark ? "#E23744" : palette.subText} style={styles.themeOptionText}>
-                      Light
-                    </T>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    style={[
-                      styles.themeOption,
-                      {
-                        borderColor: isDark ? "#E23744" : palette.borderLight,
-                        backgroundColor: isDark ? "rgba(226, 55, 68, 0.1)" : palette.surface,
-                      },
-                    ]}
-                    onPress={() => setThemeMode("dark")}
-                  >
-                    <T weight={isDark ? "medium" : "regular"} color={isDark ? "#E23744" : palette.subText} style={styles.themeOptionText}>
-                      Dark
-                    </T>
-                  </TouchableOpacity>
-                </View>
-              )}
+                <AppearanceModal
+                  visible={showAppearanceModal}
+                  onClose={() => setShowAppearanceModal(false)}
+                />
 
                 <View>
                   <MoreRow
@@ -1423,24 +1393,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     marginTop: 10,
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  themeSwitchRow: {
-    marginTop: 8,
-    marginBottom: 12,
-    flexDirection: "row",
-    gap: 8,
-  },
-  themeOption: {
-    flex: 1,
-    height: 34,
-    borderWidth: 1,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  themeOptionText: {
     fontSize: 11,
     lineHeight: 14,
   },
