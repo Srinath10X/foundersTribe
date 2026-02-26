@@ -12,7 +12,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.founderstribe.ai",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio",
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
