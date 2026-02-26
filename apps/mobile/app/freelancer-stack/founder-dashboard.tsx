@@ -5,14 +5,12 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  Avatar,
   FlowScreen,
   SurfaceCard,
   T,
@@ -23,7 +21,6 @@ import { useAuth } from "@/context/AuthContext";
 import { useContracts, useMyGigs } from "@/hooks/useGig";
 import { formatTimeline, parseGigDescription } from "@/lib/gigContent";
 import gigApi from "@/lib/gigService";
-import { SearchAccount, searchAll } from "@/lib/searchService";
 import type { Gig, Proposal } from "@/types/gig";
 
 type ProposalSummary = {
@@ -72,8 +69,6 @@ export default function FounderDashboardScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchAccount[]>([]);
-  const [searching, setSearching] = useState(false);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposalSummary, setProposalSummary] = useState<ProposalSummary>({
@@ -210,30 +205,19 @@ export default function FounderDashboardScreen() {
 
   const hasError = Boolean(gigsError || contractsError || proposalError);
   const loading = gigsLoading || contractsLoading;
-  const isSearching = searchText.trim().length > 0;
+  const activeCategoryTitle = searchText.trim().toLowerCase();
 
-  const handleSearch = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      const results = await searchAll(query);
-      setSearchResults(results.accounts ?? []);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      handleSearch(searchText);
-    }, 280);
-    return () => clearTimeout(timer);
-  }, [handleSearch, searchText]);
+  const openServiceSearch = useCallback(
+    (seed?: string) => {
+      const q = (seed ?? searchText).trim();
+      if (!q) {
+        nav.push("/freelancer-stack/service-search");
+        return;
+      }
+      nav.push(`/freelancer-stack/service-search?q=${encodeURIComponent(q)}`);
+    },
+    [nav, searchText],
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -279,94 +263,47 @@ export default function FounderDashboardScreen() {
         }
       >
         <View style={styles.content}>
-          <View style={[styles.searchBox, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => openServiceSearch()}
+            style={[styles.searchBox, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+          >
             <Ionicons name="search" size={15} color={palette.subText} />
-            <TextInput
-              value={searchText}
-              onChangeText={setSearchText}
-              placeholder="Search freelancers by name, bio, skills"
-              placeholderTextColor={palette.subText}
-              style={[styles.searchInput, { color: palette.text }]}
-            />
-            {searchText.length > 0 ? (
-              <TouchableOpacity onPress={() => setSearchText("")}>
-                <Ionicons name="close-circle" size={16} color={palette.subText} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          {isSearching ? (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                  Search Results
-                </T>
-                {!searching ? (
-                  <T weight="regular" color={palette.subText} style={styles.sectionMeta}>
-                    {searchResults.length} found
-                  </T>
-                ) : null}
-              </View>
-
-              {searching ? (
-                <View style={styles.centerWrap}>
-                  <ActivityIndicator size="small" color={palette.accent} />
-                </View>
-              ) : searchResults.length === 0 ? (
-                <SurfaceCard style={styles.emptyCard}>
-                  <Ionicons name="search" size={22} color={palette.subText} />
-                  <T weight="medium" color={palette.text} style={styles.emptyTitle}>
-                    No freelancers found
-                  </T>
-                  <T weight="regular" color={palette.subText} style={styles.emptySub}>
-                    Try different keywords or broader roles.
-                  </T>
-                </SurfaceCard>
-              ) : (
-                <View style={styles.stack}>
-                  {searchResults.slice(0, 6).map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      activeOpacity={0.86}
-                      onPress={() => nav.push(`/freelancer-stack/freelancer-profile?id=${item.id}`)}
-                    >
-                      <SurfaceCard style={styles.freelancerCard}>
-                        <Avatar source={item.avatar_url ? { uri: item.avatar_url } : undefined} size={42} />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <T weight="medium" color={palette.text} style={styles.freelancerName} numberOfLines={1}>
-                            {item.display_name}
-                          </T>
-                          <T weight="regular" color={palette.subText} style={styles.freelancerBio} numberOfLines={1}>
-                            {item.bio || "Freelancer"}
-                          </T>
-                        </View>
-                        <View style={styles.freelancerRight}>
-                          {item.rating ? (
-                            <View style={styles.ratingRow}>
-                              <Ionicons name="star" size={12} color="#F4C430" />
-                              <T weight="regular" color={palette.subText} style={styles.ratingText}>
-                                {item.rating}
-                              </T>
-                            </View>
-                          ) : null}
-                          <Ionicons name="chevron-forward" size={15} color={palette.subText} />
-                        </View>
-                      </SurfaceCard>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+            <View style={styles.searchInput}>
+              <T weight="regular" color={searchText ? palette.text : palette.subText} style={styles.searchInputText} numberOfLines={1}>
+                {searchText || "Search by service (e.g. UI Design, Reel Editing)"}
+              </T>
             </View>
-          ) : (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                  Popular Categories
-                </T>
-              </View>
-              <View style={styles.categoriesGrid}>
-                {popularCategories.map((cat) => (
-                  <TouchableOpacity key={cat.id} activeOpacity={0.86} style={[styles.categoryCell, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}>
+            <View>
+              <Ionicons name="arrow-forward-circle" size={20} color={palette.accent} />
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                Popular Categories
+              </T>
+            </View>
+            <View style={styles.categoriesGrid}>
+              {popularCategories.map((cat) => {
+                const active = activeCategoryTitle === cat.title.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    activeOpacity={0.86}
+                    onPress={() => {
+                      setSearchText(cat.title);
+                      openServiceSearch(cat.title);
+                    }}
+                    style={[
+                      styles.categoryCell,
+                      {
+                        borderColor: active ? palette.accent : palette.borderLight,
+                        backgroundColor: active ? palette.accentSoft : palette.surface,
+                      },
+                    ]}
+                  >
                     <View style={[styles.categoryIcon, { backgroundColor: cat.bg }]}>
                       <Ionicons name={cat.icon} size={14} color={cat.color} />
                     </View>
@@ -374,10 +311,10 @@ export default function FounderDashboardScreen() {
                       {cat.title}
                     </T>
                   </TouchableOpacity>
-                ))}
-              </View>
+                );
+              })}
             </View>
-          )}
+          </View>
 
           {hasError ? (
             <SurfaceCard style={styles.errorCard}>
@@ -567,10 +504,32 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
+    justifyContent: "center",
+  },
+  searchInputText: {
     fontFamily: "Poppins_400Regular",
     fontSize: 12,
     padding: 0,
     textAlignVertical: "center",
+  },
+  filtersCard: {
+    padding: 10,
+    gap: 8,
+  },
+  filterRowWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterChipText: {
+    fontSize: 10,
+    lineHeight: 13,
   },
   errorCard: {
     paddingVertical: 10,
@@ -667,6 +626,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     lineHeight: 14,
+  },
+  freelancerHint: {
+    marginTop: 2,
+    fontSize: 10,
+    lineHeight: 13,
   },
   freelancerRight: {
     alignItems: "flex-end",

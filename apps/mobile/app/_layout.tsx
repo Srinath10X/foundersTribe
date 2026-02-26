@@ -226,7 +226,7 @@ function RootLayoutNav() {
     } else {
       // 3. Handling Logged Out Users
       if (inRolePager || inOnboarding) {
-        setTimeout(() => router.replace("/"), 0);
+        setTimeout(() => router.replace("/login"), 0);
       }
     }
   }, [session, segments, authLoading, fontsLoaded, hasCompletedOnboarding, isRoleLoaded, role]);

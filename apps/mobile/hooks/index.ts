@@ -9,6 +9,10 @@ export {
   useCreateGig,
   useUpdateGig,
   useDeleteGig,
+  useFreelancerServices,
+  useMyFreelancerServices,
+  useFreelancerServicesByUser,
+  useUpdateMyFreelancerServices,
   // Stats
   useFreelancerStats,
   // Proposals
@@ -22,6 +26,11 @@ export {
   useContract,
   useCompleteContract,
   useApproveContract,
+  useServiceRequests,
+  useCreateServiceRequest,
+  useServiceRequestMessages,
+  useSendServiceRequestMessage,
+  useMarkServiceRequestMessagesRead,
   // Messages
   useContractMessages,
   useInfiniteContractMessages,

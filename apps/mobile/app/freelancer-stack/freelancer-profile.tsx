@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import {
@@ -16,7 +16,8 @@ import { TestimonialCarousel } from "@/components/freelancer/TestimonialCarousel
 import { useAuth } from "@/context/AuthContext";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
-import { useContracts, useUserTestimonials } from "@/hooks/useGig";
+import { useContracts, useCreateServiceRequest, useFreelancerServicesByUser, useUserTestimonials } from "@/hooks/useGig";
+import gigApi from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -122,8 +123,13 @@ export default function FreelancerProfileScreen() {
   const { palette } = useFlowPalette();
   const nav = useFlowNav();
   const { session } = useAuth();
-  const { id, gigId } = useLocalSearchParams<{ id?: string; gigId?: string }>();
+  const { id, gigId, serviceId } = useLocalSearchParams<{ id?: string; gigId?: string; serviceId?: string }>();
   const { data: contractsData } = useContracts({ limit: 200 });
+  const { data: freelancerServices = [] } = useFreelancerServicesByUser(
+    typeof id === "string" ? id : "",
+    Boolean(id),
+  );
+  const createServiceRequest = useCreateServiceRequest();
 
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -228,6 +234,9 @@ export default function FreelancerProfileScreen() {
   const lastUpdatedLabel = profile?.updated_at
     ? new Date(profile.updated_at).toLocaleDateString()
     : null;
+  const preselectedService = freelancerServices.find((service) => service.id === serviceId)
+    || freelancerServices[0]
+    || null;
 
   const openExternalUrl = async (url: string) => {
     const value = String(url || "").trim();
@@ -236,6 +245,42 @@ export default function FreelancerProfileScreen() {
     const canOpen = await Linking.canOpenURL(safe);
     if (canOpen) {
       Linking.openURL(safe).catch(() => {});
+    }
+  };
+
+  const sendServiceRequest = async (targetServiceId?: string) => {
+    if (!profile?.id) return;
+    const selectedService = freelancerServices.find((service) => service.id === targetServiceId) || null;
+    const selectedServiceName = selectedService?.service_name?.trim() || "";
+    const initialRequestMessage = selectedServiceName
+      ? `Hi, I would like to discuss your ${selectedServiceName} service.`
+      : "Hi, I would like to discuss your services.";
+    try {
+      const request = await createServiceRequest.mutateAsync({
+        freelancer_id: profile.id,
+        service_id: targetServiceId || undefined,
+        message: initialRequestMessage,
+      });
+      const normalizedPreview = String(request.last_message_preview || "").trim().toLowerCase();
+      const normalizedInitial = initialRequestMessage.trim().toLowerCase();
+      if (normalizedPreview !== normalizedInitial) {
+        await gigApi
+          .sendServiceRequestMessage(request.id, {
+            message_type: "text",
+            body: initialRequestMessage,
+            metadata: { source: "service_request_fallback" },
+          })
+          .catch(() => undefined);
+      }
+      const titleText = `${profile.display_name || "Freelancer"} • Service Chat`;
+      const avatarUri = profile.photo_url || profile.avatar_url || "";
+      nav.push(
+        `/freelancer-stack/contract-chat-thread?threadKind=service&requestId=${encodeURIComponent(
+          request.id,
+        )}&title=${encodeURIComponent(titleText)}&avatar=${encodeURIComponent(avatarUri)}`,
+      );
+    } catch (error: any) {
+      Alert.alert("Request failed", error?.message || "Could not send message request");
     }
   };
 
@@ -355,6 +400,17 @@ export default function FreelancerProfileScreen() {
                     Message
                   </T>
                 </TouchableOpacity>
+              ) : preselectedService ? (
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
+                  onPress={() => sendServiceRequest(preselectedService.id)}
+                  disabled={createServiceRequest.isPending}
+                >
+                  <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
+                    {createServiceRequest.isPending ? "Sending..." : "Send Message Request"}
+                  </T>
+                </TouchableOpacity>
               ) : null}
               {profile.linkedin_url ? (
                 <TouchableOpacity
@@ -370,9 +426,57 @@ export default function FreelancerProfileScreen() {
             </View>
             {!linkedContract ? (
               <T weight="regular" color={palette.subText} style={styles.actionHint}>
-                Message is available once a contract is active.
+                {preselectedService
+                  ? "Send a request to start chatting before contract finalization."
+                  : "No listed services yet. Message is available once a contract is active."}
               </T>
             ) : null}
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.sectionCard}>
+            <View style={styles.sectionHeadRow}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                Services
+              </T>
+              <T weight="regular" color={palette.subText} style={styles.sectionMeta}>
+                {freelancerServices.length}
+              </T>
+            </View>
+            {freelancerServices.length === 0 ? (
+              <T weight="regular" color={palette.subText} style={styles.emptyLine}>
+                No active services listed yet.
+              </T>
+            ) : (
+              <View style={styles.servicesStack}>
+                {freelancerServices.map((service) => (
+                  <View
+                    key={service.id}
+                    style={[styles.serviceRow, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <T weight="medium" color={palette.text} style={styles.serviceName} numberOfLines={1}>
+                        {service.service_name}
+                      </T>
+                      <T weight="regular" color={palette.subText} style={styles.serviceMeta} numberOfLines={2}>
+                        ₹{Math.round(Number(service.cost_amount || 0)).toLocaleString()} • {service.delivery_time_value} {service.delivery_time_unit}
+                      </T>
+                    </View>
+                    {!linkedContract ? (
+                      <TouchableOpacity
+                        activeOpacity={0.84}
+                        style={[styles.requestBtn, { backgroundColor: palette.accentSoft }]}
+                        onPress={() => sendServiceRequest(service.id)}
+                        disabled={createServiceRequest.isPending}
+                      >
+                        <T weight="medium" color={palette.accent} style={styles.requestBtnText}>
+                          Request
+                        </T>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            )}
           </SurfaceCard>
 
           <SurfaceCard style={styles.sectionCard}>
@@ -624,6 +728,42 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   sectionMeta: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  emptyLine: {
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  servicesStack: {
+    marginTop: 10,
+    gap: 8,
+  },
+  serviceRow: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  serviceName: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  serviceMeta: {
+    marginTop: 1,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  requestBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  requestBtnText: {
     fontSize: 10,
     lineHeight: 13,
   },

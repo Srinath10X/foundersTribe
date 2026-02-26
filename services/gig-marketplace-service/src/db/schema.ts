@@ -28,6 +28,8 @@ export const contractStatusEnum = pgEnum("contract_status_enum", ["active", "com
 export const messageTypeEnum = pgEnum("message_type_enum", ["text", "file", "system"]);
 export const notificationTypeEnum = pgEnum("notification_type_enum", ["new_proposal", "proposal_accepted", "message", "contract_completed"]);
 export const postTypeEnum = pgEnum("post_type_enum", ["work_update", "showcase", "milestone", "hiring", "insight"]);
+export const serviceDurationUnitEnum = pgEnum("service_duration_unit_enum", ["days", "weeks"]);
+export const serviceRequestStatusEnum = pgEnum("service_request_status_enum", ["pending", "accepted", "declined", "cancelled"]);
 
 export const userProfiles = pgTable(
   "user_profiles",
@@ -115,6 +117,28 @@ export const gigTags = pgTable(
   }),
 );
 
+export const freelancerServices = pgTable(
+  "freelancer_services",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    freelancerId: uuid("freelancer_id").notNull(),
+    serviceName: text("service_name").notNull(),
+    description: text("description"),
+    costAmount: numeric("cost_amount", { precision: 12, scale: 2 }).notNull(),
+    costCurrency: text("cost_currency").notNull().default("INR"),
+    deliveryTimeValue: integer("delivery_time_value").notNull(),
+    deliveryTimeUnit: serviceDurationUnitEnum("delivery_time_unit").notNull().default("days"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    costNonNegative: check("freelancer_services_cost_nonnegative", sql`${t.costAmount} >= 0`),
+    timePositive: check("freelancer_services_time_positive", sql`${t.deliveryTimeValue} > 0`),
+    nameNonEmpty: check("freelancer_services_name_nonempty", sql`length(trim(${t.serviceName})) > 1`),
+  }),
+);
+
 export const proposals = pgTable(
   "proposals",
   {
@@ -175,6 +199,54 @@ export const messages = pgTable(
   (t) => ({
     contentCheck: check(
       "messages_content_check",
+      sql`(${t.messageType} = 'text' and ${t.body} is not null) or (${t.messageType} = 'file' and ${t.fileUrl} is not null) or (${t.messageType} = 'system')`,
+    ),
+  }),
+);
+
+export const serviceMessageRequests = pgTable(
+  "service_message_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    serviceId: uuid("service_id"),
+    founderId: uuid("founder_id").notNull(),
+    freelancerId: uuid("freelancer_id").notNull(),
+    status: serviceRequestStatusEnum("status").notNull().default("pending"),
+    requestMessage: text("request_message"),
+    lastMessagePreview: text("last_message_preview"),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+    unreadFounderCount: integer("unread_founder_count").notNull().default(0),
+    unreadFreelancerCount: integer("unread_freelancer_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    usersDistinct: check("service_message_requests_distinct_users", sql`${t.founderId} <> ${t.freelancerId}`),
+    unreadNonNegative: check(
+      "service_message_requests_unread_nonnegative",
+      sql`${t.unreadFounderCount} >= 0 and ${t.unreadFreelancerCount} >= 0`,
+    ),
+  }),
+);
+
+export const serviceRequestMessages = pgTable(
+  "service_request_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id").notNull(),
+    senderId: uuid("sender_id").notNull(),
+    recipientId: uuid("recipient_id"),
+    messageType: messageTypeEnum("message_type").notNull().default("text"),
+    body: text("body"),
+    fileUrl: text("file_url"),
+    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    contentCheck: check(
+      "service_request_messages_content_check",
       sql`(${t.messageType} = 'text' and ${t.body} is not null) or (${t.messageType} = 'file' and ${t.fileUrl} is not null) or (${t.messageType} = 'system')`,
     ),
   }),
