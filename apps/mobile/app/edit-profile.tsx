@@ -1,4 +1,3 @@
-import { Typography } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
 import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -422,7 +421,7 @@ export default function EditProfileScreen() {
       return;
     }
     if (!userType) {
-      Alert.alert("Missing info", "Please choose whether you are founder, freelancer, or both.");
+      Alert.alert("Missing info", "Please select Founder and/or Freelancer.");
       return;
     }
     if (!bio.trim()) {
@@ -668,15 +667,33 @@ export default function EditProfileScreen() {
     );
 
   // ── Styles ─────────────────────────────────────────────
+  const softBorder = isDark ? "rgba(255,255,255,0.11)" : theme.borderLight;
+  const softBg = isDark ? "rgba(255,255,255,0.045)" : theme.surfaceElevated;
+  const mutedText = theme.text.tertiary || theme.text.secondary;
+  const founderSelected = userType === "founder" || userType === "both";
+  const freelancerSelected = userType === "freelancer" || userType === "both";
+  const deriveUserType = (
+    hasFounder: boolean,
+    hasFreelancer: boolean,
+  ): "founder" | "freelancer" | "both" | null => {
+    if (hasFounder && hasFreelancer) return "both";
+    if (hasFounder) return "founder";
+    if (hasFreelancer) return "freelancer";
+    return null;
+  };
+  const toggleUserType = (kind: "founder" | "freelancer") => {
+    const nextFounder = kind === "founder" ? !founderSelected : founderSelected;
+    const nextFreelancer = kind === "freelancer" ? !freelancerSelected : freelancerSelected;
+    setUserType(deriveUserType(nextFounder, nextFreelancer));
+  };
   const inputStyle = [
     styles.input,
     {
-      backgroundColor: theme.surfaceElevated,
+      backgroundColor: softBg,
       color: theme.text.primary,
-      borderColor: theme.border,
+      borderColor: softBorder,
     },
   ];
-
   const labelStyle = [styles.label, { color: theme.text.secondary }];
 
   if (loading) {
@@ -703,131 +720,127 @@ export default function EditProfileScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={theme.text.primary} />
+      <View style={[styles.header, { borderBottomColor: softBorder, backgroundColor: theme.surface }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backBtn, { borderColor: softBorder, backgroundColor: softBg }]}
+        >
+          <Ionicons name="chevron-back" size={19} color={theme.text.primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.text.primary }]}>
-          Edit Profile
-        </Text>
+
+        <Text style={[styles.headerTitle, { color: theme.text.primary }]}>Edit Profile</Text>
+
         <TouchableOpacity
           onPress={handleSave}
           disabled={saving}
-          style={[styles.saveBtn, { backgroundColor: theme.brand.primary }]}
+          style={[styles.headerSaveBtn, { backgroundColor: theme.brand.primary }]}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.saveBtnText}>Save</Text>
+            <Text style={styles.headerSaveText}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={[styles.screenHint, { color: theme.text.tertiary }]}>
-            Keep this profile complete so founders and freelancers can trust your work quickly.
-          </Text>
+          <View style={styles.heroCard}>
+            <View style={styles.heroDotOverlay} />
+            <View style={styles.heroPatternA} />
+            <View style={styles.heroPatternB} />
+            <View style={styles.heroPatternC} />
 
-          {/* Photo Picker */}
-          <TouchableOpacity
-            style={[
-              styles.photoSection,
-              { backgroundColor: theme.surface, borderColor: theme.border },
-            ]}
-            onPress={pickPhoto}
-            activeOpacity={0.7}
-            disabled={uploading}
-          >
-            {photoUrl ? (
-              <Image
-                source={{ uri: photoUrl }}
-                style={[
-                  styles.photoPreview,
-                  { borderColor: theme.brand.primary },
-                ]}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.photoPreview,
-                  {
-                    backgroundColor: theme.surfaceElevated,
-                    borderColor: theme.border,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  },
-                ]}
+            <View style={styles.heroTop}>
+              <TouchableOpacity
+                activeOpacity={0.82}
+                style={styles.heroAvatarWrap}
+                onPress={pickPhoto}
+                disabled={uploading}
               >
-                <Ionicons name="person" size={40} color={theme.text.muted} />
+                {photoUrl ? (
+                  <Image source={{ uri: photoUrl }} style={styles.photoPreview} />
+                ) : (
+                  <View style={styles.photoFallback}>
+                    <Ionicons name="person" size={36} color="#94A3B8" />
+                  </View>
+                )}
+                <View style={styles.heroCameraBadge}>
+                  {uploading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="camera" size={14} color="#FFFFFF" />
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              <View style={styles.heroTextWrap}>
+                <Text style={styles.heroName} numberOfLines={2}>
+                  {displayName.trim() || "Your Name"}
+                </Text>
+                <Text style={styles.heroMeta} numberOfLines={1}>
+                  {userType === "founder"
+                    ? "Founder Profile"
+                    : userType === "freelancer"
+                      ? "Freelancer Profile"
+                      : userType === "both"
+                        ? "Founder + Freelancer Profile"
+                        : "Profile Setup"}
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={pickPhoto}
+                  style={styles.heroInlineAction}
+                  disabled={uploading}
+                >
+                  <Ionicons name="image-outline" size={13} color="#FFFFFF" />
+                  <Text style={styles.heroInlineActionText}>
+                    {uploading ? "Uploading..." : "Change Photo"}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            )}
-            <View
-              style={[
-                styles.cameraIconBadge,
-                { backgroundColor: theme.brand.primary, borderColor: theme.surface },
-              ]}
-            >
-              {uploading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="camera" size={16} color="#fff" />
-              )}
             </View>
-            <Text style={[styles.photoHint, { color: theme.text.tertiary }]}>
-              {uploading ? "Uploading..." : "Tap to change photo"}
-            </Text>
-          </TouchableOpacity>
 
-          {/* Basic Info */}
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
-            <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-              Basic Info
-            </Text>
-            <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
-              Identity, profile summary, and role preferences.
-            </Text>
+            <View style={styles.heroStatusChip}>
+              <View style={styles.heroStatusIcon}>
+                <Ionicons name="sparkles-outline" size={12} color="#FBBF24" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heroStatusLabel}>Profile Editor</Text>
+                <Text style={styles.heroStatusValue} numberOfLines={1}>
+                  Keep details complete and up to date
+                </Text>
+              </View>
+            </View>
+          </View>
 
-            <Text style={labelStyle}>I am a...</Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: softBorder }]}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionBar, { backgroundColor: "#6366F1" }]} />
+              <Text style={[styles.sectionHeaderText, { color: mutedText }]}>Preferences</Text>
+            </View>
+
+            <Text style={labelStyle}>I am...</Text>
+            <Text style={[styles.roleHint, { color: mutedText }]}>
+              Select one or both.
+            </Text>
             <View style={styles.roleContainer}>
               <TouchableOpacity
                 style={[
                   styles.roleOption,
                   {
-                    backgroundColor:
-                      userType === "founder"
-                        ? theme.brand.primary
-                        : theme.surfaceElevated,
-                    borderColor:
-                      userType === "founder"
-                        ? theme.brand.primary
-                        : theme.border,
+                    backgroundColor: founderSelected ? theme.brand.primary : softBg,
+                    borderColor: founderSelected ? theme.brand.primary : softBorder,
                   },
                 ]}
-                onPress={() => setUserType("founder")}
+                onPress={() => toggleUserType("founder")}
               >
-                <Ionicons
-                  name="rocket"
-                  size={20}
-                  color={userType === "founder" ? "#fff" : theme.text.secondary}
-                />
-                <Text
-                  style={[
-                    styles.roleText,
-                    {
-                      color:
-                        userType === "founder" ? "#fff" : theme.text.primary,
-                    },
-                  ]}
-                >
+                <Ionicons name="rocket-outline" size={18} color={founderSelected ? "#FFFFFF" : theme.text.secondary} />
+                <Text style={[styles.roleText, { color: founderSelected ? "#FFFFFF" : theme.text.primary }]}>
                   Founder
                 </Text>
               </TouchableOpacity>
@@ -836,71 +849,24 @@ export default function EditProfileScreen() {
                 style={[
                   styles.roleOption,
                   {
-                    backgroundColor:
-                      userType === "freelancer"
-                        ? theme.brand.primary
-                        : theme.surfaceElevated,
-                    borderColor:
-                      userType === "freelancer"
-                        ? theme.brand.primary
-                        : theme.border,
+                    backgroundColor: freelancerSelected ? theme.brand.primary : softBg,
+                    borderColor: freelancerSelected ? theme.brand.primary : softBorder,
                   },
                 ]}
-                onPress={() => setUserType("freelancer")}
+                onPress={() => toggleUserType("freelancer")}
               >
-                <Ionicons
-                  name="code-working"
-                  size={20}
-                  color={
-                    userType === "freelancer" ? "#fff" : theme.text.secondary
-                  }
-                />
-                <Text
-                  style={[
-                    styles.roleText,
-                    {
-                      color:
-                        userType === "freelancer" ? "#fff" : theme.text.primary,
-                    },
-                  ]}
-                >
+                <Ionicons name="code-working-outline" size={18} color={freelancerSelected ? "#FFFFFF" : theme.text.secondary} />
+                <Text style={[styles.roleText, { color: freelancerSelected ? "#FFFFFF" : theme.text.primary }]}>
                   Freelancer
                 </Text>
               </TouchableOpacity>
+            </View>
+          </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.roleOption,
-                  {
-                    backgroundColor:
-                      userType === "both"
-                        ? theme.brand.primary
-                        : theme.surfaceElevated,
-                    borderColor:
-                      userType === "both"
-                        ? theme.brand.primary
-                        : theme.border,
-                  },
-                ]}
-                onPress={() => setUserType("both")}
-              >
-                <Ionicons
-                  name="swap-horizontal"
-                  size={20}
-                  color={userType === "both" ? "#fff" : theme.text.secondary}
-                />
-                <Text
-                  style={[
-                    styles.roleText,
-                    {
-                      color:
-                        userType === "both" ? "#fff" : theme.text.primary,
-                    },
-                  ]}
-                >
-                  Both
-                </Text>
-              </TouchableOpacity>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: softBorder }]}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionBar, { backgroundColor: "#E23744" }]} />
+              <Text style={[styles.sectionHeaderText, { color: mutedText }]}>Personal Details</Text>
             </View>
 
             <Text style={labelStyle}>Full Name</Text>
@@ -974,60 +940,38 @@ export default function EditProfileScreen() {
                   placeholder="e.g. Fullstack Developer, UI Designer"
                   placeholderTextColor={theme.text.muted}
                 />
-
               </>
             )}
           </View>
 
-          {/* Business Idea (Founder Only) */}
           {(userType === "founder" || userType === "both") && (
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: softBorder }]}>
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-                  Business Ideas
-                </Text>
-                <TouchableOpacity
-                  onPress={addBusinessIdea}
-                  style={styles.addBtn}
-                >
-                  <Ionicons
-                    name="add-circle"
-                    size={24}
-                    color={theme.brand.primary}
-                  />
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionBar, { backgroundColor: "#F59E0B" }]} />
+                  <Text style={[styles.sectionHeaderText, { color: mutedText }]}>Vision & Ventures</Text>
+                </View>
+                <TouchableOpacity onPress={addBusinessIdea} style={styles.addBtn}>
+                  <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
-                Add ideas with optional pitch links (YouTube).
+              <Text style={[styles.cardSubtitle, { color: mutedText }]}>
+                Add business ideas and optional YouTube pitch links.
               </Text>
 
               {businessIdeas.map((item, index) => (
-                <View
-                  key={index}
-                  style={[styles.dynamicItem, { borderColor: theme.border }]}
-                >
+                <View key={index} style={[styles.dynamicItem, { borderColor: softBorder, backgroundColor: softBg }]}>
                   <View style={styles.dynamicItemHeader}>
-                    <Text
-                      style={[
-                        styles.dynamicItemIndex,
-                        { color: theme.text.muted },
-                      ]}
-                    >
-                      #{index + 1}
-                    </Text>
+                    <Text style={[styles.dynamicItemIndex, { color: theme.text.secondary }]}>Idea {index + 1}</Text>
                     <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color="#FF3B30"
-                      />
+                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
                     </TouchableOpacity>
                   </View>
                   <TextInput
                     style={[...inputStyle, styles.multiline]}
                     value={item.idea}
                     onChangeText={(v) => updateBusinessIdea(index, v)}
-                    placeholder="Tell us about the product/ idea/ problem statement you working on"
+                    placeholder="Describe the idea, problem, or solution..."
                     placeholderTextColor={theme.text.muted}
                     multiline
                     maxLength={2000}
@@ -1037,7 +981,7 @@ export default function EditProfileScreen() {
                     style={inputStyle}
                     value={item.pitch_url || ""}
                     onChangeText={(v) => updateBusinessPitch(index, v)}
-                    placeholder="Pitch Video URL (YouTube) - optional"
+                    placeholder="Pitch Video URL (YouTube)"
                     placeholderTextColor={theme.text.muted}
                     autoCapitalize="none"
                     keyboardType="url"
@@ -1047,59 +991,34 @@ export default function EditProfileScreen() {
             </View>
           )}
 
-          {/* Previous Works (Freelancer Only) */}
           {(userType === "freelancer" || userType === "both") && (
-            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: softBorder }]}>
               <View style={styles.cardHeader}>
-                <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-                  Previous Works
-                </Text>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionBar, { backgroundColor: "#14B8A6" }]} />
+                  <Text style={[styles.sectionHeaderText, { color: mutedText }]}>Previous Works</Text>
+                </View>
                 <TouchableOpacity
-                  onPress={() =>
-                    setCompletedGigs([
-                      ...completedGigs,
-                      { title: "", description: "" },
-                    ])
-                  }
+                  onPress={() => setCompletedGigs([...completedGigs, { title: "", description: "" }])}
                   style={styles.addBtn}
                 >
-                  <Ionicons
-                    name="add-circle"
-                    size={24}
-                    color={theme.brand.primary}
-                  />
+                  <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
-                Showcase previous client work and outcomes.
+              <Text style={[styles.cardSubtitle, { color: mutedText }]}>
+                Showcase project highlights and outcomes.
               </Text>
 
+              {completedGigs.length === 0 ? (
+                <Text style={[styles.emptyHint, { color: theme.text.muted }]}>Tap + to add previous work</Text>
+              ) : null}
+
               {completedGigs.map((gig, index) => (
-                <View
-                  key={index}
-                  style={[styles.dynamicItem, { borderColor: theme.border }]}
-                >
+                <View key={index} style={[styles.dynamicItem, { borderColor: softBorder, backgroundColor: softBg }]}>
                   <View style={styles.dynamicItemHeader}>
-                    <Text
-                      style={[
-                        styles.dynamicItemIndex,
-                        { color: theme.text.muted },
-                      ]}
-                    >
-                      Work #{index + 1}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() =>
-                        setCompletedGigs(
-                          completedGigs.filter((_, i) => i !== index),
-                        )
-                      }
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color="#FF3B30"
-                      />
+                    <Text style={[styles.dynamicItemIndex, { color: theme.text.secondary }]}>Work {index + 1}</Text>
+                    <TouchableOpacity onPress={() => setCompletedGigs(completedGigs.filter((_, i) => i !== index))}>
+                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
                     </TouchableOpacity>
                   </View>
                   <TextInput
@@ -1121,55 +1040,38 @@ export default function EditProfileScreen() {
                       updated[index] = { ...updated[index], description: v };
                       setCompletedGigs(updated);
                     }}
-                    placeholder="Role / Work summary / impact"
+                    placeholder="Role / summary / impact"
                     placeholderTextColor={theme.text.muted}
                     multiline
+                    textAlignVertical="top"
                   />
                 </View>
               ))}
             </View>
           )}
 
-          {/* Previous Works */}
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: softBorder }]}>
             <View style={styles.cardHeader}>
-              <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-                Experience
-              </Text>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionBar, { backgroundColor: "#3B82F6" }]} />
+                <Text style={[styles.sectionHeaderText, { color: mutedText }]}>Experience</Text>
+              </View>
               <TouchableOpacity onPress={addWork} style={styles.addBtn}>
-                <Ionicons
-                  name="add-circle"
-                  size={24}
-                  color={theme.brand.primary}
-                />
+                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
-              Add your relevant roles and durations.
-            </Text>
+            <Text style={[styles.cardSubtitle, { color: mutedText }]}>Add your relevant roles and durations.</Text>
 
-            {previousWorks.length === 0 && (
-              <Text style={[styles.emptyHint, { color: theme.text.muted }]}>
-                Tap + to add work experience
-              </Text>
-            )}
+            {previousWorks.length === 0 ? (
+              <Text style={[styles.emptyHint, { color: theme.text.muted }]}>Tap + to add work experience</Text>
+            ) : null}
 
             {previousWorks.map((work, index) => (
-              <View
-                key={index}
-                style={[styles.dynamicItem, { borderColor: theme.border }]}
-              >
+              <View key={index} style={[styles.dynamicItem, { borderColor: softBorder, backgroundColor: softBg }]}>
                 <View style={styles.dynamicItemHeader}>
-                  <Text
-                    style={[
-                      styles.dynamicItemIndex,
-                      { color: theme.text.muted },
-                    ]}
-                  >
-                    #{index + 1}
-                  </Text>
+                  <Text style={[styles.dynamicItemIndex, { color: theme.text.secondary }]}>Experience {index + 1}</Text>
                   <TouchableOpacity onPress={() => removeWork(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
                 <TextInput
@@ -1190,60 +1092,44 @@ export default function EditProfileScreen() {
                   style={inputStyle}
                   value={work.duration}
                   onChangeText={(v) => updateWork(index, "duration", v)}
-                  placeholder="Duration (e.g. 2020-2023)"
+                  placeholder="Duration (e.g. Jan 2025 - Present)"
                   placeholderTextColor={theme.text.muted}
                 />
               </View>
             ))}
           </View>
 
-          {/* Social Links */}
-          <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: softBorder }]}>
             <View style={styles.cardHeader}>
-              <Text style={[styles.cardTitle, { color: theme.text.primary }]}>
-                Social Links
-              </Text>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.sectionBar, { backgroundColor: "#8B5CF6" }]} />
+                <Text style={[styles.sectionHeaderText, { color: mutedText }]}>Social Links</Text>
+              </View>
               <TouchableOpacity onPress={addLink} style={styles.addBtn}>
-                <Ionicons
-                  name="add-circle"
-                  size={24}
-                  color={theme.brand.primary}
-                />
+                <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.cardSubtitle, { color: theme.text.tertiary }]}>
-              Public links people can use to verify and connect.
+            <Text style={[styles.cardSubtitle, { color: mutedText }]}>
+              Add public links so others can verify and connect.
             </Text>
 
-            {socialLinks.length === 0 && (
-              <Text style={[styles.emptyHint, { color: theme.text.muted }]}>
-                Tap + to add social links
-              </Text>
-            )}
+            {socialLinks.length === 0 ? (
+              <Text style={[styles.emptyHint, { color: theme.text.muted }]}>Tap + to add social links</Text>
+            ) : null}
 
             {socialLinks.map((link, index) => (
-              <View
-                key={index}
-                style={[styles.dynamicItem, { borderColor: theme.border }]}
-              >
+              <View key={index} style={[styles.dynamicItem, { borderColor: softBorder, backgroundColor: softBg }]}>
                 <View style={styles.dynamicItemHeader}>
-                  <Text
-                    style={[
-                      styles.dynamicItemIndex,
-                      { color: theme.text.muted },
-                    ]}
-                  >
-                    #{index + 1}
-                  </Text>
+                  <Text style={[styles.dynamicItemIndex, { color: theme.text.secondary }]}>Link {index + 1}</Text>
                   <TouchableOpacity onPress={() => removeLink(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                    <Ionicons name="trash-outline" size={18} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
                 <TextInput
                   style={inputStyle}
                   value={link.platform}
                   onChangeText={(v) => updateLink(index, "platform", v)}
-                  placeholder="Platform (e.g. twitter, github)"
+                  placeholder="Platform (e.g. github, x, dribbble)"
                   placeholderTextColor={theme.text.muted}
                   autoCapitalize="none"
                 />
@@ -1260,14 +1146,28 @@ export default function EditProfileScreen() {
                   style={inputStyle}
                   value={link.label}
                   onChangeText={(v) => updateLink(index, "label", v)}
-                  placeholder="Label (e.g. My Twitter)"
+                  placeholder="Label (e.g. Portfolio)"
                   placeholderTextColor={theme.text.muted}
                 />
               </View>
             ))}
           </View>
 
-          <View style={{ height: 60 }} />
+          <TouchableOpacity
+            style={[styles.bottomSaveBtn, { backgroundColor: theme.brand.primary }]}
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.88}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.bottomSaveText}>Save Profile</Text>
+                <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+              </>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -1288,153 +1188,319 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   backBtn: {
-    padding: 6,
-    borderRadius: 20,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    fontFamily: Typography.fonts.primary,
-  },
-  saveBtn: {
-    paddingHorizontal: 16,
+    width: 34,
     height: 34,
-    borderRadius: 10,
-    minWidth: 72,
+    borderRadius: 17,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  saveBtnText: {
-    color: "#fff",
-    fontWeight: "600",
+  headerTitle: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: 0.15,
+  },
+  headerSaveBtn: {
+    minWidth: 74,
+    height: 34,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  headerSaveText: {
+    fontFamily: "Poppins_500Medium",
     fontSize: 13,
+    lineHeight: 18,
+    color: "#FFFFFF",
   },
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 100,
+    paddingBottom: 34,
+    gap: 12,
   },
-  screenHint: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginBottom: 10,
-    paddingHorizontal: 2,
-  },
-  photoSection: {
-    alignItems: "center",
+  heroCard: {
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: "#121826",
     borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
-    marginBottom: 12,
+    borderColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
+  },
+  heroDotOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  heroPatternA: {
+    position: "absolute",
+    right: -36,
+    top: -48,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    backgroundColor: "rgba(239,68,68,0.25)",
+  },
+  heroPatternB: {
+    position: "absolute",
+    left: -52,
+    bottom: -88,
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    backgroundColor: "rgba(59,130,246,0.22)",
+  },
+  heroPatternC: {
+    position: "absolute",
+    right: 22,
+    top: 30,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: "rgba(245,158,11,0.16)",
+  },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  heroAvatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    overflow: "visible",
   },
   photoPreview: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 2,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
   },
-  cameraIconBadge: {
-    position: "absolute",
-    bottom: 30,
-    right: "34%",
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2,
-    justifyContent: "center",
+  photoFallback: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  photoHint: {
-    fontSize: 11,
-    lineHeight: 14,
+  heroCameraBadge: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#E23744",
+    borderWidth: 2,
+    borderColor: "#121826",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  heroName: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 18,
+    lineHeight: 23,
+    color: "#FFFFFF",
+    letterSpacing: -0.2,
+  },
+  heroMeta: {
+    marginTop: 2,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 11.5,
+    lineHeight: 15,
+    color: "rgba(255,255,255,0.82)",
+  },
+  heroInlineAction: {
     marginTop: 8,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+    backgroundColor: "rgba(255,255,255,0.11)",
+  },
+  heroInlineActionText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 11.5,
+    lineHeight: 15,
+    color: "#FFFFFF",
+  },
+  heroStatusChip: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    backgroundColor: "rgba(0,0,0,0.34)",
+  },
+  heroStatusIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(251,191,36,0.2)",
+  },
+  heroStatusLabel: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 8.8,
+    lineHeight: 11.5,
+    color: "rgba(255,255,255,0.64)",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
+  heroStatusValue: {
+    marginTop: 1,
+    fontFamily: "Poppins_500Medium",
+    fontSize: 12.5,
+    lineHeight: 16.5,
+    color: "#FBBF24",
   },
   card: {
     borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  sectionBar: {
+    width: 4,
+    height: 16,
+    borderRadius: 999,
+  },
+  sectionHeaderText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 0,
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 10,
-    fontFamily: Typography.fonts.primary,
   },
   cardSubtitle: {
-    marginTop: -4,
-    marginBottom: 8,
+    fontFamily: "Poppins_400Regular",
     fontSize: 11,
-    lineHeight: 14,
+    lineHeight: 15,
+    marginTop: -2,
   },
   label: {
-    fontSize: 11,
-    fontWeight: "600",
-    marginBottom: 6,
-    marginTop: 10,
+    marginTop: 2,
+    marginBottom: 4,
+    fontFamily: "Poppins_500Medium",
+    fontSize: 11.5,
+    lineHeight: 15.5,
   },
   input: {
-    borderRadius: 10,
+    borderRadius: 11,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13,
-    lineHeight: 17,
+    lineHeight: 18,
+    fontFamily: "Poppins_400Regular",
   },
   multiline: {
-    minHeight: 92,
+    minHeight: 94,
     paddingTop: 10,
+  },
+  roleContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2,
+  },
+  roleHint: {
+    marginTop: -2,
+    marginBottom: 2,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  roleOption: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 11,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  roleText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   addBtn: {
     padding: 2,
-    marginBottom: 8,
+    marginRight: 2,
   },
   emptyHint: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontFamily: "Poppins_400Regular",
+    fontSize: 11.5,
+    lineHeight: 15.5,
     fontStyle: "italic",
-    marginBottom: 8,
   },
   dynamicItem: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 10,
-    marginBottom: 10,
     gap: 7,
   },
   dynamicItemHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   dynamicItemIndex: {
-    fontSize: 10,
-    fontWeight: "600",
+    fontFamily: "Poppins_500Medium",
+    fontSize: 11,
+    lineHeight: 14,
   },
-  roleContainer: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  roleOption: {
-    flex: 1,
-    flexDirection: "row",
+  bottomSaveBtn: {
+    minHeight: 50,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+    marginBottom: Platform.OS === "ios" ? 24 : 14,
   },
-  roleText: {
-    fontSize: 12,
-    fontWeight: "600",
+  bottomSaveText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#FFFFFF",
   },
 });

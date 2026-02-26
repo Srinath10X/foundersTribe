@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cursorLimitQuery } from "./common.js";
 const nullableText = z.string().trim().max(255).nullable().optional();
 const upsertProfileBody = z.object({
     handle: z.string().trim().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/).optional(),
@@ -35,6 +36,13 @@ export const getUserProfileSchema = z.object({
     params: z.object({}).optional(),
     body: z.object({}).optional(),
     query: z.object({}).optional(),
+});
+export const listUsersSchema = z.object({
+    params: z.object({}).optional(),
+    body: z.object({}).optional(),
+    query: cursorLimitQuery.extend({
+        q: z.string().trim().min(1).max(100).optional(),
+    }),
 });
 export const getUserTestimonialsSchema = z.object({
     params: z.object({

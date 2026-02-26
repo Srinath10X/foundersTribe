@@ -12,6 +12,7 @@ import {
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
+import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
@@ -220,8 +221,8 @@ export default function FreelancerProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<PublicProfileData | null>(null);
+  const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
   const testimonialScrollRef = React.useRef<ScrollView | null>(null);
-  const testimonialScrollXRef = React.useRef(0);
 
   const targetUserId = (typeof id === "string" && id) || profile?.id || "";
   const { data: testimonials = [], refetch: refetchTestimonials } = useUserTestimonials(
@@ -322,20 +323,7 @@ export default function FreelancerProfileScreen() {
   const preselectedService = freelancerServices.find((service) => service.id === serviceId)
     || freelancerServices[0]
     || null;
-
-  const profileType = String(profile?.user_type || profile?.role || "freelancer").toLowerCase();
-  const profileStatus =
-    profileType === "founder"
-      ? "Building Startup"
-      : profileType === "both"
-        ? "Open to Work + Building"
-        : "Open to Work";
-  const statusHint =
-    profileType === "founder"
-      ? "Actively seeking collaborators and early users."
-      : profileType === "both"
-        ? "Open for freelance projects and startup partnerships."
-        : "Open for new projects and high-impact opportunities.";
+  const isFounderProfile = String(profile?.user_type || "").toLowerCase() === "founder";
 
   const openExternalUrl = async (url: string) => {
     const value = String(url || "").trim();
@@ -368,10 +356,6 @@ export default function FreelancerProfileScreen() {
 
   const canSlideTestimonials = testimonialItems.length > 1;
   const testimonialCardWidth = Math.max(260, screenWidth - 72);
-  const scrollTestimonialsBy = (delta: number) => {
-    const nextX = Math.max(0, testimonialScrollXRef.current + delta);
-    testimonialScrollRef.current?.scrollTo({ x: nextX, animated: true });
-  };
 
   if (loading) {
     return (
@@ -456,30 +440,17 @@ export default function FreelancerProfileScreen() {
           </View>
 
           <View style={styles.statusRow}>
-            <View style={styles.heroStatusChip}>
-              <View style={styles.heroStatusIcon}>
-                <Ionicons name="star" size={12} color="#FBBF24" />
-              </View>
-              <View>
-                <T weight="regular" color="rgba(255,255,255,0.62)" style={styles.statusLabel}>
-                  Status
-                </T>
-                <T weight="semiBold" color="#FBBF24" style={styles.statusValue} numberOfLines={1}>
-                  {profileStatus}
-                </T>
-              </View>
-            </View>
-            <View style={styles.statusBadge}>
-              <Ionicons name="trending-up-outline" size={13} color="#FFFFFF" />
-              <T weight="medium" color="#FFFFFF" style={styles.statusBadgeText}>
-                Active
+            <View style={styles.statusToggleWrap}>
+              <T
+                weight="semiBold"
+                color={availabilityEnabled ? "#FFFFFF" : "rgba(255,255,255,0)"}
+                style={styles.statusToggleLabel}
+              >
+                {isFounderProfile ? "Open to Hire" : "Open to Work"}
               </T>
+              <StatusToggleSwitch value={availabilityEnabled} onValueChange={setAvailabilityEnabled} />
             </View>
           </View>
-
-          <T weight="regular" color="rgba(255,255,255,0.75)" style={styles.statusHintText}>
-            {statusHint}
-          </T>
         </View>
       </View>
 
@@ -637,120 +608,77 @@ export default function FreelancerProfileScreen() {
           <View style={styles.blockWrap}>
             <SectionTitle color="#F59E0B" title="Testimonials" />
             <SurfaceCard style={styles.sectionCard}>
-              <View style={styles.testimonialHeadRow}>
-                <View style={styles.testimonialHeadLeft}>
-                  <View style={[styles.testimonialHeadIcon, { backgroundColor: "rgba(245, 158, 11, 0.14)" }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={15} color="#F59E0B" />
-                  </View>
-                  <View>
-                    <T weight="semiBold" color={palette.text} style={styles.testimonialHeadTitle}>
-                      Founder Feedback
-                    </T>
-                    <T weight="regular" color={palette.subText} style={styles.testimonialHeadSub}>
-                      Recent reviews on deliveries
-                    </T>
-                  </View>
-                </View>
-                <View style={styles.testimonialNavRow}>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    disabled={!canSlideTestimonials}
-                    style={[
-                      styles.testimonialNavBtn,
-                      { backgroundColor: palette.card, borderColor: palette.borderLight },
-                      !canSlideTestimonials ? styles.testimonialNavBtnDisabled : null,
-                    ]}
-                    onPress={() => scrollTestimonialsBy(-300)}
-                  >
-                    <Ionicons name="chevron-back" size={15} color={canSlideTestimonials ? palette.text : palette.subText} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    disabled={!canSlideTestimonials}
-                    style={[
-                      styles.testimonialNavBtn,
-                      { backgroundColor: palette.card, borderColor: palette.borderLight },
-                      !canSlideTestimonials ? styles.testimonialNavBtnDisabled : null,
-                    ]}
-                    onPress={() => scrollTestimonialsBy(300)}
-                  >
-                    <Ionicons name="chevron-forward" size={15} color={canSlideTestimonials ? palette.text : palette.subText} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
               {testimonialItems.length === 0 ? (
                 <T weight="regular" color={palette.subText} style={styles.emptyText}>
                   No founder reviews yet.
                 </T>
               ) : (
-                <ScrollView
-                  ref={testimonialScrollRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  scrollEnabled={canSlideTestimonials}
-                  contentContainerStyle={styles.testimonialScroll}
-                  onScroll={(event) => {
-                    testimonialScrollXRef.current = event.nativeEvent.contentOffset.x;
-                  }}
-                  scrollEventThrottle={16}
-                >
-                  {testimonialItems.slice(0, 12).map((item) => {
-                    const reviewer = testimonialName(item);
-                    const avatarSource = testimonialAvatarSource(item);
-                    const gigTitle = item.contract?.gig?.title || "Project";
-                    return (
-                      <View
-                        key={item.id}
-                        style={[
-                          styles.testimonialItemCard,
-                          { width: testimonialCardWidth },
-                          { borderColor: palette.borderLight, backgroundColor: palette.surface },
-                        ]}
-                      >
-                        <View style={styles.testimonialItemHead}>
-                          <View style={styles.testimonialPersonRow}>
-                            {avatarSource ? (
-                              <Avatar source={avatarSource} size={32} />
-                            ) : (
-                              <View style={[styles.testimonialInitial, { backgroundColor: palette.accentSoft }]}> 
-                                <T weight="semiBold" color={palette.accent} style={styles.testimonialInitialText}>
-                                  {reviewer.slice(0, 1).toUpperCase() || "U"}
+                <View style={styles.testimonialCarouselWrap}>
+                  <ScrollView
+                    ref={testimonialScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    scrollEnabled={canSlideTestimonials}
+                    contentContainerStyle={styles.testimonialScroll}
+                  >
+                    {testimonialItems.slice(0, 12).map((item) => {
+                      const reviewer = testimonialName(item);
+                      const avatarSource = testimonialAvatarSource(item);
+                      const gigTitle = item.contract?.gig?.title || "Project";
+                      return (
+                        <View
+                          key={item.id}
+                          style={[
+                            styles.testimonialItemCard,
+                            { width: testimonialCardWidth },
+                            { borderColor: palette.borderLight, backgroundColor: palette.surface },
+                          ]}
+                        >
+                          <View style={styles.testimonialItemHead}>
+                            <View style={styles.testimonialPersonRow}>
+                              {avatarSource ? (
+                                <Avatar source={avatarSource} size={32} />
+                              ) : (
+                                <View style={[styles.testimonialInitial, { backgroundColor: palette.accentSoft }]}> 
+                                  <T weight="semiBold" color={palette.accent} style={styles.testimonialInitialText}>
+                                    {reviewer.slice(0, 1).toUpperCase() || "U"}
+                                  </T>
+                                </View>
+                              )}
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <T weight="semiBold" color={palette.text} style={styles.testimonialReviewer} numberOfLines={1}>
+                                  {reviewer}
+                                </T>
+                                <T weight="regular" color={palette.subText} style={styles.testimonialMeta} numberOfLines={1}>
+                                  {gigTitle}
                                 </T>
                               </View>
-                            )}
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <T weight="semiBold" color={palette.text} style={styles.testimonialReviewer} numberOfLines={1}>
-                                {reviewer}
-                              </T>
-                              <T weight="regular" color={palette.subText} style={styles.testimonialMeta} numberOfLines={1}>
-                                {gigTitle}
-                              </T>
                             </View>
+                            <T weight="regular" color={palette.subText} style={styles.testimonialMeta}>
+                              {testimonialDateLabel(item.created_at)}
+                            </T>
                           </View>
-                          <T weight="regular" color={palette.subText} style={styles.testimonialMeta}>
-                            {testimonialDateLabel(item.created_at)}
+
+                          <View style={styles.testimonialStars}>
+                            {Array.from({ length: 5 }).map((_, idx) => (
+                              <Ionicons
+                                key={`${item.id}-star-${idx}`}
+                                name={idx < Number(item.score || 0) ? "star" : "star-outline"}
+                                size={13}
+                                color={idx < Number(item.score || 0) ? "#F4C430" : palette.subText}
+                              />
+                            ))}
+                          </View>
+
+                          <T weight="regular" color={palette.text} style={styles.testimonialText} numberOfLines={5}>
+                            {item.review_text || "Great collaboration and delivery."}
                           </T>
                         </View>
+                      );
+                    })}
+                  </ScrollView>
 
-                        <View style={styles.testimonialStars}>
-                          {Array.from({ length: 5 }).map((_, idx) => (
-                            <Ionicons
-                              key={`${item.id}-star-${idx}`}
-                              name={idx < Number(item.score || 0) ? "star" : "star-outline"}
-                              size={13}
-                              color={idx < Number(item.score || 0) ? "#F4C430" : palette.subText}
-                            />
-                          ))}
-                        </View>
-
-                        <T weight="regular" color={palette.text} style={styles.testimonialText} numberOfLines={5}>
-                          {item.review_text || "Great collaboration and delivery."}
-                        </T>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
+                </View>
               )}
             </SurfaceCard>
           </View>
@@ -932,59 +860,23 @@ const styles = StyleSheet.create({
   statusRow: {
     marginTop: 14,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-end",
   },
-  heroStatusChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(0,0,0,0.34)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    flex: 1,
-  },
-  heroStatusIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(251, 191, 36, 0.22)",
-    alignItems: "center",
+  statusToggleWrap: {
+    minWidth: 0,
     justifyContent: "center",
-  },
-  statusLabel: {
-    fontSize: 8.5,
-    lineHeight: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  statusValue: {
-    fontSize: 12.5,
-    lineHeight: 16,
-  },
-  statusBadge: {
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.48)",
-    paddingHorizontal: 10,
-    flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
+    flexDirection: "column",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: "transparent",
+    borderWidth: 0,
   },
-  statusBadgeText: {
+  statusToggleLabel: {
     fontSize: 11,
     lineHeight: 14,
-  },
-  statusHintText: {
-    marginTop: 8,
-    fontSize: 10.5,
-    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   quickActionsRow: {
     flexDirection: "row",
@@ -1195,53 +1087,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  testimonialHeadRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  testimonialHeadLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    flex: 1,
-  },
-  testimonialHeadIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  testimonialHeadTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  testimonialHeadSub: {
-    marginTop: 1,
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  testimonialNavRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  testimonialNavBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  testimonialNavBtnDisabled: {
-    opacity: 0.45,
+  testimonialCarouselWrap: {
+    position: "relative",
   },
   testimonialScroll: {
-    marginTop: 10,
-    paddingRight: 6,
+    marginTop: 6,
+    paddingHorizontal: 18,
     gap: 8,
   },
   testimonialItemCard: {

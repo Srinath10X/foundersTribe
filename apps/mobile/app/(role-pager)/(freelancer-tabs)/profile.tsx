@@ -2,13 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
+import ProfileOverviewSheet from "@/components/ProfileOverviewSheet";
+import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { useUserTestimonials } from "@/hooks/useGig";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
@@ -179,7 +180,7 @@ function MoreRow({
     <TouchableOpacity
       activeOpacity={0.85}
       disabled={!isPressable}
-      style={[styles.moreRow]}
+      style={styles.moreRow}
       onPress={onPress}
     >
       <View style={styles.moreRowLeft}>
@@ -212,6 +213,7 @@ function MoreRow({
           <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
         </View>
       )}
+      {!isLogout ? <View pointerEvents="none" /> : null}
     </TouchableOpacity>
   );
 }
@@ -234,10 +236,8 @@ function testimonialAvatarSource(item: Testimonial): string | null {
 }
 
 export default function FreelancerProfileScreen() {
-  const { palette, isDark } = useFlowPalette();
-  const { themeMode } = useTheme();
+  const { palette } = useFlowPalette();
   const tabBarHeight = useBottomTabBarHeight();
-  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { session } = useAuth();
 
@@ -245,10 +245,12 @@ export default function FreelancerProfileScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAppearanceModal, setShowAppearanceModal] = useState(false);
+  const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
+  const [activeOverviewSection, setActiveOverviewSection] = useState<
+    "personal" | "experience" | "previousWorks" | "testimonials" | "social" | null
+  >(null);
   const [storedTestimonials, setStoredTestimonials] = useState<Testimonial[]>([]);
   const [reviewerProfilesById, setReviewerProfilesById] = useState<Record<string, ReviewerProfileLite>>({});
-  const testimonialScrollRef = React.useRef<ScrollView | null>(null);
-  const testimonialScrollXRef = React.useRef(0);
   const profileIdForTestimonials = profile?.id || session?.user?.id || "";
   const { data: testimonials = [], refetch: refetchTestimonials } = useUserTestimonials(
     profileIdForTestimonials,
@@ -489,27 +491,215 @@ export default function FreelancerProfileScreen() {
       }),
     [reviewerProfilesById, testimonialItems],
   );
-  const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
-  const profileStatus =
-    profile?.user_type === "founder"
-      ? "Building Startup"
-      : profile?.user_type === "both"
-        ? "Open to Work + Building"
-        : "Open to Work";
-  const statusHint =
-    profile?.user_type === "founder"
-      ? "Actively seeking collaborators and early users."
-      : profile?.user_type === "both"
-        ? "Open for freelance projects and startup partnerships."
-        : "Open for new projects and high-impact opportunities.";
+  const openUrl = (url: string) => {
+    const value = String(url || "").trim();
+    if (!value) return;
+    const safe = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    Linking.openURL(safe).catch(() => {});
+  };
   const selectAppearance = () => {
     setShowAppearanceModal(true);
   };
-  const canSlideTestimonials = testimonialItemsWithTribeProfiles.length > 1;
-  const testimonialCardWidth = Math.max(260, screenWidth - 72);
-  const scrollTestimonialsBy = (delta: number) => {
-    const nextX = Math.max(0, testimonialScrollXRef.current + delta);
-    testimonialScrollRef.current?.scrollTo({ x: nextX, animated: true });
+  const activeOverviewTitle =
+    activeOverviewSection === "personal"
+      ? "Personal Details"
+      : activeOverviewSection === "experience"
+        ? "Experience"
+        : activeOverviewSection === "previousWorks"
+          ? "Previous Works"
+          : activeOverviewSection === "testimonials"
+            ? "Testimonials"
+            : activeOverviewSection === "social"
+              ? "Connect & Profiles"
+              : "Professional Overview";
+  const renderOverviewContent = () => {
+    if (activeOverviewSection === "personal") {
+      return (
+        <View>
+          <DetailRow icon="call-outline" label="Phone" value={profile?.contact} />
+          <DetailRow icon="home-outline" label="Address" value={profile?.address} />
+          <DetailRow icon="location-outline" label="Location" value={profile?.location} />
+          <DetailRow
+            icon="link-outline"
+            label="LinkedIn"
+            value={profile?.linkedin_url}
+            valueColor={profile?.linkedin_url ? "#3B82F6" : undefined}
+            onPress={profile?.linkedin_url ? () => openUrl(profile.linkedin_url as string) : undefined}
+          />
+          <DetailRow icon="briefcase-outline" label="Role" value={profile?.role} />
+        </View>
+      );
+    }
+
+    if (activeOverviewSection === "experience") {
+      return (
+        <View>
+          {works.length === 0 ? (
+            <T weight="regular" color={palette.subText} style={styles.emptyText}>
+              No experience items added yet.
+            </T>
+          ) : (
+            works.slice(0, 8).map((work, index) => {
+              const duration = work.duration || "Duration";
+              const isCurrent = /present|current/i.test(duration);
+              return (
+                <View key={`${work.company || "work"}-sheet-${index}`} style={styles.workCard}>
+                  <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
+                    <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
+                      {work.role || "Role"}
+                    </T>
+                    <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
+                      {work.company || "Company"}
+                    </T>
+                    <View style={styles.workMetaRow}>
+                      {isCurrent ? (
+                        <View style={styles.currentTag}>
+                          <T weight="medium" color="#2F9254" style={styles.currentTagText}>
+                            Current
+                          </T>
+                        </View>
+                      ) : null}
+                      <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
+                        {duration}
+                      </T>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+      );
+    }
+
+    if (activeOverviewSection === "previousWorks") {
+      return (
+        <View style={styles.sectionStack}>
+          {previousWorks.length === 0 ? (
+            <T weight="regular" color={palette.subText} style={styles.emptyText}>
+              No previous works added yet.
+            </T>
+          ) : (
+            previousWorks.slice(0, 12).map((work, index) => (
+              <View
+                key={`prev-sheet-${index}`}
+                style={[
+                  styles.previousWorkCard,
+                  { borderColor: palette.borderLight, backgroundColor: palette.card },
+                ]}
+              >
+                <View style={styles.previousWorkHead}>
+                  <View style={styles.previousWorkHeadLeft}>
+                    <View style={[styles.previousWorkIconWrap, { backgroundColor: "rgba(14, 165, 233, 0.14)" }]}>
+                      <Ionicons name="briefcase-outline" size={15} color="#0EA5E9" />
+                    </View>
+                    <View style={[styles.previousWorkIndexTag, { borderColor: "rgba(14, 165, 233, 0.3)" }]}>
+                      <T weight="bold" color="#0EA5E9" style={styles.previousWorkIndexText}>
+                        Work {index + 1}
+                      </T>
+                    </View>
+                  </View>
+                </View>
+                <T weight="semiBold" color={palette.text} style={styles.previousWorkTitle} numberOfLines={2}>
+                  {String(work?.title || "Work")}
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.previousWorkDesc} numberOfLines={4}>
+                  {String(work?.description || "Description")}
+                </T>
+              </View>
+            ))
+          )}
+        </View>
+      );
+    }
+
+    if (activeOverviewSection === "testimonials") {
+      return (
+        <View style={styles.sectionStack}>
+          {testimonialItemsWithTribeProfiles.length === 0 ? (
+            <T weight="regular" color={palette.subText} style={styles.emptyText}>
+              No founder reviews yet.
+            </T>
+          ) : (
+            testimonialItemsWithTribeProfiles.slice(0, 12).map((item) => {
+              const reviewer = testimonialName(item);
+              const avatarSource = testimonialAvatarSource(item);
+              const gigTitle = item.contract?.gig?.title || "Project";
+              return (
+                <View
+                  key={`${item.id}-sheet`}
+                  style={[
+                    styles.testimonialItemCard,
+                    { borderColor: palette.borderLight, backgroundColor: palette.surface },
+                  ]}
+                >
+                  <View style={styles.testimonialItemHead}>
+                    <View style={styles.testimonialPersonRow}>
+                      {avatarSource ? (
+                        <Avatar source={avatarSource} size={32} />
+                      ) : (
+                        <View style={[styles.testimonialInitial, { backgroundColor: palette.accentSoft }]}>
+                          <T weight="semiBold" color={palette.accent} style={styles.testimonialInitialText}>
+                            {reviewer.slice(0, 1).toUpperCase() || "U"}
+                          </T>
+                        </View>
+                      )}
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <T weight="semiBold" color={palette.text} style={styles.testimonialReviewer} numberOfLines={1}>
+                          {reviewer}
+                        </T>
+                        <T weight="regular" color={palette.subText} style={styles.testimonialMeta} numberOfLines={1}>
+                          {gigTitle}
+                        </T>
+                      </View>
+                    </View>
+                    <T weight="regular" color={palette.subText} style={styles.testimonialMeta}>
+                      {testimonialDateLabel(item.created_at)}
+                    </T>
+                  </View>
+
+                  <View style={styles.testimonialStars}>
+                    {Array.from({ length: 5 }).map((_, idx) => (
+                      <Ionicons
+                        key={`${item.id}-sheet-star-${idx}`}
+                        name={idx < Number(item.score || 0) ? "star" : "star-outline"}
+                        size={13}
+                        color={idx < Number(item.score || 0) ? "#F4C430" : palette.subText}
+                      />
+                    ))}
+                  </View>
+
+                  <T weight="regular" color={palette.text} style={styles.testimonialText}>
+                    {item.review_text || "Great collaboration and delivery."}
+                  </T>
+                </View>
+              );
+            })
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        {links.length === 0 ? (
+          <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
+        ) : (
+          links.slice(0, 12).map((item, index) => (
+            <MoreRow
+              key={`${item.platform || "link"}-sheet-${index}`}
+              icon="globe-outline"
+              title={item.label || item.platform || "Link"}
+              subtitle={item.url || undefined}
+              onPress={() => openUrl(String(item.url || ""))}
+            />
+          ))
+        )}
+      </View>
+    );
   };
 
   return (
@@ -542,47 +732,30 @@ export default function FreelancerProfileScreen() {
               <T weight="regular" color="rgba(255,255,255,0.8)" style={styles.heroMeta} numberOfLines={1}>
                 @{profile?.username || "user"}
               </T>
-              {profile?.role && (
-                <T weight="regular" color="rgba(255,255,255,0.7)" style={styles.heroRole} numberOfLines={1}>
-                  {profile.role}
+              <TouchableOpacity
+                activeOpacity={0.84}
+                style={styles.heroInlineAction}
+                onPress={() => router.push("/edit-profile")}
+              >
+                <T weight="semiBold" color="#FFFFFF" style={styles.heroInlineActionText}>
+                  Edit Profile &gt;
                 </T>
-              )}
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              style={styles.heroEditBtn}
-              onPress={() => router.push("/edit-profile")}
-            >
-              <T weight="medium" color="#FFFFFF" style={styles.heroEditText}>
-                Edit
-              </T>
-            </TouchableOpacity>
           </View>
 
           <View style={styles.statusRow}>
-            <View style={styles.heroStatusChip}>
-              <View style={styles.heroStatusIcon}>
-                <Ionicons name="star" size={12} color="#FBBF24" />
-              </View>
-              <View>
-                <T weight="regular" color="rgba(255,255,255,0.62)" style={styles.statusLabel}>
-                  Status
-                </T>
-                <T weight="semiBold" color="#FBBF24" style={styles.statusValue} numberOfLines={1}>
-                  {profileStatus}
-                </T>
-              </View>
-            </View>
-            <View style={styles.statusBadge}>
-              <Ionicons name="trending-up-outline" size={13} color="#FFFFFF" />
-              <T weight="medium" color="#FFFFFF" style={styles.statusBadgeText}>
-                Active
+            <View style={styles.statusToggleWrap}>
+              <T
+                weight="semiBold"
+                color={availabilityEnabled ? "#FFFFFF" : "rgba(255,255,255,0)"}
+                style={styles.statusToggleLabel}
+              >
+                Open to Work
               </T>
+              <StatusToggleSwitch value={availabilityEnabled} onValueChange={setAvailabilityEnabled} />
             </View>
           </View>
-          <T weight="regular" color="rgba(255,255,255,0.75)" style={styles.statusHintText}>
-            {statusHint}
-          </T>
         </View>
       </View>
 
@@ -599,312 +772,63 @@ export default function FreelancerProfileScreen() {
             </>
           ) : null}
 
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              style={[styles.quickActionBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-              onPress={() => router.push("/edit-profile")}
-            >
-              <Ionicons name="create-outline" size={17} color="#E23744" />
-              <T weight="medium" color={palette.text} style={styles.quickActionText}>
-                Edit Profile
-              </T>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              style={[styles.quickActionBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-              onPress={() => router.push("/(role-pager)/(freelancer-tabs)/my-services")}
-            >
-              <Ionicons name="briefcase-outline" size={17} color={palette.text} />
-              <T weight="medium" color={palette.text} style={styles.quickActionText}>
-                Manage Services
-              </T>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.blockWrap}>
-            <SectionTitle color="#E23744" title="Personal Details" />
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
-              <DetailRow icon="call-outline" label="Phone" value={profile?.contact} />
-              <DetailRow icon="home-outline" label="Address" value={profile?.address} />
-              <DetailRow icon="location-outline" label="Location" value={profile?.location} />
-              <DetailRow
-                icon="link-outline"
-                label="LinkedIn"
-                value={profile?.linkedin_url}
-                valueColor={profile?.linkedin_url ? "#3B82F6" : undefined}
-                onPress={
-                  profile?.linkedin_url
-                    ? async () => {
-                        const raw = String(profile.linkedin_url || "").trim();
-                        if (!raw) return;
-                        const safe = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-                        const canOpen = await Linking.canOpenURL(safe);
-                        if (canOpen) Linking.openURL(safe).catch(() => {});
-                      }
-                    : undefined
-                }
+              <SectionTitle color="#6366F1" title="Preferences" />
+              <MoreRow
+                icon="briefcase-outline"
+                title="Manage Services"
+                onPress={() => router.push("/my-services")}
               />
-              <DetailRow icon="briefcase-outline" label="Role" value={profile?.role} />
+              <MoreRow
+                icon="color-palette-outline"
+                title="Appearance"
+                onPress={selectAppearance}
+              />
             </SurfaceCard>
           </View>
 
           <View style={styles.blockWrap}>
-            <SectionTitle color="#3B82F6" title="Experience" />
-            <SurfaceCard style={styles.sectionCard}>
-              {works.length === 0 ? (
-                <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                  No experience items added yet.
-                </T>
-              ) : (
-                works.slice(0, 4).map((work, index) => {
-                  const duration = work.duration || "Duration";
-                  const isCurrent = /present|current/i.test(duration);
-                  return (
-                    <View key={`${work.company || "work"}-${index}`} style={styles.workCard}>
-                      <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
-                        <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
-                          {work.role || "Role"}
-                        </T>
-                        <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
-                          {work.company || "Company"}
-                        </T>
-                        <View style={styles.workMetaRow}>
-                          {isCurrent ? (
-                            <View style={styles.currentTag}>
-                              <T weight="medium" color="#2F9254" style={styles.currentTagText}>
-                                Current
-                              </T>
-                            </View>
-                          ) : null}
-                          <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
-                            {duration}
-                          </T>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </SurfaceCard>
-          </View>
-
-          <View style={styles.blockWrap}>
-            <SectionTitle color="#0EA5E9" title="Previous Works" />
-            <SurfaceCard style={styles.sectionCard}>
-              <View style={styles.sectionStack}>
-                {previousWorks.length === 0 ? (
-                  <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                    No previous works added yet.
-                  </T>
-                ) : (
-                  previousWorks.slice(0, 5).map((work, index) => (
-                    <View
-                      key={`prev-${index}`}
-                      style={[
-                        styles.previousWorkCard,
-                        { borderColor: palette.borderLight, backgroundColor: palette.card },
-                      ]}
-                    >
-                      <View style={styles.previousWorkHead}>
-                        <View style={styles.previousWorkHeadLeft}>
-                          <View style={[styles.previousWorkIconWrap, { backgroundColor: "rgba(14, 165, 233, 0.14)" }]}>
-                            <Ionicons name="briefcase-outline" size={15} color="#0EA5E9" />
-                          </View>
-                          <View style={[styles.previousWorkIndexTag, { borderColor: "rgba(14, 165, 233, 0.3)" }]}>
-                            <T weight="bold" color="#0EA5E9" style={styles.previousWorkIndexText}>
-                              Work {index + 1}
-                            </T>
-                          </View>
-                        </View>
-                      </View>
-
-                      <T weight="semiBold" color={palette.text} style={styles.previousWorkTitle} numberOfLines={2}>
-                        {String(work?.title || "Work")}
-                      </T>
-                      <T weight="regular" color={palette.subText} style={styles.previousWorkDesc} numberOfLines={4}>
-                        {String(work?.description || "Description")}
-                      </T>
-                    </View>
-                  ))
-                )}
-              </View>
-            </SurfaceCard>
-          </View>
-
-          <View style={styles.blockWrap}>
-            <SectionTitle color="#F59E0B" title="Testimonials" />
-            <SurfaceCard style={styles.sectionCard}>
-              <View style={styles.testimonialHeadRow}>
-                <View style={styles.testimonialHeadLeft}>
-                  <View style={[styles.testimonialHeadIcon, { backgroundColor: "rgba(245, 158, 11, 0.14)" }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={15} color="#F59E0B" />
-                  </View>
-                  <View>
-                    <T weight="semiBold" color={palette.text} style={styles.testimonialHeadTitle}>
-                      Founder Feedback
-                    </T>
-                    <T weight="regular" color={palette.subText} style={styles.testimonialHeadSub}>
-                      Recent reviews on deliveries
-                    </T>
-                  </View>
-                </View>
-                <View style={styles.testimonialNavRow}>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    disabled={!canSlideTestimonials}
-                    style={[
-                      styles.testimonialNavBtn,
-                      { backgroundColor: palette.card, borderColor: palette.borderLight },
-                      !canSlideTestimonials ? styles.testimonialNavBtnDisabled : null,
-                    ]}
-                    onPress={() => scrollTestimonialsBy(-300)}
-                  >
-                    <Ionicons name="chevron-back" size={15} color={canSlideTestimonials ? palette.text : palette.subText} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    activeOpacity={0.86}
-                    disabled={!canSlideTestimonials}
-                    style={[
-                      styles.testimonialNavBtn,
-                      { backgroundColor: palette.card, borderColor: palette.borderLight },
-                      !canSlideTestimonials ? styles.testimonialNavBtnDisabled : null,
-                    ]}
-                    onPress={() => scrollTestimonialsBy(300)}
-                  >
-                    <Ionicons name="chevron-forward" size={15} color={canSlideTestimonials ? palette.text : palette.subText} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {testimonialItemsWithTribeProfiles.length === 0 ? (
-                <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                  No founder reviews yet.
-                </T>
-              ) : (
-                <ScrollView
-                  ref={testimonialScrollRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  scrollEnabled={canSlideTestimonials}
-                  contentContainerStyle={styles.testimonialScroll}
-                  onScroll={(event) => {
-                    testimonialScrollXRef.current = event.nativeEvent.contentOffset.x;
-                  }}
-                  scrollEventThrottle={16}
-                >
-                  {testimonialItemsWithTribeProfiles.slice(0, 12).map((item) => {
-                    const reviewer = testimonialName(item);
-                    const avatarSource = testimonialAvatarSource(item);
-                    const gigTitle = item.contract?.gig?.title || "Project";
-                    return (
-                      <View
-                        key={item.id}
-                        style={[
-                          styles.testimonialItemCard,
-                          { width: testimonialCardWidth },
-                          { borderColor: palette.borderLight, backgroundColor: palette.surface },
-                        ]}
-                      >
-                        <View style={styles.testimonialItemHead}>
-                          <View style={styles.testimonialPersonRow}>
-                            {avatarSource ? (
-                              <Avatar source={avatarSource} size={32} />
-                            ) : (
-                              <View style={[styles.testimonialInitial, { backgroundColor: palette.accentSoft }]}>
-                                <T weight="semiBold" color={palette.accent} style={styles.testimonialInitialText}>
-                                  {reviewer.slice(0, 1).toUpperCase() || "U"}
-                                </T>
-                              </View>
-                            )}
-                            <View style={{ flex: 1, minWidth: 0 }}>
-                              <T weight="semiBold" color={palette.text} style={styles.testimonialReviewer} numberOfLines={1}>
-                                {reviewer}
-                              </T>
-                              <T weight="regular" color={palette.subText} style={styles.testimonialMeta} numberOfLines={1}>
-                                {gigTitle}
-                              </T>
-                            </View>
-                          </View>
-                          <T weight="regular" color={palette.subText} style={styles.testimonialMeta}>
-                            {testimonialDateLabel(item.created_at)}
-                          </T>
-                        </View>
-
-                        <View style={styles.testimonialStars}>
-                          {Array.from({ length: 5 }).map((_, idx) => (
-                            <Ionicons
-                              key={`${item.id}-star-${idx}`}
-                              name={idx < Number(item.score || 0) ? "star" : "star-outline"}
-                              size={13}
-                              color={idx < Number(item.score || 0) ? "#F4C430" : palette.subText}
-                            />
-                          ))}
-                        </View>
-
-                        <T weight="regular" color={palette.text} style={styles.testimonialText} numberOfLines={5}>
-                          {item.review_text || "Great collaboration and delivery."}
-                        </T>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </SurfaceCard>
-          </View>
-
-          <View style={styles.blockWrap}>
-            <SectionTitle color="#10B981" title="Social Links" />
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
-              {links.length === 0 ? (
-                <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
-              ) : (
-                links.slice(0, 6).map((item, index) => (
-                  <MoreRow
-                    key={`${item.platform || "link"}-${index}`}
-                    icon="globe-outline"
-                    title={item.label || item.platform || "Link"}
-                    subtitle={item.url || undefined}
-                    onPress={() => openUrl(String(item.url || ""))}
-                  />
-                ))
-              )}
+              <SectionTitle color="#F59E0B" title="Professional Overview" />
+              <MoreRow icon="person-outline" title="Personal Details" onPress={() => setActiveOverviewSection("personal")} />
+              <MoreRow icon="folder-open-outline" title="Previous Works" onPress={() => setActiveOverviewSection("previousWorks")} />
             </SurfaceCard>
           </View>
 
           <View style={styles.blockWrap}>
-            <SectionTitle color="#8B5CF6" title="More" />
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
-              <View style={styles.moreStack}>
-                <MoreRow
-                  icon="color-palette-outline"
-                  title="Appearance"
-                  subtitle={appearanceLabel}
-                  onPress={selectAppearance}
-                  trailingIcon={isDark ? "moon-outline" : "sunny-outline"}
-                />
-                <AppearanceModal
-                  visible={showAppearanceModal}
-                  onClose={() => setShowAppearanceModal(false)}
-                />
-
-                <View>
-                  <MoreRow
-                    icon="log-out-outline"
-                    title="Log out"
-                    onPress={async () => {
-                      await supabase.auth.signOut();
-                      router.replace("/login");
-                    }}
-                    isLogout
-                  />
-                </View>
-              </View>
+              <SectionTitle color="#0EA5E9" title="Career Highlights" />
+              <MoreRow icon="briefcase-outline" title="Experience" onPress={() => router.push("/experience")} />
+              <MoreRow icon="chatbubble-ellipses-outline" title="Testimonials" onPress={() => setActiveOverviewSection("testimonials")} />
+              <MoreRow icon="globe-outline" title="Connect & Profiles" onPress={() => setActiveOverviewSection("social")} />
             </SurfaceCard>
           </View>
+
+          <View style={styles.blockWrap}>
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              <MoreRow
+                icon="log-out-outline"
+                title="Log out"
+                onPress={async () => {
+                  await supabase.auth.signOut();
+                  router.replace("/login");
+                }}
+                isLogout
+              />
+            </SurfaceCard>
+          </View>
+          <AppearanceModal
+            visible={showAppearanceModal}
+            onClose={() => setShowAppearanceModal(false)}
+          />
+          <ProfileOverviewSheet
+            visible={Boolean(activeOverviewSection)}
+            title={activeOverviewTitle}
+            onClose={() => setActiveOverviewSection(null)}
+          >
+            {renderOverviewContent()}
+          </ProfileOverviewSheet>
 
           <View style={{ height: tabBarHeight + 16 }} />
         </View>
@@ -935,9 +859,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
-    gap: 20,
+    paddingTop: 6,
+    paddingBottom: 20,
+    gap: 12,
   },
   heroDotOverlay: {
     position: "absolute",
@@ -994,7 +918,7 @@ const styles = StyleSheet.create({
   },
   heroTop: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 12,
   },
   avatarSection: {
@@ -1025,7 +949,6 @@ const styles = StyleSheet.create({
   heroIdentityText: {
     flex: 1,
     minWidth: 0,
-    paddingRight: 4,
   },
   heroName: {
     fontSize: 16,
@@ -1037,81 +960,36 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     lineHeight: 14,
   },
-  heroRole: {
-    marginTop: 4,
-    fontSize: 10.5,
-    lineHeight: 13,
+  heroInlineAction: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingVertical: 2,
   },
-  heroEditBtn: {
-    height: 30,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroEditText: {
-    fontSize: 11,
-    lineHeight: 14,
+  heroInlineActionText: {
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   statusRow: {
     marginTop: 14,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-end",
   },
-  heroStatusChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(0,0,0,0.34)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    flex: 1,
-  },
-  heroStatusIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(251, 191, 36, 0.22)",
+  statusToggleWrap: {
+    minWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
+    backgroundColor: "transparent",
+    borderWidth: 0,
   },
-  statusLabel: {
-    fontSize: 8.5,
-    lineHeight: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  statusValue: {
-    fontSize: 12.5,
-    lineHeight: 16,
-  },
-  statusBadge: {
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.48)",
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  statusBadgeText: {
+  statusToggleLabel: {
     fontSize: 11,
     lineHeight: 14,
-  },
-  statusHintText: {
-    marginTop: 8,
-    fontSize: 10.5,
-    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   quickActionsRow: {
     flexDirection: "row",
@@ -1133,13 +1011,16 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   blockWrap: {
-    gap: 8,
+    gap: 4,
   },
   sectionHeader: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
+    paddingVertical: 6,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 5,
+    marginTop: 0,
+    marginBottom: 4,
   },
   sectionBar: {
     width: 4,
@@ -1153,45 +1034,46 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sectionCard: {
-    padding: 14,
+    padding: 10,
     borderRadius: 14,
   },
   listCard: {
-    paddingVertical: 4,
+    paddingTop: 5,
+    paddingBottom: 5,
     gap: 0,
   },
   sectionStack: {
-    marginTop: 10,
-    gap: 10,
+    marginTop: 0,
+    gap: 6,
   },
   detailRow: {
-    minHeight: 60,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(0,0,0,0.05)",
   },
   detailRowLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     flex: 1,
   },
   detailIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   detailValue: {
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   detailLabel: {
-    marginTop: 2,
+    marginTop: 0,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -1297,53 +1179,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
   },
-  testimonialHeadRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  testimonialHeadLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    flex: 1,
-  },
-  testimonialHeadIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  testimonialHeadTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  testimonialHeadSub: {
-    marginTop: 1,
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  testimonialNavRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  testimonialNavBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  testimonialNavBtnDisabled: {
-    opacity: 0.45,
+  testimonialCarouselWrap: {
+    position: "relative",
   },
   testimonialScroll: {
-    marginTop: 10,
-    paddingRight: 6,
+    marginTop: 6,
+    paddingHorizontal: 18,
     gap: 8,
   },
   testimonialItemCard: {
@@ -1397,15 +1238,24 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   moreStack: {
-    marginTop: 8,
+    marginTop: 2,
   },
   moreRow: {
-    minHeight: 56,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
-    paddingVertical: 10,
+    position: "relative",
+    gap: 6,
+    paddingVertical: 3,
+  },
+  moreRowDivider: {
+    position: "absolute",
+    left: 40,
+    right: 0,
+    bottom: 0,
+    height: 1,
+    backgroundColor: "rgba(17, 17, 17, 0.18)",
   },
   moreRight: {
     flexDirection: "row",
@@ -1415,27 +1265,27 @@ const styles = StyleSheet.create({
   moreRowLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     flex: 1,
   },
   moreIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   moreTitle: {
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12,
+    lineHeight: 15,
   },
   moreSubtitle: {
-    marginTop: 2,
+    marginTop: 0,
     fontSize: 11,
     lineHeight: 14,
   },
   logoutRowEnhance: {
-    marginTop: 4,
+    marginTop: 10,
     borderRadius: 12,
     paddingHorizontal: 10,
     backgroundColor: "rgba(226, 55, 68, 0.06)",

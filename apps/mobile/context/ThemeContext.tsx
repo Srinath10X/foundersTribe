@@ -1,7 +1,7 @@
 import { DarkTheme, LightTheme } from '@/constants/DesignSystem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
-import { useColorScheme as useDeviceColorScheme } from 'react-native';
+import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, View, useColorScheme as useDeviceColorScheme } from 'react-native';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 type Theme = typeof DarkTheme;
@@ -22,6 +22,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const deviceColorScheme = useDeviceColorScheme();
   const [themeMode, setThemeModeState] = useState<ThemeMode>('system');
   const [isThemeLoaded, setIsThemeLoaded] = useState(false);
+  const themeTransitionOpacity = useRef(new Animated.Value(0)).current;
+  const [themeTransitionColor, setThemeTransitionColor] = useState<string | null>(null);
   
   // Load saved theme preference
   useEffect(() => {
@@ -40,11 +42,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setIsThemeLoaded(true);
     }
   };
+
+  const runThemeTransition = (fromTheme: Theme) => {
+    setThemeTransitionColor(fromTheme.background);
+    themeTransitionOpacity.stopAnimation();
+    themeTransitionOpacity.setValue(1);
+    requestAnimationFrame(() => {
+      Animated.timing(themeTransitionOpacity, {
+        toValue: 0,
+        duration: 280,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        setThemeTransitionColor(null);
+      });
+    });
+  };
   
   const setThemeMode = async (mode: ThemeMode) => {
     try {
-      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
       setThemeModeState(mode);
+      runThemeTransition(theme);
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
     } catch (error) {
       console.error('Error saving theme preference:', error);
     }
@@ -69,7 +88,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   
   return (
     <ThemeContext.Provider value={{ theme, themeMode, setThemeMode, toggleTheme, isDark }}>
-      {children}
+      <View style={styles.root}>
+        {children}
+        {themeTransitionColor ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                backgroundColor: themeTransitionColor,
+                opacity: themeTransitionOpacity,
+              },
+            ]}
+          />
+        ) : null}
+      </View>
     </ThemeContext.Provider>
   );
 }
@@ -81,3 +114,9 @@ export function useTheme() {
   }
   return context;
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});

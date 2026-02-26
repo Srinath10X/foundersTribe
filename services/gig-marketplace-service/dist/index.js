@@ -18,6 +18,9 @@ import usersRoutes from "./routes/users.js";
 import feedRoutes from "./routes/feed.js";
 import servicesRoutes from "./routes/services.js";
 const app = express();
+// Cloud Run terminates TLS/load-balancing upstream and forwards client IP via X-Forwarded-*.
+// Rate limiting middleware needs proxy trust enabled to avoid 500 errors on proxied requests.
+app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({
     origin: env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(","),
