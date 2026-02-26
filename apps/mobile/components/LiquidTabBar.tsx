@@ -26,15 +26,15 @@ import { useTheme } from "@/context/ThemeContext";
 import * as tribeApi from "@/lib/tribeApi";
 
 // ─── Layout constants ──────────────────────────────────────────
-export const BAR_HEIGHT = 66;
+export const BAR_HEIGHT = 52;
 export const BAR_BOTTOM = Platform.OS === "ios" ? 28 : 20;
-const BAR_RADIUS = 40;
-const BAR_VERTICAL_PADDING = 7;
+const BAR_RADIUS = 30;
+const BAR_VERTICAL_PADDING = 5;
 const BUBBLE_HEIGHT = BAR_HEIGHT - BAR_VERTICAL_PADDING * 2;
 const BUBBLE_BORDER_RADIUS = BUBBLE_HEIGHT / 2;
 const BUBBLE_INSET = 4;
-const ICON_SIZE = 22;
-const ICON_LABEL_GAP = 3;
+const ICON_SIZE = 18;
+const ICON_LABEL_GAP = 2;
 const SPRING_CONFIG = { damping: 18, stiffness: 200, mass: 0.8 };
 const PRESS_SPRING = { damping: 15, stiffness: 300 };
 const HIDDEN_ROUTE_NAME_SEGMENTS = [
@@ -190,7 +190,7 @@ const ModeSwitchPill = memo(function ModeSwitchPill({
       >
         <Animated.View style={[switchStyles.inner, animatedStyle]}>
           <View style={switchStyles.iconWrap}>
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+            <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
               <Path
                 d="M21,6H9A3,3,0,0,0,6,9H6a3,3,0,0,0,3,3h6a3,3,0,0,1,3,3h0a3,3,0,0,1-3,3H3"
                 stroke={isDark ? "#D4D4D4" : "#525252"}
@@ -235,7 +235,7 @@ const switchStyles = StyleSheet.create({
   },
   pressable: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -244,17 +244,17 @@ const switchStyles = StyleSheet.create({
     justifyContent: "center",
   },
   iconWrap: {
-    width: 20,
-    height: 20,
+    width: 16,
+    height: 16,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 0,
   },
   label: {
-    fontSize: 8.5,
+    fontSize: 7.5,
     fontFamily: "Poppins_500Medium",
     textAlign: "center",
-    lineHeight: 11,
+    lineHeight: 10,
     includeFontPadding: false,
   },
 });
@@ -378,9 +378,9 @@ const tabItemStyles = StyleSheet.create({
     marginBottom: ICON_LABEL_GAP,
   },
   label: {
-    fontSize: 10,
+    fontSize: 9,
     textAlign: "center",
-    lineHeight: 13,
+    lineHeight: 11,
     includeFontPadding: false,
     maxWidth: "90%",
   },
