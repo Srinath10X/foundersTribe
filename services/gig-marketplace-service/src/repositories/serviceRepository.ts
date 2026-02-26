@@ -49,6 +49,8 @@ export type ServiceRequestRow = {
   } | null;
 };
 
+export type ServiceRequestStatus = "pending" | "accepted" | "declined" | "cancelled";
+
 export type ServiceRequestMessageRow = {
   id: string;
   request_id: string;
@@ -264,6 +266,20 @@ export class ServiceRepository {
         "*, service:freelancer_services(id, service_name, description, cost_amount, cost_currency, delivery_time_value, delivery_time_unit, is_active)",
       )
       .eq("id", requestId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (data || null) as ServiceRequestRow | null;
+  }
+
+  async updateServiceRequestStatus(requestId: string, status: ServiceRequestStatus): Promise<ServiceRequestRow | null> {
+    const { data, error } = await this.db
+      .from("service_message_requests")
+      .update({ status })
+      .eq("id", requestId)
+      .select(
+        "*, service:freelancer_services(id, service_name, description, cost_amount, cost_currency, delivery_time_value, delivery_time_unit, is_active)",
+      )
       .maybeSingle();
 
     if (error) throw error;

@@ -162,6 +162,7 @@ export default function ContractChatScreen() {
   const pathname = usePathname();
   const { session } = useAuth();
   const currentUserId = session?.user?.id || "";
+  const showServiceRequests = false;
   const keyboardVerticalOffset = Platform.OS === "ios" ? insets.top + 62 : 0;
 
   const { data, isLoading, error, refetch, isRefetching } = useContracts({ limit: 200 });
@@ -171,7 +172,7 @@ export default function ContractChatScreen() {
     refetch: refetchServiceRequests,
   } = useServiceRequests(
     { limit: 100 },
-    true,
+    showServiceRequests,
     session?.user?.id || currentUserId || "session",
   );
   const contracts = useMemo(() => {
@@ -180,10 +181,11 @@ export default function ContractChatScreen() {
     return all.filter((contract) => contract?.founder_id === currentUserId);
   }, [currentUserId, data?.items]);
   const serviceRequests = useMemo(() => {
+    if (!showServiceRequests) return [];
     const all = serviceRequestsData?.items ?? [];
     if (!currentUserId) return all;
-    return all.filter((request) => request.founder_id === currentUserId || request.freelancer_id === currentUserId);
-  }, [currentUserId, serviceRequestsData?.items]);
+    return all.filter((request) => request.freelancer_id === currentUserId);
+  }, [currentUserId, serviceRequestsData?.items, showServiceRequests]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ChatFilter>("all");
@@ -194,6 +196,9 @@ export default function ContractChatScreen() {
   const [pushBanner, setPushBanner] = useState<PushBannerState | null>(null);
   const pushBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const serviceRequestsRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasContractChats = contracts.length > 0;
+  const liveDotColor = !hasContractChats ? "#94A3B8" : isRealtimeConnected ? "#22C55E" : "#F59E0B";
+  const liveStatusText = !hasContractChats ? "No active contract chats" : isRealtimeConnected ? "Live updates on" : "Reconnecting...";
 
   const showPushBanner = useCallback((nextBanner: PushBannerState) => {
     setPushBanner(nextBanner);
@@ -226,19 +231,22 @@ export default function ContractChatScreen() {
   }, []);
 
   const scheduleServiceRequestsRefetch = useCallback(() => {
+    if (!showServiceRequests) return;
     if (serviceRequestsRefetchTimerRef.current) return;
     serviceRequestsRefetchTimerRef.current = setTimeout(() => {
       serviceRequestsRefetchTimerRef.current = null;
       refetchServiceRequests().catch(() => undefined);
     }, 900);
-  }, [refetchServiceRequests]);
+  }, [refetchServiceRequests, showServiceRequests]);
 
   useEffect(() => {
+    if (!showServiceRequests) return;
     if (!currentUserId) return;
     refetchServiceRequests().catch(() => undefined);
-  }, [currentUserId, refetchServiceRequests]);
+  }, [currentUserId, refetchServiceRequests, showServiceRequests]);
 
   useEffect(() => {
+    if (!showServiceRequests) return;
     if (!currentUserId) return;
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") {
@@ -248,7 +256,7 @@ export default function ContractChatScreen() {
     return () => {
       subscription.remove();
     };
-  }, [currentUserId, refetchServiceRequests]);
+  }, [currentUserId, refetchServiceRequests, showServiceRequests]);
 
   useEffect(() => {
     const userId = currentUserId;
@@ -493,6 +501,7 @@ export default function ContractChatScreen() {
   }, [contracts, currentUserId, publicProfilesByUserId, serviceRequests, session?.access_token]);
 
   useEffect(() => {
+    if (!showServiceRequests) return;
     const userId = currentUserId;
     if (!userId) return;
 
@@ -534,7 +543,7 @@ export default function ContractChatScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, scheduleServiceRequestsRefetch]);
+  }, [currentUserId, scheduleServiceRequestsRefetch, showServiceRequests]);
 
   const statusCounts = useMemo(() => {
     const contractUnread = contracts.filter((contract) => (chatMetaByContractId[contract.id]?.unreadCount || 0) > 0).length;
@@ -715,9 +724,9 @@ export default function ContractChatScreen() {
           <T weight="medium" color={palette.text} style={styles.pageTitle}>Chats</T>
           <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Contract conversations</T>
           <View style={styles.liveRow}>
-            <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
+            <View style={[styles.liveDot, { backgroundColor: liveDotColor }]} />
             <T weight="regular" color={palette.subText} style={styles.liveText}>
-              {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
+              {liveStatusText}
             </T>
           </View>
         </View>
@@ -742,9 +751,9 @@ export default function ContractChatScreen() {
           <T weight="medium" color={palette.text} style={styles.pageTitle}>Chats</T>
           <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Contract conversations</T>
           <View style={styles.liveRow}>
-            <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
+            <View style={[styles.liveDot, { backgroundColor: liveDotColor }]} />
             <T weight="regular" color={palette.subText} style={styles.liveText}>
-              {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
+              {liveStatusText}
             </T>
           </View>
         </View>
@@ -776,9 +785,9 @@ export default function ContractChatScreen() {
           <T weight="medium" color={palette.text} style={styles.pageTitle}>Chats</T>
           <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>Contract conversations</T>
           <View style={styles.liveRow}>
-            <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
+            <View style={[styles.liveDot, { backgroundColor: liveDotColor }]} />
             <T weight="regular" color={palette.subText} style={styles.liveText}>
-              {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
+              {liveStatusText}
             </T>
           </View>
         </View>

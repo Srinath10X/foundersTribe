@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { gigService } from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
-import type { ServiceRequestMessage } from "@/types/gig";
+import type { ServiceRequestMessage, ServiceRequestStatus } from "@/types/gig";
 
 export type ServiceChatMessage = ServiceRequestMessage & {
   pending?: boolean;
@@ -175,6 +175,7 @@ async function resolveAvatar(candidate: unknown, userId: string): Promise<string
 export function useServiceRequestRealtimeChat({ requestId }: Params) {
   const [resolvedRequestId, setResolvedRequestId] = useState<string | null>(requestId ?? null);
   const [messages, setMessages] = useState<ServiceChatMessage[]>([]);
+  const [requestStatus, setRequestStatus] = useState<ServiceRequestStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +227,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
       if (loggedInUserId && request) {
         setFounderId(request.founder_id || null);
         setFreelancerId(request.freelancer_id || null);
+        setRequestStatus(request.status || null);
         const nextViewerRole: ViewerRole =
           request.founder_id === loggedInUserId
             ? "founder"
@@ -276,6 +278,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
         setCounterpartyId(null);
         setFounderId(null);
         setFreelancerId(null);
+        setRequestStatus(null);
         setViewerRole(null);
         setCounterpartyProfile(null);
       }
@@ -300,6 +303,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
   useEffect(() => {
     if (!resolvedRequestId) {
       setLoading(false);
+      setRequestStatus(null);
       return;
     }
     loadInitialMessages(resolvedRequestId);
@@ -331,6 +335,21 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
           }
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "service_message_requests",
+          filter: `id=eq.${resolvedRequestId}`,
+        },
+        (payload) => {
+          const next = payload.new as { status?: ServiceRequestStatus | null } | null;
+          if (next?.status) {
+            setRequestStatus(next.status);
+          }
+        },
+      )
       .subscribe((status) => {
         setIsRealtimeConnected(status === "SUBSCRIBED");
       });
@@ -347,6 +366,10 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
   const sendTextMessage = useCallback(async (body: string) => {
     const text = body.trim();
     if (!text || !resolvedRequestId || !currentUserId) return;
+    if (requestStatus !== "accepted") {
+      setError("Chat is enabled only after the freelancer accepts this request");
+      return;
+    }
     if (isSendingRef.current) return;
 
     isSendingRef.current = true;
@@ -403,7 +426,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
       setSending(false);
       isSendingRef.current = false;
     }
-  }, [counterpartyId, currentUserId, resolvedRequestId]);
+  }, [counterpartyId, currentUserId, requestStatus, resolvedRequestId]);
 
   const retryFailedMessage = useCallback(async (msg: ServiceChatMessage) => {
     if (!msg.failed || msg.message_type !== "text" || !msg.body) return;
@@ -419,6 +442,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
 
   return useMemo(() => ({
     requestId: resolvedRequestId,
+    requestStatus,
     messages,
     loading,
     sending,
@@ -435,6 +459,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
       (resolvedRequestId ? loadInitialMessages(resolvedRequestId, forceRemote) : Promise.resolve()),
   }), [
     resolvedRequestId,
+    requestStatus,
     messages,
     loading,
     sending,
