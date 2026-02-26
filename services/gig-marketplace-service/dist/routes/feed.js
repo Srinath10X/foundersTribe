@@ -6,7 +6,11 @@ const router = Router();
 // Create a post
 router.post("/", validate(createPostSchema), async (req, res, next) => {
     try {
-        const data = await feedService.createPost(req.db, req.user.id, req.body);
+        const userMeta = {
+            full_name: req.user.user_metadata?.full_name,
+            avatar_url: req.user.user_metadata?.avatar_url,
+        };
+        const data = await feedService.createPost(req.db, req.user.id, req.body, userMeta);
         res.status(201).json({ data });
     }
     catch (err) {

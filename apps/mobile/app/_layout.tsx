@@ -206,10 +206,14 @@ function RootLayoutNav() {
           segment === "tribe" ||
           segment === "article" ||
           segment === "article_copy" ||
+          segment === "experience" ||
           segment === "edit-interests" ||
+          segment === "my-services" ||
           segment === "edit-profile" ||
           segment === "search" ||
+          pathname.includes("experience") ||
           pathname.includes("edit-interests") ||
+          pathname.includes("my-services") ||
           pathname.includes("edit-profile") ||
           pathname.includes("/search/");
 
@@ -279,7 +283,30 @@ function RootLayoutNav() {
 
         {/* Other screens */}
         <Stack.Screen name="edit-profile" />
-        <Stack.Screen name="edit-interests" />
+        <Stack.Screen
+          name="edit-interests"
+          options={{
+            presentation: "card",
+            animation: "slide_from_bottom",
+            animationDuration: 280,
+          }}
+        />
+        <Stack.Screen
+          name="my-services"
+          options={{
+            presentation: "card",
+            animation: "slide_from_bottom",
+            animationDuration: 280,
+          }}
+        />
+        <Stack.Screen
+          name="experience"
+          options={{
+            presentation: "card",
+            animation: "slide_from_bottom",
+            animationDuration: 280,
+          }}
+        />
         <Stack.Screen
           name="modal"
           options={{ presentation: "modal" }}

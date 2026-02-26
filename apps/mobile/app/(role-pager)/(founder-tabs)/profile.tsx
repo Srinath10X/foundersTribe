@@ -5,10 +5,11 @@ import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
+import ProfileOverviewSheet from "@/components/ProfileOverviewSheet";
+import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -246,7 +247,7 @@ function MoreRow({
     <TouchableOpacity
       activeOpacity={0.85}
       disabled={!isPressable}
-      style={[styles.moreRow]}
+      style={styles.moreRow}
       onPress={onPress}
     >
       <View style={styles.moreRowLeft}>
@@ -279,13 +280,13 @@ function MoreRow({
           <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
         </View>
       )}
+      {!isLogout ? <View pointerEvents="none" /> : null}
     </TouchableOpacity>
   );
 }
 
 export default function FreelancerProfileScreen() {
-  const { palette, isDark } = useFlowPalette();
-  const { themeMode } = useTheme();
+  const { palette } = useFlowPalette();
   const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
@@ -294,6 +295,10 @@ export default function FreelancerProfileScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAppearanceModal, setShowAppearanceModal] = useState(false);
+  const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
+  const [activeOverviewSection, setActiveOverviewSection] = useState<
+    "personal" | "experience" | "ideas" | "social" | null
+  >(null);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -358,7 +363,6 @@ export default function FreelancerProfileScreen() {
 
   const works = profile?.previous_works || [];
   const links = (profile?.social_links || []).filter((x) => x?.url);
-  const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
   const pitchUrls = Array.from(
     new Set(
       [
@@ -382,20 +386,152 @@ export default function FreelancerProfileScreen() {
     const safe = /^https?:\/\//i.test(value) ? value : `https://${value}`;
     Linking.openURL(safe).catch(() => {});
   };
-  const profileStatus =
-    profile?.user_type === "founder"
-      ? "Building Startup"
-      : profile?.user_type === "both"
-        ? "Open to Work + Building"
-        : "Open to Work";
-  const statusHint =
-    profile?.user_type === "founder"
-      ? "Actively seeking collaborators and early users."
-      : profile?.user_type === "both"
-        ? "Open for freelance projects and startup partnerships."
-        : "Open for new projects and high-impact opportunities.";
   const selectAppearance = () => {
     setShowAppearanceModal(true);
+  };
+  const activeOverviewTitle =
+    activeOverviewSection === "personal"
+      ? "Personal Details"
+      : activeOverviewSection === "experience"
+        ? "Experience"
+        : activeOverviewSection === "ideas"
+          ? "Vision & Ventures"
+          : activeOverviewSection === "social"
+            ? "Connect & Profiles"
+            : "Professional Overview";
+  const renderOverviewContent = () => {
+    if (activeOverviewSection === "personal") {
+      return (
+        <View>
+          <DetailRow icon="call-outline" label="Phone" value={profile?.contact} />
+          <DetailRow icon="home-outline" label="Address" value={profile?.address} />
+          <DetailRow icon="location-outline" label="Location" value={profile?.location} />
+          <DetailRow
+            icon="link-outline"
+            label="LinkedIn"
+            value={profile?.linkedin_url}
+            valueColor={profile?.linkedin_url ? "#3B82F6" : undefined}
+            onPress={profile?.linkedin_url ? () => openUrl(profile.linkedin_url as string) : undefined}
+          />
+          <DetailRow icon="briefcase-outline" label="Role" value={profile?.role} />
+        </View>
+      );
+    }
+
+    if (activeOverviewSection === "experience") {
+      return (
+        <View>
+          {works.length === 0 ? (
+            <T weight="regular" color={palette.subText} style={styles.emptyText}>
+              No experience items added yet.
+            </T>
+          ) : (
+            works.slice(0, 8).map((work, index) => {
+              const duration = work.duration || "Duration";
+              const isCurrent = /present|current/i.test(duration);
+              return (
+                <View key={`${work.company || "work"}-sheet-${index}`} style={styles.workCard}>
+                  <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
+                    <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
+                      {work.role || "Role"}
+                    </T>
+                    <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
+                      {work.company || "Company"}
+                    </T>
+                    <View style={styles.workMetaRow}>
+                      {isCurrent ? (
+                        <View style={styles.currentTag}>
+                          <T weight="medium" color="#2F9254" style={styles.currentTagText}>
+                            Current
+                          </T>
+                        </View>
+                      ) : null}
+                      <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
+                        {duration}
+                      </T>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+      );
+    }
+
+    if (activeOverviewSection === "ideas") {
+      return (
+        <View>
+          {businessIdeaItems.length === 0 ? (
+            <T weight="regular" color={palette.subText} style={styles.emptyText}>
+              No business ideas added.
+            </T>
+          ) : (
+            businessIdeaItems.map((item, index) => (
+              <View
+                key={`idea-sheet-${index}`}
+                style={[
+                  styles.businessIdeaCard,
+                  {
+                    backgroundColor: palette.card,
+                    borderColor: palette.borderLight,
+                  },
+                ]}
+              >
+                <View style={styles.ideaHead}>
+                  <View style={styles.ideaHeadLeft}>
+                    <View style={[styles.ideaIndexTag, { borderColor: "rgba(226,55,68,0.28)" }]}>
+                      <T weight="bold" color="#E23744" style={styles.ideaIndexText}>
+                        Idea {index + 1}
+                      </T>
+                    </View>
+                  </View>
+                  <View style={styles.ideaIconWrap}>
+                    <Ionicons name="bulb-outline" size={15} color="#6B7280" />
+                  </View>
+                </View>
+                <T weight="regular" color={palette.subText} style={styles.businessIdeaText}>
+                  {item.idea}
+                </T>
+                {!!item.pitchUrl && (
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    style={[styles.pitchCta, { borderColor: "#E23744", alignSelf: "flex-start" }]}
+                    onPress={() => openUrl(item.pitchUrl as string)}
+                  >
+                    <Ionicons name="link-outline" size={16} color="#E23744" />
+                    <T weight="medium" color="#E23744" style={styles.pitchTagText}>
+                      Pitch Video
+                    </T>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        {links.length === 0 ? (
+          <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
+        ) : (
+          links.slice(0, 12).map((item, index) => (
+            <MoreRow
+              key={`${item.platform || "link"}-sheet-${index}`}
+              icon="globe-outline"
+              title={item.label || item.platform || "Link"}
+              subtitle={item.url || undefined}
+              onPress={() => openUrl(String(item.url || ""))}
+            />
+          ))
+        )}
+      </View>
+    );
   };
 
   return (
@@ -428,47 +564,30 @@ export default function FreelancerProfileScreen() {
                 <T weight="regular" color="rgba(255,255,255,0.8)" style={styles.heroMeta} numberOfLines={1}>
                   @{profile?.username || "user"}
                 </T>
-                {profile?.role && (
-                  <T weight="regular" color="rgba(255,255,255,0.7)" style={styles.heroRole} numberOfLines={1}>
-                    {profile.role}
+                <TouchableOpacity
+                  activeOpacity={0.84}
+                  style={styles.heroInlineAction}
+                  onPress={() => router.push("/edit-profile")}
+                >
+                  <T weight="semiBold" color="#FFFFFF" style={styles.heroInlineActionText}>
+                    Edit Profile &gt;
                   </T>
-                )}
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                activeOpacity={0.86}
-                style={styles.heroEditBtn}
-                onPress={() => router.push("/edit-profile")}
-              >
-                <T weight="medium" color="#FFFFFF" style={styles.heroEditText}>
-                  Edit
-                </T>
-              </TouchableOpacity>
             </View>
 
             <View style={styles.statusRow}>
-              <View style={styles.heroStatusChip}>
-                <View style={styles.heroStatusIcon}>
-                  <Ionicons name="star" size={12} color="#FBBF24" />
-                </View>
-                <View>
-                  <T weight="regular" color="rgba(255,255,255,0.62)" style={styles.statusLabel}>
-                    Status
-                  </T>
-                  <T weight="semiBold" color="#FBBF24" style={styles.statusValue} numberOfLines={1}>
-                    {profileStatus}
-                  </T>
-                </View>
-              </View>
-              <View style={styles.statusBadge}>
-                <Ionicons name="trending-up-outline" size={13} color="#FFFFFF" />
-                <T weight="medium" color="#FFFFFF" style={styles.statusBadgeText}>
-                  Active
+              <View style={styles.statusToggleWrap}>
+                <T
+                  weight="semiBold"
+                  color={availabilityEnabled ? "#FFFFFF" : "rgba(255,255,255,0)"}
+                  style={styles.statusToggleLabel}
+                >
+                  Open to Hire
                 </T>
+                <StatusToggleSwitch value={availabilityEnabled} onValueChange={setAvailabilityEnabled} />
               </View>
             </View>
-            <T weight="regular" color="rgba(255,255,255,0.75)" style={styles.statusHintText}>
-              {statusHint}
-            </T>
           </View>
       </View>
 
@@ -485,181 +604,51 @@ export default function FreelancerProfileScreen() {
             </>
           ) : null}
 
-          <View style={styles.quickActionsRow}>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              style={[styles.quickActionBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-              onPress={() => router.push("/edit-profile")}
-            >
-              <Ionicons name="create-outline" size={17} color="#E23744" />
-              <T weight="medium" color={palette.text} style={styles.quickActionText}>
-                Edit Profile
-              </T>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.86}
-              style={[styles.quickActionBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-              onPress={() => router.push("/edit-interests")}
-            >
-              <Ionicons name="sparkles-outline" size={17} color="#8B5CF6" />
-              <T weight="medium" color={palette.text} style={styles.quickActionText}>
-                Edit Interests
-              </T>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.blockWrap}>
-            <SectionTitle color="#E23744" title="Personal Details" />
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
-              <DetailRow icon="call-outline" label="Phone" value={profile?.contact} />
-              <DetailRow icon="home-outline" label="Address" value={profile?.address} />
-              <DetailRow icon="location-outline" label="Location" value={profile?.location} />
-              <DetailRow
-                icon="link-outline"
-                label="LinkedIn"
-                value={profile?.linkedin_url}
-                valueColor={profile?.linkedin_url ? "#3B82F6" : undefined}
-                onPress={profile?.linkedin_url ? () => openUrl(profile.linkedin_url as string) : undefined}
+              <SectionTitle color="#6366F1" title="Preferences" />
+              <MoreRow
+                icon="sparkles-outline"
+                title="Edit Interests"
+                onPress={() => router.push("/edit-interests")}
               />
-              <DetailRow icon="briefcase-outline" label="Role" value={profile?.role} />
-            </SurfaceCard>
-          </View>
-
-          <View style={styles.blockWrap}>
-            <SectionTitle color="#3B82F6" title="Experience" />
-            <SurfaceCard style={[styles.sectionCard]}>
-              {works.length === 0 ? (
-                <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                  No experience items added yet.
-                </T>
-              ) : (
-                works.slice(0, 4).map((work, index) => {
-                  const duration = work.duration || "Duration";
-                  const isCurrent = /present|current/i.test(duration);
-                  return (
-                    <View key={`${work.company || "work"}-index`} style={styles.workCard}>
-                      <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
-                        <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
-                          {work.role || "Role"}
-                        </T>
-                        <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
-                          {work.company || "Company"}
-                        </T>
-                        <View style={styles.workMetaRow}>
-                          {isCurrent ? (
-                            <View style={styles.currentTag}>
-                              <T weight="medium" color="#2F9254" style={styles.currentTagText}>
-                                Current
-                              </T>
-                            </View>
-                          ) : null}
-                          <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
-                            {duration}
-                          </T>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </SurfaceCard>
-          </View>
-
-          {(profile?.user_type === "founder" || profile?.user_type === "both") && (
-            <View style={styles.blockWrap}>
-              <SectionTitle color="#F59E0B" title="Business Ideas" />
-              <SurfaceCard style={styles.sectionCard}>
-                {businessIdeaItems.length === 0 ? (
-                  <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                    No business ideas added.
-                  </T>
-                ) : (
-                  businessIdeaItems.map((item, index) => (
-                    <View
-                      key={`idea-${index}`}
-                      style={[
-                        styles.businessIdeaCard,
-                        {
-                          backgroundColor: palette.card,
-                          borderColor: palette.borderLight,
-                        },
-                      ]}
-                    >
-                      <View style={styles.ideaHead}>
-                        <View style={styles.ideaHeadLeft}>
-                          <View style={[styles.ideaIndexTag, { borderColor: "rgba(226,55,68,0.28)" }]}>
-                            <T weight="bold" color="#E23744" style={styles.ideaIndexText}>
-                              Idea {index + 1}
-                            </T>
-                          </View>
-                        </View>
-                        <View style={styles.ideaIconWrap}>
-                          <Ionicons name="bulb-outline" size={15} color="#6B7280" />
-                        </View>
-                      </View>
-                      {/* <T weight="bold" color={palette.text} style={styles.ideaTitle} numberOfLines={2}>
-                        {deriveIdeaTitle(item.idea, index)}
-                      </T> */}
-                      <T weight="regular" color={palette.subText} style={styles.businessIdeaText} numberOfLines={4}>
-                        {item.idea}
-                      </T>
-                      <View style={styles.ideaActionsRow}>
-                        {!!item.pitchUrl && (
-                          <TouchableOpacity
-                            activeOpacity={0.82}
-                            style={[styles.pitchCta, { borderColor: "#E23744" }]}
-                            onPress={() => openUrl(item.pitchUrl as string)}
-                          >
-                            <Ionicons name="link-outline" size={16} color="#E23744" />
-                            <T weight="medium" color="#E23744" style={styles.pitchTagText}>
-                              Pitch Video
-                            </T>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  ))
-                )}
-              </SurfaceCard>
-            </View>
-          )}
-
-          <View style={styles.blockWrap}>
-            <SectionTitle color="#10B981" title="Social Links" />
-            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
-              {links.length === 0 ? (
-                <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
-              ) : (
-                links.slice(0, 6).map((item, index) => (
-                  <MoreRow
-                    key={`${item.platform || "link"}-${index}`}
-                    icon="globe-outline"
-                    title={item.label || item.platform || "Link"}
-                    subtitle={item.url || undefined}
-                    onPress={() => openUrl(String(item.url || ""))}
-                  />
-                ))
-              )}
-            </SurfaceCard>
-          </View>
-
-          <View style={styles.blockWrap}>
-            <SectionTitle color="#8B5CF6" title="More" />
-            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
               <MoreRow
                 icon="color-palette-outline"
                 title="Appearance"
-                subtitle={appearanceLabel}
                 onPress={selectAppearance}
-                trailingIcon={isDark ? "moon-outline" : "sunny-outline"}
               />
-              <AppearanceModal
-                visible={showAppearanceModal}
-                onClose={() => setShowAppearanceModal(false)}
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              <SectionTitle color="#F59E0B" title="Professional Overview" />
+              <MoreRow icon="person-outline" title="Personal Details" onPress={() => setActiveOverviewSection("personal")} />
+              <MoreRow icon="bulb-outline" title="Business Ideas"  onPress={() => setActiveOverviewSection("ideas")} />
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              <SectionTitle color="#0EA5E9" title="Career Highlights" />
+              <MoreRow icon="briefcase-outline" title="Experience" onPress={() => router.push("/experience")} />
+              <MoreRow icon="globe-outline" title="Connect & Profiles" onPress={() => setActiveOverviewSection("social")} />
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              <SectionTitle color="#0EA5E9" title="Collections" />
+              <MoreRow
+                icon="bookmark-outline"
+                title="Your Bookmarks"
+                onPress={() => router.push("/(role-pager)/(founder-tabs)/bookmarks")}
               />
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
               <MoreRow
                 icon="log-out-outline"
                 title="Log out"
@@ -671,6 +660,17 @@ export default function FreelancerProfileScreen() {
               />
             </SurfaceCard>
           </View>
+          <AppearanceModal
+            visible={showAppearanceModal}
+            onClose={() => setShowAppearanceModal(false)}
+          />
+          <ProfileOverviewSheet
+            visible={Boolean(activeOverviewSection)}
+            title={activeOverviewTitle}
+            onClose={() => setActiveOverviewSection(null)}
+          >
+            {renderOverviewContent()}
+          </ProfileOverviewSheet>
 
           <View style={{ height: tabBarHeight + 16 }} />
         </View>
@@ -685,23 +685,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  headerIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
   },
   pageTitle: {
     fontFamily: "Poppins_600SemiBold",
@@ -718,9 +701,9 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
-    gap: 20,
+    paddingTop: 6,
+    paddingBottom: 20,
+    gap: 12,
   },
   heroDotOverlay: {
     position: "absolute",
@@ -777,7 +760,7 @@ const styles = StyleSheet.create({
   },
   heroTop: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 12,
   },
   avatarSection: {
@@ -808,7 +791,6 @@ const styles = StyleSheet.create({
   heroIdentityText: {
     flex: 1,
     minWidth: 0,
-    paddingRight: 4,
   },
   heroName: {
     fontSize: 16,
@@ -820,81 +802,36 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     lineHeight: 14,
   },
-  heroRole: {
-    marginTop: 4,
-    fontSize: 10.5,
-    lineHeight: 13,
+  heroInlineAction: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    paddingVertical: 2,
   },
-  heroEditBtn: {
-    height: 30,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroEditText: {
-    fontSize: 11,
-    lineHeight: 14,
+  heroInlineActionText: {
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   statusRow: {
     marginTop: 14,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-end",
   },
-  heroStatusChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(0,0,0,0.34)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    flex: 1,
-  },
-  heroStatusIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(251, 191, 36, 0.22)",
+  statusToggleWrap: {
+    minWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
+    backgroundColor: "transparent",
+    borderWidth: 0,
   },
-  statusLabel: {
-    fontSize: 8.5,
-    lineHeight: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  statusValue: {
-    fontSize: 12.5,
-    lineHeight: 16,
-  },
-  statusBadge: {
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.48)",
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  statusBadgeText: {
+  statusToggleLabel: {
     fontSize: 11,
     lineHeight: 14,
-  },
-  statusHintText: {
-    marginTop: 8,
-    fontSize: 10.5,
-    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   quickActionsRow: {
     flexDirection: "row",
@@ -916,13 +853,16 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   blockWrap: {
-    gap: 8,
+    gap: 4,
   },
   sectionHeader: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 0,
+    paddingVertical: 6,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 5,
+    marginTop: 0,
+    marginBottom: 4,
   },
   sectionBar: {
     width: 4,
@@ -936,90 +876,46 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sectionCard: {
-    padding: 14,
+    padding: 10,
     borderRadius: 14,
   },
   listCard: {
-    paddingVertical: 4,
+    paddingTop: 5,
+    paddingBottom: 5,
     gap: 0,
   },
+  sectionStack: {
+    marginTop: 0,
+    gap: 6,
+  },
   detailRow: {
-    minHeight: 60,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(0,0,0,0.05)",
   },
   detailRowLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 8,
     flex: 1,
   },
   detailIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
   detailValue: {
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12.5,
+    lineHeight: 16,
   },
   detailLabel: {
-    marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  moreRow: {
-    minHeight: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingVertical: 10,
-  },
-  logoutRowEnhance: {
-    marginTop: 4,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    backgroundColor: "rgba(226, 55, 68, 0.06)",
-    borderWidth: 1,
-    borderColor: "rgba(226, 55, 68, 0.2)",
-  },
-  moreRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  moreRowLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  moreIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoutIconEnhance: {
-    backgroundColor: "rgba(226, 55, 68, 0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(226, 55, 68, 0.28)",
-  },
-  moreTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  moreSubtitle: {
-    marginTop: 2,
+    marginTop: 0,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -1040,14 +936,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(59, 130, 246, 0.2)",
   },
+  workItem: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
   workRole: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
   },
   workCompany: {
     marginTop: 2,
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 14,
   },
   workMetaRow: {
     marginTop: 5,
@@ -1068,20 +970,121 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   workDuration: {
+    marginTop: 1,
     fontSize: 10,
     lineHeight: 13,
   },
-  businessIdeaCard: {
-    padding: 12,
+  previousWorkCard: {
     borderWidth: 1,
     borderRadius: 12,
-    marginBottom: 10,
+    padding: 12,
+  },
+  previousWorkHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  previousWorkHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  previousWorkIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previousWorkIndexTag: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    height: 22,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    backgroundColor: "rgba(14,165,233,0.08)",
+  },
+  previousWorkIndexText: {
+    fontSize: 9.5,
+    lineHeight: 12,
+    textTransform: "uppercase",
+  },
+  previousWorkTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  previousWorkDesc: {
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  testimonialCarouselWrap: {
+    position: "relative",
+  },
+  testimonialScroll: {
+    marginTop: 6,
+    paddingHorizontal: 18,
+    gap: 8,
+  },
+  testimonialItemCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 11,
+    gap: 8,
+  },
+  testimonialItemHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  testimonialPersonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  testimonialInitial: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  testimonialInitialText: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  testimonialReviewer: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  testimonialMeta: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  testimonialStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  testimonialText: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  businessIdeaCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
   },
   ideaHead: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   ideaHeadLeft: {
     flexDirection: "row",
@@ -1111,29 +1114,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     textTransform: "uppercase",
   },
-  ideaTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    marginBottom: 6,
-  },
   businessIdeaText: {
     fontSize: 12,
     lineHeight: 17,
-    marginBottom: 10,
-  },
-  ideaActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  ideaMetaPill: {
-    height: 24,
-    borderRadius: 999,
-    backgroundColor: "rgba(107,114,128,0.12)",
-    paddingHorizontal: 8,
-    alignItems: "center",
-    justifyContent: "center",
+    marginBottom: 8,
   },
   pitchCta: {
     borderWidth: 1,
@@ -1149,7 +1133,64 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   emptyText: {
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  moreStack: {
+    marginTop: 2,
+  },
+  moreRow: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    position: "relative",
+    gap: 6,
+    paddingVertical: 3,
+    paddingBottom: 3,
+  },
+  moreRowDivider: {
+    position: "absolute",
+    left: 40,
+    right: 0,
+    bottom: 0,
+    height: 1,
+    backgroundColor: "rgba(15,23,42,0.18)",
+  },
+  moreRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  moreRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  moreIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  moreTitle: {
     fontSize: 12,
-    lineHeight: 16,
+    lineHeight: 15,
+  },
+  moreSubtitle: {
+    marginTop: 0,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  logoutRowEnhance: {
+    marginTop: 10,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(226, 55, 68, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(226, 55, 68, 0.2)",
   },
 });

@@ -2,11 +2,35 @@ import { FeedRepository } from "../repositories/feedRepository.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
 import { AppError } from "../utils/AppError.js";
 import { mapSupabaseError } from "./dbErrorMap.js";
-export async function createPost(db, authorId, payload) {
+export async function createPost(db, authorId, payload, userMeta) {
     try {
         const repo = new FeedRepository(db);
-        // Ensure user_profiles row exists (FK requirement)
-        await db.from("user_profiles").upsert({ id: authorId }, { onConflict: "id", ignoreDuplicates: true });
+        // Ensure user_profiles row exists with full_name & avatar_url populated.
+        // Check the existing row first so we never overwrite user-set values.
+        const { data: existing } = await db
+            .from("user_profiles")
+            .select("id, full_name, avatar_url")
+            .eq("id", authorId)
+            .maybeSingle();
+        if (!existing) {
+            // No profile yet — create one with auth metadata
+            await db.from("user_profiles").insert({
+                id: authorId,
+                full_name: userMeta?.full_name || null,
+                avatar_url: userMeta?.avatar_url || null,
+            });
+        }
+        else {
+            // Profile exists but name/avatar may be missing — fill from auth metadata
+            const updates = {};
+            if (!existing.full_name && userMeta?.full_name)
+                updates.full_name = userMeta.full_name;
+            if (!existing.avatar_url && userMeta?.avatar_url)
+                updates.avatar_url = userMeta.avatar_url;
+            if (Object.keys(updates).length > 0) {
+                await db.from("user_profiles").update(updates).eq("id", authorId);
+            }
+        }
         const result = await repo.createPost({
             author_id: authorId,
             content: payload.content,
@@ -27,17 +51,35 @@ export async function listFeed(db, query, userId) {
     const { rows } = await repo.listPosts(query, limit, cursor);
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
-    // Check which posts the current user has liked
     if (items.length > 0) {
-        const postIds = items.map((p) => p.id);
-        const { data: likes } = await db
-            .from("feed_post_likes")
-            .select("post_id")
-            .eq("user_id", userId)
-            .in("post_id", postIds);
+        const authorIds = [...new Set(items.map((p) => p.author_id))];
+        // Fetch real profile data from the `profiles` table (tribe-service source of truth)
+        // and liked status in parallel
+        const [{ data: profiles }, { data: likes }] = await Promise.all([
+            db
+                .from("profiles")
+                .select("id, display_name, username, avatar_url, photo_url, bio")
+                .in("id", authorIds),
+            db
+                .from("feed_post_likes")
+                .select("post_id")
+                .eq("user_id", userId)
+                .in("post_id", items.map((p) => p.id)),
+        ]);
+        const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
         const likedSet = new Set((likes || []).map((l) => l.post_id));
         for (const item of items) {
             item.is_liked = likedSet.has(item.id);
+            // Enrich author from `profiles` table, falling back to `user_profiles` join data
+            const tribeProfile = profileMap.get(item.author_id);
+            if (tribeProfile) {
+                item.author = {
+                    id: item.author_id,
+                    full_name: tribeProfile.display_name || item.author?.full_name || null,
+                    avatar_url: tribeProfile.photo_url || tribeProfile.avatar_url || item.author?.avatar_url || null,
+                    handle: tribeProfile.username || item.author?.handle || null,
+                };
+            }
         }
     }
     const nextCursor = hasMore
@@ -53,6 +95,20 @@ export async function getPostById(db, id, userId) {
     // Check if current user liked this post
     const like = await repo.getUserLike(id, userId);
     post.is_liked = !!like;
+    // Enrich author from `profiles` table (tribe-service source of truth)
+    const { data: tribeProfile } = await db
+        .from("profiles")
+        .select("id, display_name, username, avatar_url, photo_url")
+        .eq("id", post.author_id)
+        .maybeSingle();
+    if (tribeProfile) {
+        post.author = {
+            id: post.author_id,
+            full_name: tribeProfile.display_name || post.author?.full_name || null,
+            avatar_url: tribeProfile.photo_url || tribeProfile.avatar_url || post.author?.avatar_url || null,
+            handle: tribeProfile.username || post.author?.handle || null,
+        };
+    }
     return post;
 }
 export async function deletePost(db, id, authorId) {

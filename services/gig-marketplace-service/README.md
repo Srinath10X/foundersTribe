@@ -10,6 +10,27 @@ npm install
 npm run dev
 ```
 
+## Deploy (Cloud Run)
+Use shared scripts from `/deploy` (repo root):
+
+```bash
+./deploy/build-and-push.sh gig-marketplace-service
+./deploy/deploy-cloud-run.sh gig-marketplace-service
+```
+
+Or single command:
+
+```bash
+./deploy/deploy-gig-service.sh
+```
+
+This builds/pushes `gig-marketplace-service` and deploys Cloud Run service `gig-marketplace-service`.
+
+Required Secret Manager secrets:
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_KEY`
+
 ## Base URL
 - `http://localhost:3005/api`
 

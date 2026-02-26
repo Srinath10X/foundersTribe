@@ -197,6 +197,48 @@ export default function CommunityScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.headerActions}
           >
+                        <TouchableOpacity
+              style={[
+                styles.headerBtn,
+                activeView === "tribes" && tribesMode === "my"
+                  ? { backgroundColor: theme.brand.primary }
+                  : {
+                      backgroundColor: theme.surface,
+                    },
+              ]}
+              onPress={() => {
+                setTribesMode("my");
+                setActiveView("tribes");
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={
+                  activeView === "tribes" && tribesMode === "my"
+                    ? "people"
+                    : "people-outline"
+                }
+                size={16}
+                color={
+                  activeView === "tribes" && tribesMode === "my"
+                    ? theme.text.inverse
+                    : theme.text.primary
+                }
+              />
+              <Text
+                style={[
+                  styles.headerBtnText,
+                  {
+                    color:
+                      activeView === "tribes" && tribesMode === "my"
+                        ? theme.text.inverse
+                        : theme.text.primary,
+                  },
+                ]}
+              >
+                My Tribes
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.headerBtn,
@@ -237,49 +279,6 @@ export default function CommunityScreen() {
                 ]}
               >
                 Explore
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.headerBtn,
-                activeView === "tribes" && tribesMode === "my"
-                  ? { backgroundColor: theme.brand.primary }
-                  : {
-                      backgroundColor: theme.surface,
-                    },
-              ]}
-              onPress={() => {
-                setTribesMode("my");
-                setActiveView("tribes");
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={
-                  activeView === "tribes" && tribesMode === "my"
-                    ? "people"
-                    : "people-outline"
-                }
-                size={16}
-                color={
-                  activeView === "tribes" && tribesMode === "my"
-                    ? theme.text.inverse
-                    : theme.text.primary
-                }
-              />
-              <Text
-                style={[
-                  styles.headerBtnText,
-                  {
-                    color:
-                      activeView === "tribes" && tribesMode === "my"
-                        ? theme.text.inverse
-                        : theme.text.primary,
-                  },
-                ]}
-              >
-                My Tribes
               </Text>
             </TouchableOpacity>
 
