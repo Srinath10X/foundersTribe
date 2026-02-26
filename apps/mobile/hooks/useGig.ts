@@ -456,6 +456,30 @@ export function useCreateServiceRequest() {
   });
 }
 
+export function useAcceptServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation<ServiceMessageRequest, GigServiceError, { requestId: string }>({
+    mutationFn: ({ requestId }) => gigService.acceptServiceRequest(requestId),
+    onSuccess: (request) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.detail(request.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.messages(request.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.all });
+    },
+  });
+}
+
+export function useDeclineServiceRequest() {
+  const queryClient = useQueryClient();
+  return useMutation<ServiceMessageRequest, GigServiceError, { requestId: string }>({
+    mutationFn: ({ requestId }) => gigService.declineServiceRequest(requestId),
+    onSuccess: (request) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.detail(request.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.messages(request.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.serviceRequests.all });
+    },
+  });
+}
+
 export function useServiceRequestMessages(
   requestId: string | null | undefined,
   params?: MessageListParams,

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePathname } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useAcceptServiceRequest, useDeclineServiceRequest } from "@/hooks/useGig";
 import { useContractRealtimeChat } from "@/hooks/useContractRealtimeChat";
 import { useServiceRequestRealtimeChat } from "@/hooks/useServiceRequestRealtimeChat";
 
@@ -101,6 +103,9 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
   });
   const activeThread = threadKind === "service" ? serviceThread : contractThread;
   const resolvedContractId = threadKind === "service" ? serviceThread.requestId : contractThread.contractId;
+  const serviceRequestStatus = threadKind === "service" ? serviceThread.requestStatus : null;
+  const acceptServiceRequest = useAcceptServiceRequest();
+  const declineServiceRequest = useDeclineServiceRequest();
   const {
     isRealtimeConnected,
     currentUserId,
@@ -125,6 +130,30 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
   const composerBottom = Platform.OS === "ios" ? Math.max(8, insets.bottom) : 8;
   const androidKeyboardGap = 16;
   const [androidKeyboardOffset, setAndroidKeyboardOffset] = useState(0);
+  const isServicePending = threadKind === "service" && serviceRequestStatus === "pending";
+  const isServiceActionPending = acceptServiceRequest.isPending || declineServiceRequest.isPending;
+  const canSendMessage = !!resolvedContractId && (threadKind !== "service" || serviceRequestStatus === "accepted");
+
+  const requestStatusMeta = useMemo(() => {
+    if (threadKind !== "service") return null;
+    if (serviceRequestStatus === "accepted") {
+      return { label: "Accepted", hint: "You can now chat with each other", color: "#16A34A" };
+    }
+    if (serviceRequestStatus === "declined") {
+      return { label: "Declined", hint: "This request was declined", color: "#DC2626" };
+    }
+    if (serviceRequestStatus === "cancelled") {
+      return { label: "Cancelled", hint: "This request is no longer active", color: "#B45309" };
+    }
+    return {
+      label: "Pending",
+      hint:
+        resolvedViewerRole === "freelancer"
+          ? "Accept or decline this request to continue"
+          : "Waiting for freelancer to accept",
+      color: "#D97706",
+    };
+  }, [resolvedViewerRole, serviceRequestStatus, threadKind]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -152,9 +181,29 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
 
   const handleSend = async () => {
     const body = draft.trim();
-    if (!body) return;
+    if (!body || !canSendMessage) return;
     setDraft("");
     await sendTextMessage(body);
+  };
+
+  const handleAcceptServiceRequest = async () => {
+    if (threadKind !== "service" || !resolvedContractId) return;
+    try {
+      await acceptServiceRequest.mutateAsync({ requestId: resolvedContractId });
+      await serviceThread.refresh(true);
+    } catch (error: any) {
+      Alert.alert("Unable to accept", error?.message || "Please try again.");
+    }
+  };
+
+  const handleDeclineServiceRequest = async () => {
+    if (threadKind !== "service" || !resolvedContractId) return;
+    try {
+      await declineServiceRequest.mutateAsync({ requestId: resolvedContractId });
+      await serviceThread.refresh(true);
+    } catch (error: any) {
+      Alert.alert("Unable to decline", error?.message || "Please try again.");
+    }
   };
 
   const openProfile = () => {
@@ -220,7 +269,7 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[styles.iconBtn, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
             onPress={openProfile}
             disabled={!counterpartyId}
@@ -230,7 +279,7 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
               size={18}
               color={counterpartyId ? palette.text : palette.subText}
             />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
 
         <View style={[styles.body, { backgroundColor: palette.bg }]}>
@@ -239,6 +288,67 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
               <T weight="regular" color={palette.accent} style={styles.errorText}>
                 {error}
               </T>
+            </View>
+          ) : null}
+
+          {requestStatusMeta ? (
+            <View
+              style={[
+                styles.requestStatusWrap,
+                {
+                  borderColor: palette.borderLight,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+            >
+              <View style={[styles.requestStatusDot, { backgroundColor: requestStatusMeta.color }]} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T weight="medium" color={palette.text} style={styles.requestStatusTitle}>
+                  {requestStatusMeta.label}
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.requestStatusHint}>
+                  {requestStatusMeta.hint}
+                </T>
+              </View>
+            </View>
+          ) : null}
+
+          {isServicePending && resolvedViewerRole === "freelancer" ? (
+            <View style={styles.requestActionsRow}>
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleDeclineServiceRequest}
+                disabled={isServiceActionPending}
+                style={[
+                  styles.requestActionBtn,
+                  {
+                    borderColor: palette.borderLight,
+                    backgroundColor: palette.surface,
+                    opacity: isServiceActionPending ? 0.6 : 1,
+                  },
+                ]}
+              >
+                <T weight="medium" color={palette.subText} style={styles.requestActionText}>
+                  Reject
+                </T>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleAcceptServiceRequest}
+                disabled={isServiceActionPending}
+                style={[
+                  styles.requestActionBtn,
+                  {
+                    borderColor: palette.accent,
+                    backgroundColor: palette.accentSoft,
+                    opacity: isServiceActionPending ? 0.6 : 1,
+                  },
+                ]}
+              >
+                <T weight="medium" color={palette.accent} style={styles.requestActionText}>
+                  Accept
+                </T>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -289,7 +399,13 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
                     <View style={{ width: 24 }} />
                   )}
 
-                  <View style={[styles.bubbleWrap, isMine ? styles.bubbleWrapMine : styles.bubbleWrapPeer, isMine && showAvatar ? { marginRight: 4 } : null, isMine ]}>
+                  <View
+                    style={[
+                      styles.bubbleWrap,
+                      isMine ? styles.bubbleWrapMine : styles.bubbleWrapPeer,
+                      isMine && showAvatar ? { marginRight: 4 } : null,
+                    ]}
+                  >
                     {/* <View
                       style={[
                         styles.roleChip,
@@ -368,12 +484,18 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
           >
             <View style={[styles.composer, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
               <TextInput
-                placeholder="Type a message"
+                placeholder={
+                  canSendMessage
+                    ? "Type a message"
+                    : threadKind === "service"
+                      ? "Chat unlocks after request acceptance"
+                      : "Type a message"
+                }
                 placeholderTextColor={palette.subText}
                 style={[styles.input, { color: palette.text, backgroundColor: palette.bg }]}
                 value={draft}
                 onChangeText={setDraft}
-                editable={!!resolvedContractId}
+                editable={canSendMessage}
                 multiline
                 maxLength={1200}
               />
@@ -382,11 +504,11 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
                   styles.sendBtn,
                   {
                     backgroundColor: palette.accent,
-                    opacity: draft.trim() && !sending && !!resolvedContractId ? 1 : 0.45,
+                    opacity: draft.trim() && !sending && canSendMessage ? 1 : 0.45,
                   },
                 ]}
                 onPress={handleSend}
-                disabled={!draft.trim() || sending || !resolvedContractId}
+                disabled={!draft.trim() || sending || !canSendMessage}
               >
                 <Ionicons name="send" size={15} color="#fff" />
               </TouchableOpacity>
@@ -459,6 +581,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   errorText: { fontSize: 10, lineHeight: 13 },
+  requestStatusWrap: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  requestStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  requestStatusTitle: { fontSize: 12, lineHeight: 15 },
+  requestStatusHint: { marginTop: 1, fontSize: 10, lineHeight: 13 },
+  requestActionsRow: {
+    marginBottom: 8,
+    flexDirection: "row",
+    gap: 8,
+  },
+  requestActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestActionText: { fontSize: 12, lineHeight: 16 },
   chatContent: { paddingBottom: 10 },
   dateWrap: { alignItems: "center", marginVertical: 8 },
   datePill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },

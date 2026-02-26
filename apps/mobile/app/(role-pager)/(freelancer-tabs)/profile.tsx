@@ -2,10 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
 
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
-import { TestimonialCarousel } from "@/components/freelancer/TestimonialCarousel";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -108,38 +107,147 @@ function compactLocation(raw: unknown): string | null {
   return null;
 }
 
-function FieldRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string | null }) {
+function SectionTitle({ color, title }: { color: string; title: string }) {
   const { palette } = useFlowPalette();
 
   return (
-    <View style={styles.fieldRow}>
-      <View style={[styles.fieldIcon, { backgroundColor: palette.accentSoft }]}>
-        <Ionicons name={icon} size={13} color={palette.accent} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <T weight="regular" color={palette.subText} style={styles.fieldLabel}>
-          {label}
-        </T>
-        <T weight="medium" color={palette.text} style={styles.fieldValue} numberOfLines={2}>
-          {value || "Not provided"}
-        </T>
-      </View>
+    <View style={styles.sectionHeader}>
+      <View style={[styles.sectionBar, { backgroundColor: color }]} />
+      <T weight="bold" color={palette.subText} style={styles.sectionHeaderText}>
+        {title}
+      </T>
     </View>
   );
 }
 
-export default function FreelancerProfileScreen() {
+function DetailRow({
+  icon,
+  label,
+  value,
+  onPress,
+  valueColor,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value?: string | null;
+  onPress?: () => void;
+  valueColor?: string;
+}) {
   const { palette } = useFlowPalette();
-  const { themeMode, setThemeMode } = useTheme();
+  const isPressable = typeof onPress === "function";
+
+  return (
+    <TouchableOpacity activeOpacity={0.85} disabled={!isPressable} style={styles.detailRow} onPress={onPress}>
+      <View style={styles.detailRowLeft}>
+        <View style={[styles.detailIcon, { backgroundColor: palette.card }]}>
+          <Ionicons name={icon} size={16} color="#9CA3AF" />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T weight="medium" color={valueColor || palette.text} style={styles.detailValue} numberOfLines={2}>
+            {value || "Not provided"}
+          </T>
+          <T weight="regular" color={palette.subText} style={styles.detailLabel}>
+            {label}
+          </T>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function MoreRow({
+  icon,
+  title,
+  subtitle,
+  onPress,
+  isLogout,
+  trailingIcon,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle?: string | null;
+  onPress?: () => void;
+  isLogout?: boolean;
+  trailingIcon?: keyof typeof Ionicons.glyphMap;
+}) {
+  const { palette } = useFlowPalette();
+  const isPressable = typeof onPress === "function";
+  const resolvedSubtitle = subtitle || (isLogout ? "Sign out from this account" : null);
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.85}
+      disabled={!isPressable}
+      style={[styles.moreRow]}
+      onPress={onPress}
+    >
+      <View style={styles.moreRowLeft}>
+        <View
+          style={[
+            styles.moreIcon,
+            { backgroundColor: palette.card },
+          ]}
+        >
+          <Ionicons
+            name={icon}
+            size={16}
+            color={isLogout ? "#E23744" : "#9CA3AF"}
+          />
+        </View>
+        <View>
+          <T weight={isLogout ? "semiBold" : "medium"} color={isLogout ? "#E23744" : palette.text} style={styles.moreTitle}>
+            {title}
+          </T>
+          {resolvedSubtitle && (
+            <T weight="regular" color={isLogout ? "#C2414A" : palette.subText} style={styles.moreSubtitle}>
+              {resolvedSubtitle}
+            </T>
+          )}
+        </View>
+      </View>
+      {!isLogout && (
+        <View style={styles.moreRight}>
+          {trailingIcon ? <Ionicons name={trailingIcon} size={15} color="#9CA3AF" /> : null}
+          <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+function testimonialName(item: Testimonial) {
+  return item.reviewer?.full_name || item.reviewer?.handle || "Member";
+}
+
+function testimonialDateLabel(value?: string | null) {
+  if (!value) return "";
+  const ts = new Date(value).getTime();
+  if (Number.isNaN(ts)) return "";
+  return new Date(ts).toLocaleDateString();
+}
+
+function testimonialAvatarSource(item: Testimonial): string | null {
+  const raw = String(item.reviewer?.avatar_url || "").trim();
+  if (!raw) return null;
+  return /^https?:\/\//i.test(raw) ? raw : null;
+}
+
+export default function FreelancerProfileScreen() {
+  const { palette, isDark } = useFlowPalette();
+  const { setThemeMode } = useTheme();
   const tabBarHeight = useBottomTabBarHeight();
+  const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { session } = useAuth();
 
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAppearanceOptions, setShowAppearanceOptions] = useState(false);
   const [storedTestimonials, setStoredTestimonials] = useState<Testimonial[]>([]);
   const [reviewerProfilesById, setReviewerProfilesById] = useState<Record<string, ReviewerProfileLite>>({});
+  const testimonialScrollRef = React.useRef<ScrollView | null>(null);
+  const testimonialScrollXRef = React.useRef(0);
   const profileIdForTestimonials = profile?.id || session?.user?.id || "";
   const { data: testimonials = [], refetch: refetchTestimonials } = useUserTestimonials(
     profileIdForTestimonials,
@@ -380,22 +488,101 @@ export default function FreelancerProfileScreen() {
       }),
     [reviewerProfilesById, testimonialItems],
   );
-  const lastUpdatedLabel = profile?.updated_at ? new Date(profile.updated_at).toLocaleDateString() : null;
-  const themeOptions: { key: "system" | "light" | "dark"; label: string }[] = [
-    { key: "system", label: "System" },
-    { key: "light", label: "Light" },
-    { key: "dark", label: "Dark" },
-  ];
+  const appearanceLabel = isDark ? "Dark" : "Light";
+  const profileStatus =
+    profile?.user_type === "founder"
+      ? "Building Startup"
+      : profile?.user_type === "both"
+        ? "Open to Work + Building"
+        : "Open to Work";
+  const statusHint =
+    profile?.user_type === "founder"
+      ? "Actively seeking collaborators and early users."
+      : profile?.user_type === "both"
+        ? "Open for freelance projects and startup partnerships."
+        : "Open for new projects and high-impact opportunities.";
+  const selectAppearance = () => {
+    setShowAppearanceOptions((prev) => !prev);
+  };
+  const canSlideTestimonials = testimonialItemsWithTribeProfiles.length > 1;
+  const testimonialCardWidth = Math.max(260, screenWidth - 72);
+  const scrollTestimonialsBy = (delta: number) => {
+    const nextX = Math.max(0, testimonialScrollXRef.current + delta);
+    testimonialScrollRef.current?.scrollTo({ x: nextX, animated: true });
+  };
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
-        <T weight="medium" color={palette.text} style={styles.pageTitle}>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.surface }]}>
+        <T weight="bold" color={palette.text} style={styles.pageTitle}>
           Profile
         </T>
-        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-          Keep your public profile updated
-        </T>
+      </View>
+
+      <View style={styles.heroFixedWrap}>
+        <View style={styles.heroCard}>
+          <View style={styles.heroDotOverlay} />
+          <View style={styles.heroPatternA} />
+          <View style={styles.heroPatternB} />
+          <View style={styles.heroPatternC} />
+          <View style={styles.heroPatternD} />
+
+          <View style={styles.heroTop}>
+            <View style={styles.avatarSection}>
+              <View style={styles.heroAvatarRing}>
+                <Avatar source={profile?.photo_url || people.alex} size={60} />
+                <View style={styles.statusDot} />
+              </View>
+            </View>
+            <View style={styles.heroIdentityText}>
+              <T weight="semiBold" color="#FFFFFF" style={styles.heroName} numberOfLines={2}>
+                {profile?.display_name || "User"}
+              </T>
+              <T weight="regular" color="rgba(255,255,255,0.8)" style={styles.heroMeta} numberOfLines={1}>
+                @{profile?.username || "user"}
+              </T>
+              {profile?.role && (
+                <T weight="regular" color="rgba(255,255,255,0.7)" style={styles.heroRole} numberOfLines={1}>
+                  {profile.role}
+                </T>
+              )}
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.86}
+              style={styles.heroEditBtn}
+              onPress={() => router.push("/edit-profile")}
+            >
+              <T weight="medium" color="#FFFFFF" style={styles.heroEditText}>
+                Edit
+              </T>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.statusRow}>
+            <View style={styles.heroStatusChip}>
+              <View style={styles.heroStatusIcon}>
+                <Ionicons name="star" size={12} color="#FBBF24" />
+              </View>
+              <View>
+                <T weight="regular" color="rgba(255,255,255,0.62)" style={styles.statusLabel}>
+                  Status
+                </T>
+                <T weight="semiBold" color="#FBBF24" style={styles.statusValue} numberOfLines={1}>
+                  {profileStatus}
+                </T>
+              </View>
+            </View>
+            <View style={styles.statusBadge}>
+              <Ionicons name="trending-up-outline" size={13} color="#FFFFFF" />
+              <T weight="medium" color="#FFFFFF" style={styles.statusBadgeText}>
+                Active
+              </T>
+            </View>
+          </View>
+          <T weight="regular" color="rgba(255,255,255,0.75)" style={styles.statusHintText}>
+            {statusHint}
+          </T>
+        </View>
       </View>
 
       <ScrollView
@@ -410,198 +597,344 @@ export default function FreelancerProfileScreen() {
               <SurfaceCard style={styles.sectionCard}><LoadingState rows={3} /></SurfaceCard>
             </>
           ) : null}
-          <SurfaceCard style={styles.heroCard}>
-            <View style={styles.heroTop}>
-              <Avatar source={profile?.photo_url || people.alex} size={64} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <T weight="medium" color={palette.text} style={styles.heroName} numberOfLines={1}>
-                  {profile?.display_name || "User"}
-                </T>
-                <T weight="regular" color={palette.subText} style={styles.heroMeta} numberOfLines={1}>
-                  @{profile?.username || "user"}
-                </T>
-                <T weight="regular" color={palette.subText} style={styles.heroMeta} numberOfLines={1}>
-                  {profile?.user_type || "freelancer"}
-                </T>
-              </View>
-            </View>
 
-            <T weight="regular" color={palette.subText} style={styles.bioText}>
-              {profile?.bio || "Add a short bio to make your profile stronger."}
-            </T>
-            <T weight="regular" color={palette.subText} style={styles.updatedMeta}>
-              Last updated: {lastUpdatedLabel || "Not available"}
-            </T>
-
+          <View style={styles.quickActionsRow}>
             <TouchableOpacity
               activeOpacity={0.86}
-              style={[styles.editBtn, { backgroundColor: palette.accent }]}
+              style={[styles.quickActionBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
               onPress={() => router.push("/edit-profile")}
             >
-              <Ionicons name="create-outline" size={14} color="#fff" />
-              <T weight="medium" color="#fff" style={styles.editBtnText}>
+              <Ionicons name="create-outline" size={17} color="#E23744" />
+              <T weight="medium" color={palette.text} style={styles.quickActionText}>
                 Edit Profile
               </T>
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.86}
-              style={[styles.manageServicesBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+              style={[styles.quickActionBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
               onPress={() => router.push("/(role-pager)/(freelancer-tabs)/my-services")}
             >
-              <Ionicons name="briefcase-outline" size={14} color={palette.text} />
-              <T weight="medium" color={palette.text} style={styles.manageServicesText}>
+              <Ionicons name="briefcase-outline" size={17} color={palette.text} />
+              <T weight="medium" color={palette.text} style={styles.quickActionText}>
                 Manage Services
               </T>
             </TouchableOpacity>
-          </SurfaceCard>
+          </View>
 
-          <SurfaceCard style={styles.sectionCard}>
-            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-              Personal Details
-            </T>
-            <View style={styles.sectionStack}>
-              <FieldRow icon="call-outline" label="Phone" value={profile?.contact} />
-              <FieldRow icon="location-outline" label="Address" value={profile?.address} />
-              <FieldRow icon="navigate-outline" label="Location" value={profile?.location} />
-              <FieldRow icon="logo-linkedin" label="LinkedIn" value={profile?.linkedin_url} />
-              <FieldRow icon="briefcase-outline" label="Role" value={profile?.role} />
-            </View>
-          </SurfaceCard>
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#E23744" title="Personal Details" />
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              <DetailRow icon="call-outline" label="Phone" value={profile?.contact} />
+              <DetailRow icon="home-outline" label="Address" value={profile?.address} />
+              <DetailRow icon="location-outline" label="Location" value={profile?.location} />
+              <DetailRow
+                icon="link-outline"
+                label="LinkedIn"
+                value={profile?.linkedin_url}
+                valueColor={profile?.linkedin_url ? "#3B82F6" : undefined}
+                onPress={
+                  profile?.linkedin_url
+                    ? async () => {
+                        const raw = String(profile.linkedin_url || "").trim();
+                        if (!raw) return;
+                        const safe = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+                        const canOpen = await Linking.canOpenURL(safe);
+                        if (canOpen) Linking.openURL(safe).catch(() => {});
+                      }
+                    : undefined
+                }
+              />
+              <DetailRow icon="briefcase-outline" label="Role" value={profile?.role} />
+            </SurfaceCard>
+          </View>
 
-          <SurfaceCard style={styles.sectionCard}>
-            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-              Experience
-            </T>
-            <View style={styles.sectionStack}>
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#3B82F6" title="Experience" />
+            <SurfaceCard style={styles.sectionCard}>
               {works.length === 0 ? (
                 <T weight="regular" color={palette.subText} style={styles.emptyText}>
                   No experience items added yet.
                 </T>
               ) : (
-                works.slice(0, 4).map((work, index) => (
-                  <View key={`${work.company || "work"}-${index}`} style={[styles.workItem, { borderColor: palette.borderLight }]}> 
-                    <T weight="medium" color={palette.text} style={styles.workRole} numberOfLines={1}>
-                      {work.role || "Role"}
+                works.slice(0, 4).map((work, index) => {
+                  const duration = work.duration || "Duration";
+                  const isCurrent = /present|current/i.test(duration);
+                  return (
+                    <View key={`${work.company || "work"}-${index}`} style={styles.workCard}>
+                      <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
+                        <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
+                          {work.role || "Role"}
+                        </T>
+                        <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
+                          {work.company || "Company"}
+                        </T>
+                        <View style={styles.workMetaRow}>
+                          {isCurrent ? (
+                            <View style={styles.currentTag}>
+                              <T weight="medium" color="#2F9254" style={styles.currentTagText}>
+                                Current
+                              </T>
+                            </View>
+                          ) : null}
+                          <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
+                            {duration}
+                          </T>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#0EA5E9" title="Previous Works" />
+            <SurfaceCard style={styles.sectionCard}>
+              <View style={styles.sectionStack}>
+                {previousWorks.length === 0 ? (
+                  <T weight="regular" color={palette.subText} style={styles.emptyText}>
+                    No previous works added yet.
+                  </T>
+                ) : (
+                  previousWorks.slice(0, 5).map((work, index) => (
+                    <View
+                      key={`prev-${index}`}
+                      style={[
+                        styles.previousWorkCard,
+                        { borderColor: palette.borderLight, backgroundColor: palette.card },
+                      ]}
+                    >
+                      <View style={styles.previousWorkHead}>
+                        <View style={styles.previousWorkHeadLeft}>
+                          <View style={[styles.previousWorkIconWrap, { backgroundColor: "rgba(14, 165, 233, 0.14)" }]}>
+                            <Ionicons name="briefcase-outline" size={15} color="#0EA5E9" />
+                          </View>
+                          <View style={[styles.previousWorkIndexTag, { borderColor: "rgba(14, 165, 233, 0.3)" }]}>
+                            <T weight="bold" color="#0EA5E9" style={styles.previousWorkIndexText}>
+                              Work {index + 1}
+                            </T>
+                          </View>
+                        </View>
+                      </View>
+
+                      <T weight="semiBold" color={palette.text} style={styles.previousWorkTitle} numberOfLines={2}>
+                        {String(work?.title || "Work")}
+                      </T>
+                      <T weight="regular" color={palette.subText} style={styles.previousWorkDesc} numberOfLines={4}>
+                        {String(work?.description || "Description")}
+                      </T>
+                    </View>
+                  ))
+                )}
+              </View>
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#F59E0B" title="Testimonials" />
+            <SurfaceCard style={styles.sectionCard}>
+              <View style={styles.testimonialHeadRow}>
+                <View style={styles.testimonialHeadLeft}>
+                  <View style={[styles.testimonialHeadIcon, { backgroundColor: "rgba(245, 158, 11, 0.14)" }]}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={15} color="#F59E0B" />
+                  </View>
+                  <View>
+                    <T weight="semiBold" color={palette.text} style={styles.testimonialHeadTitle}>
+                      Founder Feedback
                     </T>
-                    <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
-                      {work.company || "Company"}
-                    </T>
-                    <T weight="regular" color={palette.subText} style={styles.workDuration} numberOfLines={1}>
-                      {work.duration || "Duration"}
+                    <T weight="regular" color={palette.subText} style={styles.testimonialHeadSub}>
+                      Recent reviews on deliveries
                     </T>
                   </View>
-                ))
-              )}
-            </View>
-          </SurfaceCard>
+                </View>
+                <View style={styles.testimonialNavRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    disabled={!canSlideTestimonials}
+                    style={[
+                      styles.testimonialNavBtn,
+                      { backgroundColor: palette.card, borderColor: palette.borderLight },
+                      !canSlideTestimonials ? styles.testimonialNavBtnDisabled : null,
+                    ]}
+                    onPress={() => scrollTestimonialsBy(-300)}
+                  >
+                    <Ionicons name="chevron-back" size={15} color={canSlideTestimonials ? palette.text : palette.subText} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    disabled={!canSlideTestimonials}
+                    style={[
+                      styles.testimonialNavBtn,
+                      { backgroundColor: palette.card, borderColor: palette.borderLight },
+                      !canSlideTestimonials ? styles.testimonialNavBtnDisabled : null,
+                    ]}
+                    onPress={() => scrollTestimonialsBy(300)}
+                  >
+                    <Ionicons name="chevron-forward" size={15} color={canSlideTestimonials ? palette.text : palette.subText} />
+                  </TouchableOpacity>
+                </View>
+              </View>
 
-          <SurfaceCard style={styles.sectionCard}>
-            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-              Previous Works
-            </T>
-            <View style={styles.sectionStack}>
-              {previousWorks.length === 0 ? (
+              {testimonialItemsWithTribeProfiles.length === 0 ? (
                 <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                  No previous works added yet.
+                  No founder reviews yet.
                 </T>
               ) : (
-                previousWorks.slice(0, 4).map((work, index) => (
-                  <View key={`prev-${index}`} style={[styles.workItem, { borderColor: palette.borderLight }]}>
-                    <T weight="medium" color={palette.text} style={styles.workRole}>
-                      {String(work?.title || "Work")}
-                    </T>
-                    <T weight="regular" color={palette.subText} style={styles.workCompany}>
-                      {String(work?.description || "Description")}
-                    </T>
-                  </View>
+                <ScrollView
+                  ref={testimonialScrollRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  scrollEnabled={canSlideTestimonials}
+                  contentContainerStyle={styles.testimonialScroll}
+                  onScroll={(event) => {
+                    testimonialScrollXRef.current = event.nativeEvent.contentOffset.x;
+                  }}
+                  scrollEventThrottle={16}
+                >
+                  {testimonialItemsWithTribeProfiles.slice(0, 12).map((item) => {
+                    const reviewer = testimonialName(item);
+                    const avatarSource = testimonialAvatarSource(item);
+                    const gigTitle = item.contract?.gig?.title || "Project";
+                    return (
+                      <View
+                        key={item.id}
+                        style={[
+                          styles.testimonialItemCard,
+                          { width: testimonialCardWidth },
+                          { borderColor: palette.borderLight, backgroundColor: palette.surface },
+                        ]}
+                      >
+                        <View style={styles.testimonialItemHead}>
+                          <View style={styles.testimonialPersonRow}>
+                            {avatarSource ? (
+                              <Avatar source={avatarSource} size={32} />
+                            ) : (
+                              <View style={[styles.testimonialInitial, { backgroundColor: palette.accentSoft }]}>
+                                <T weight="semiBold" color={palette.accent} style={styles.testimonialInitialText}>
+                                  {reviewer.slice(0, 1).toUpperCase() || "U"}
+                                </T>
+                              </View>
+                            )}
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <T weight="semiBold" color={palette.text} style={styles.testimonialReviewer} numberOfLines={1}>
+                                {reviewer}
+                              </T>
+                              <T weight="regular" color={palette.subText} style={styles.testimonialMeta} numberOfLines={1}>
+                                {gigTitle}
+                              </T>
+                            </View>
+                          </View>
+                          <T weight="regular" color={palette.subText} style={styles.testimonialMeta}>
+                            {testimonialDateLabel(item.created_at)}
+                          </T>
+                        </View>
+
+                        <View style={styles.testimonialStars}>
+                          {Array.from({ length: 5 }).map((_, idx) => (
+                            <Ionicons
+                              key={`${item.id}-star-${idx}`}
+                              name={idx < Number(item.score || 0) ? "star" : "star-outline"}
+                              size={13}
+                              color={idx < Number(item.score || 0) ? "#F4C430" : palette.subText}
+                            />
+                          ))}
+                        </View>
+
+                        <T weight="regular" color={palette.text} style={styles.testimonialText} numberOfLines={5}>
+                          {item.review_text || "Great collaboration and delivery."}
+                        </T>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#10B981" title="Social Links" />
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              {links.length === 0 ? (
+                <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
+              ) : (
+                links.slice(0, 6).map((item, index) => (
+                  <MoreRow
+                    key={`${item.platform || "link"}-${index}`}
+                    icon="globe-outline"
+                    title={item.label || item.platform || "Link"}
+                    subtitle={item.url || undefined}
+                    onPress={() => openUrl(String(item.url || ""))}
+                  />
                 ))
               )}
-            </View>
-          </SurfaceCard>
+            </SurfaceCard>
+          </View>
 
-          <TestimonialCarousel
-            title="Testimonials"
-            items={testimonialItemsWithTribeProfiles}
-            emptyText="No founder reviews yet."
-          />
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#8B5CF6" title="More" />
+            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+              <View style={styles.moreStack}>
+                <MoreRow
+                  icon="color-palette-outline"
+                  title="Appearance"
+                  subtitle={appearanceLabel}
+                  onPress={selectAppearance}
+                  trailingIcon={isDark ? "moon-outline" : "sunny-outline"}
+                />
 
-          <SurfaceCard style={styles.sectionCard}>
-            <View style={styles.sectionHeadRow}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                Social Links
-              </T>
-            </View>
-            {links.length === 0 ? (
-              <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                No social links added.
-              </T>
-            ) : (
-              <View style={styles.linksWrap}>
-                {links.slice(0, 6).map((item, index) => (
+              {showAppearanceOptions && (
+                <View style={styles.themeSwitchRow}>
                   <TouchableOpacity
-                    key={`${item.platform || "link"}-${index}`}
-                    style={[styles.linkPill, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-                    activeOpacity={0.82}
-                    onPress={async () => {
-                      const raw = String(item.url || "").trim();
-                      if (!raw) return;
-                      const safe = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-                      const canOpen = await Linking.canOpenURL(safe);
-                      if (canOpen) Linking.openURL(safe).catch(() => {});
-                    }}
-                  >
-                    <Ionicons name="link-outline" size={13} color={palette.subText} />
-                    <T weight="regular" color={palette.text} style={styles.linkText} numberOfLines={1}>
-                      {item.label || item.platform || "Link"}
-                    </T>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </SurfaceCard>
-
-          <SurfaceCard style={styles.sectionCard}>
-            <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-              Appearance
-            </T>
-            <View style={styles.themeSwitchRow}>
-              {themeOptions.map((option) => {
-                const selected = themeMode === option.key;
-                return (
-                  <TouchableOpacity
-                    key={option.key}
                     activeOpacity={0.86}
                     style={[
                       styles.themeOption,
                       {
-                        borderColor: selected ? palette.accent : palette.borderLight,
-                        backgroundColor: selected ? palette.accentSoft : palette.surface,
+                        borderColor: !isDark ? "#E23744" : palette.borderLight,
+                        backgroundColor: !isDark ? "rgba(226, 55, 68, 0.1)" : palette.surface,
                       },
                     ]}
-                    onPress={() => setThemeMode(option.key)}
+                    onPress={() => setThemeMode("light")}
                   >
-                    <T weight={selected ? "medium" : "regular"} color={selected ? palette.accent : palette.subText} style={styles.themeOptionText}>
-                      {option.label}
+                    <T weight={!isDark ? "medium" : "regular"} color={!isDark ? "#E23744" : palette.subText} style={styles.themeOptionText}>
+                      Light
                     </T>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
-          </SurfaceCard>
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    style={[
+                      styles.themeOption,
+                      {
+                        borderColor: isDark ? "#E23744" : palette.borderLight,
+                        backgroundColor: isDark ? "rgba(226, 55, 68, 0.1)" : palette.surface,
+                      },
+                    ]}
+                    onPress={() => setThemeMode("dark")}
+                  >
+                    <T weight={isDark ? "medium" : "regular"} color={isDark ? "#E23744" : palette.subText} style={styles.themeOptionText}>
+                      Dark
+                    </T>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-          <TouchableOpacity
-            activeOpacity={0.86}
-            style={[styles.logoutBtn, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}
-            onPress={async () => {
-              await supabase.auth.signOut();
-              router.replace("/login");
-            }}
-          >
-            <Ionicons name="log-out-outline" size={15} color={palette.accent} />
-            <T weight="medium" color={palette.accent} style={styles.logoutBtnText}>
-              Logout
-            </T>
-          </TouchableOpacity>
+                <View>
+                  <MoreRow
+                    icon="log-out-outline"
+                    title="Log out"
+                    onPress={async () => {
+                      await supabase.auth.signOut();
+                      router.replace("/login");
+                    }}
+                    isLogout
+                  />
+                </View>
+              </View>
+            </SurfaceCard>
+          </View>
 
           <View style={{ height: tabBarHeight + 16 }} />
         </View>
@@ -613,120 +946,301 @@ export default function FreelancerProfileScreen() {
 const styles = StyleSheet.create({
   header: {
     paddingTop: 54,
-    paddingHorizontal: 18,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
   },
   pageTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    letterSpacing: -0.2,
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 21,
+    lineHeight: 27,
+    letterSpacing: 0.2,
+    textAlign: "center",
+    alignSelf: "center",
   },
-  pageSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
+  heroFixedWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   content: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 20,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+    gap: 20,
+  },
+  heroDotOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(255,255,255,0.03)",
+  },
+  heroPatternA: {
+    position: "absolute",
+    right: -30,
+    top: -40,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "rgba(239, 68, 68, 0.28)",
+  },
+  heroPatternB: {
+    position: "absolute",
+    left: -60,
+    bottom: -90,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(59, 130, 246, 0.24)",
+  },
+  heroPatternC: {
+    position: "absolute",
+    right: 18,
+    top: 28,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(245, 158, 11, 0.16)",
+  },
+  heroPatternD: {
+    position: "absolute",
+    left: 24,
+    bottom: 18,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
   heroCard: {
-    padding: 14,
-    borderRadius: 14,
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: "#121826",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
   },
   heroTop: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 12,
   },
+  avatarSection: {
+    width: 64,
+    height: 64,
+  },
+  heroAvatarRing: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.28)",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusDot: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#22C55E",
+    borderWidth: 2,
+    borderColor: "#121826",
+  },
+  heroIdentityText: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 4,
+  },
   heroName: {
-    fontSize: 15,
-    lineHeight: 19,
+    fontSize: 16,
+    lineHeight: 20,
     letterSpacing: -0.2,
   },
   heroMeta: {
-    marginTop: 1,
+    marginTop: 2,
+    fontSize: 11.5,
+    lineHeight: 14,
+  },
+  heroRole: {
+    marginTop: 4,
+    fontSize: 10.5,
+    lineHeight: 13,
+  },
+  heroEditBtn: {
+    height: 30,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroEditText: {
     fontSize: 11,
     lineHeight: 14,
   },
-  bioText: {
-    marginTop: 10,
-    fontSize: 12,
-    lineHeight: 17,
+  statusRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  updatedMeta: {
-    marginTop: 6,
-    fontSize: 10,
-    lineHeight: 13,
+  heroStatusChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(0,0,0,0.34)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    flex: 1,
   },
-  editBtn: {
-    marginTop: 12,
-    height: 36,
-    borderRadius: 10,
+  heroStatusIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(251, 191, 36, 0.22)",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
   },
-  editBtnText: {
-    fontSize: 12,
+  statusLabel: {
+    fontSize: 8.5,
+    lineHeight: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  statusValue: {
+    fontSize: 12.5,
     lineHeight: 16,
   },
-  manageServicesBtn: {
+  statusBadge: {
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(34,197,94,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.48)",
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  statusHintText: {
     marginTop: 8,
-    height: 34,
-    borderRadius: 10,
+    fontSize: 10.5,
+    lineHeight: 15,
+  },
+  quickActionsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  quickActionBtn: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 12,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 6,
+    paddingHorizontal: 8,
   },
-  manageServicesText: {
-    fontSize: 11,
-    lineHeight: 14,
+  quickActionText: {
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  blockWrap: {
+    gap: 8,
+  },
+  sectionHeader: {
+    paddingHorizontal: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sectionBar: {
+    width: 4,
+    height: 16,
+    borderRadius: 999,
+  },
+  sectionHeaderText: {
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
   sectionCard: {
     padding: 14,
     borderRadius: 14,
   },
-  sectionHeadRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    letterSpacing: -0.2,
+  listCard: {
+    paddingVertical: 4,
+    gap: 0,
   },
   sectionStack: {
     marginTop: 10,
     gap: 10,
   },
-  fieldRow: {
+  detailRow: {
+    minHeight: 60,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0,0,0,0.05)",
   },
-  fieldIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  detailRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  detailIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-  fieldLabel: {
-    fontSize: 10,
-    lineHeight: 13,
+  detailValue: {
+    fontSize: 13,
+    lineHeight: 17,
   },
-  fieldValue: {
-    marginTop: 1,
-    fontSize: 12,
-    lineHeight: 16,
+  detailLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  workCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+  workIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(59, 130, 246, 0.2)",
   },
   workItem: {
     borderWidth: 1,
@@ -743,31 +1257,169 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
   },
+  workMetaRow: {
+    marginTop: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  currentTag: {
+    borderRadius: 999,
+    backgroundColor: "rgba(56, 189, 120, 0.15)",
+    paddingHorizontal: 8,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  currentTagText: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
   workDuration: {
     marginTop: 1,
     fontSize: 10,
     lineHeight: 13,
   },
-  linksWrap: {
-    marginTop: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  linkPill: {
+  previousWorkCard: {
     borderWidth: 1,
-    borderRadius: 999,
-    height: 30,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    padding: 12,
+  },
+  previousWorkHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  previousWorkHeadLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    maxWidth: "100%",
+    gap: 8,
   },
-  linkText: {
+  previousWorkIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previousWorkIndexTag: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    height: 22,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    backgroundColor: "rgba(14,165,233,0.08)",
+  },
+  previousWorkIndexText: {
+    fontSize: 9.5,
+    lineHeight: 12,
+    textTransform: "uppercase",
+  },
+  previousWorkTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  previousWorkDesc: {
+    marginTop: 5,
     fontSize: 11,
-    lineHeight: 14,
-    maxWidth: 170,
+    lineHeight: 16,
+  },
+  testimonialHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  testimonialHeadLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    flex: 1,
+  },
+  testimonialHeadIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  testimonialHeadTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  testimonialHeadSub: {
+    marginTop: 1,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  testimonialNavRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  testimonialNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  testimonialNavBtnDisabled: {
+    opacity: 0.45,
+  },
+  testimonialScroll: {
+    marginTop: 10,
+    paddingRight: 6,
+    gap: 8,
+  },
+  testimonialItemCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 11,
+    gap: 8,
+  },
+  testimonialItemHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  testimonialPersonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  testimonialInitial: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  testimonialInitialText: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  testimonialReviewer: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  testimonialMeta: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  testimonialStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  testimonialText: {
+    fontSize: 11,
+    lineHeight: 16,
   },
   emptyText: {
     marginTop: 10,
@@ -775,7 +1427,8 @@ const styles = StyleSheet.create({
     lineHeight: 14,
   },
   themeSwitchRow: {
-    marginTop: 10,
+    marginTop: 8,
+    marginBottom: 12,
     flexDirection: "row",
     gap: 8,
   },
@@ -791,18 +1444,50 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
   },
-  logoutBtn: {
-    borderWidth: 1,
-    borderRadius: 12,
-    height: 44,
-    paddingHorizontal: 14,
+  moreStack: {
+    marginTop: 8,
+  },
+  moreRow: {
+    minHeight: 56,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 7,
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 10,
   },
-  logoutBtnText: {
-    fontSize: 12,
-    lineHeight: 16,
+  moreRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  moreRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  moreIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  moreTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  moreSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  logoutRowEnhance: {
+    marginTop: 4,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    backgroundColor: "rgba(226, 55, 68, 0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(226, 55, 68, 0.2)",
   },
 });

@@ -113,3 +113,9 @@ export const markServiceRequestMessagesReadSchema = z.object({
   body: z.object({}).optional(),
   query: z.object({}).optional(),
 });
+
+export const updateServiceRequestStatusSchema = z.object({
+  params: z.object({ id: uuidSchema }),
+  body: z.object({}).optional(),
+  query: z.object({}).optional(),
+});

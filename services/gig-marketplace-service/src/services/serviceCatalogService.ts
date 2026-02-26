@@ -1,5 +1,9 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { ServiceRepository, type ServiceCatalogRow } from "../repositories/serviceRepository.js";
+import {
+  ServiceRepository,
+  type ServiceCatalogRow,
+  type ServiceRequestStatus,
+} from "../repositories/serviceRepository.js";
 import { AppError } from "../utils/AppError.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
 import { mapSupabaseError } from "./dbErrorMap.js";
@@ -225,16 +229,6 @@ export async function createServiceRequest(
 
     const existing = await repo.findOpenRequest(founderId, payload.freelancer_id, serviceId);
     if (existing) {
-      await repo.insertServiceRequestMessage({
-        request_id: existing.id,
-        sender_id: founderId,
-        message_type: "text",
-        body: buildInitialMessage(existing.service?.service_name),
-        metadata: {
-          source: "service_request",
-          kind: "repeat_request",
-        },
-      });
       const refreshedExisting = await repo.getServiceRequestById(existing.id);
       if (!refreshedExisting) {
         throw new AppError("Service request created but not found", 500, "internal_error");
@@ -351,8 +345,8 @@ export async function createServiceRequestMessage(
       throw new AppError("Unauthorized", 403, "forbidden");
     }
 
-    if (request.status === "declined" || request.status === "cancelled") {
-      throw new AppError("Messaging is disabled for this request", 409, "request_closed");
+    if (request.status !== "accepted") {
+      throw new AppError("Messaging is available after request acceptance", 409, "request_not_accepted");
     }
 
     return await repo.insertServiceRequestMessage({
@@ -366,6 +360,58 @@ export async function createServiceRequestMessage(
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw mapSupabaseError(error, "Failed to send service message");
+  }
+}
+
+async function transitionServiceRequestStatus(
+  db: SupabaseClient,
+  requestId: string,
+  userId: string,
+  targetStatus: ServiceRequestStatus,
+) {
+  const repo = new ServiceRepository(db);
+  const request = await repo.getServiceRequestById(requestId);
+  if (!request) throw new AppError("Request not found", 404, "not_found");
+
+  if (request.freelancer_id !== userId) {
+    throw new AppError("Only the freelancer can update this request", 403, "forbidden");
+  }
+
+  if (request.status === targetStatus) {
+    return {
+      ...request,
+      unread_count: request.unread_freelancer_count,
+    };
+  }
+
+  if (request.status !== "pending") {
+    throw new AppError(`Cannot update request in ${request.status} state`, 409, "invalid_request_status");
+  }
+
+  const updated = await repo.updateServiceRequestStatus(requestId, targetStatus);
+  if (!updated) throw new AppError("Request not found", 404, "not_found");
+
+  return {
+    ...updated,
+    unread_count: updated.unread_freelancer_count,
+  };
+}
+
+export async function acceptServiceRequest(db: SupabaseClient, requestId: string, userId: string) {
+  try {
+    return await transitionServiceRequestStatus(db, requestId, userId, "accepted");
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw mapSupabaseError(error, "Failed to accept service request");
+  }
+}
+
+export async function declineServiceRequest(db: SupabaseClient, requestId: string, userId: string) {
+  try {
+    return await transitionServiceRequestStatus(db, requestId, userId, "declined");
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw mapSupabaseError(error, "Failed to decline service request");
   }
 }
 
