@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { validate } from "../middleware/validate.js";
-import { createServiceRequestMessageSchema, createServiceRequestSchema, getServiceRequestSchema, getFreelancerServicesByUserSchema, listFreelancerServicesSchema, listMyServicesSchema, listServiceRequestMessagesSchema, listServiceRequestsSchema, markServiceRequestMessagesReadSchema, upsertMyServicesSchema, } from "../schemas/serviceSchemas.js";
+import { createServiceRequestMessageSchema, createServiceRequestSchema, getServiceRequestSchema, getFreelancerServicesByUserSchema, listFreelancerServicesSchema, listMyServicesSchema, listServiceRequestMessagesSchema, listServiceRequestsSchema, markServiceRequestMessagesReadSchema, updateServiceRequestStatusSchema, upsertMyServicesSchema, } from "../schemas/serviceSchemas.js";
 import * as serviceCatalogService from "../services/serviceCatalogService.js";
 const router = Router();
 router.get("/", validate(listFreelancerServicesSchema), async (req, res, next) => {
@@ -87,6 +87,24 @@ router.post("/requests/:id/messages", validate(createServiceRequestMessageSchema
 router.post("/requests/:id/messages/read", validate(markServiceRequestMessagesReadSchema), async (req, res, next) => {
     try {
         const data = await serviceCatalogService.markServiceRequestMessagesRead(req.db, req.params.id, req.user.id);
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+router.post("/requests/:id/accept", validate(updateServiceRequestStatusSchema), async (req, res, next) => {
+    try {
+        const data = await serviceCatalogService.acceptServiceRequest(req.db, req.params.id, req.user.id);
+        res.json({ data });
+    }
+    catch (err) {
+        next(err);
+    }
+});
+router.post("/requests/:id/decline", validate(updateServiceRequestStatusSchema), async (req, res, next) => {
+    try {
+        const data = await serviceCatalogService.declineServiceRequest(req.db, req.params.id, req.user.id);
         res.json({ data });
     }
     catch (err) {

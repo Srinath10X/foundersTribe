@@ -4,6 +4,7 @@ import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
+import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import {
   Avatar,
   FlowScreen,
@@ -262,6 +263,7 @@ export default function FounderProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showAppearanceModal, setShowAppearanceModal] = useState(false);
+  const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
 
   const {
     data: gigsData,
@@ -403,18 +405,7 @@ export default function FounderProfileScreen() {
   };
 
   const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
-  const profileStatus =
-    profile?.user_type === "founder"
-      ? "Building Startup"
-      : profile?.user_type === "both"
-        ? "Open to Work + Building"
-        : "Open to Work";
-  const statusHint =
-    profile?.user_type === "founder"
-      ? "Actively seeking collaborators and early users."
-      : profile?.user_type === "both"
-        ? "Open for freelance projects and startup partnerships."
-        : "Open for new projects and high-impact opportunities.";
+  const isFounderProfile = String(profile?.user_type || "").toLowerCase() === "founder";
   const selectAppearance = () => {
     setShowAppearanceModal(true);
   };
@@ -462,36 +453,24 @@ export default function FounderProfileScreen() {
                 onPress={() => router.push("/edit-profile")}
               >
                 <T weight="medium" color="#FFFFFF" style={styles.heroEditText}>
-                  Edit
+                  Edit Profile &gt;
                 </T>
               </TouchableOpacity>
             ) : null}
           </View>
 
           <View style={styles.statusRow}>
-            <View style={styles.heroStatusChip}>
-              <View style={styles.heroStatusIcon}>
-                <Ionicons name="star" size={12} color="#FBBF24" />
-              </View>
-              <View>
-                <T weight="regular" color="rgba(255,255,255,0.62)" style={styles.statusLabel}>
-                  Status
-                </T>
-                <T weight="semiBold" color="#FBBF24" style={styles.statusValue} numberOfLines={1}>
-                  {profileStatus}
-                </T>
-              </View>
-            </View>
-            <View style={styles.statusBadge}>
-              <Ionicons name="trending-up-outline" size={13} color="#FFFFFF" />
-              <T weight="medium" color="#FFFFFF" style={styles.statusBadgeText}>
-                Active
+            <View style={styles.statusToggleWrap}>
+              <T
+                weight="semiBold"
+                color={availabilityEnabled ? "#FFFFFF" : "rgba(255,255,255,0)"}
+                style={styles.statusToggleLabel}
+              >
+                {isFounderProfile ? "Open to Hire" : "Open to Work"}
               </T>
+              <StatusToggleSwitch value={availabilityEnabled} onValueChange={setAvailabilityEnabled} />
             </View>
           </View>
-          <T weight="regular" color="rgba(255,255,255,0.75)" style={styles.statusHintText}>
-            {statusHint}
-          </T>
         </View>
       </View>
 
@@ -917,75 +896,34 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   heroEditBtn: {
-    height: 30,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 4,
+    alignSelf: "flex-start",
   },
   heroEditText: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   statusRow: {
     marginTop: 14,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
+    justifyContent: "flex-end",
   },
-  heroStatusChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(0,0,0,0.34)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    flex: 1,
-  },
-  heroStatusIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(251, 191, 36, 0.22)",
-    alignItems: "center",
+  statusToggleWrap: {
+    minWidth: 0,
     justifyContent: "center",
-  },
-  statusLabel: {
-    fontSize: 8.5,
-    lineHeight: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-  },
-  statusValue: {
-    fontSize: 12.5,
-    lineHeight: 16,
-  },
-  statusBadge: {
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "rgba(34,197,94,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.48)",
-    paddingHorizontal: 10,
-    flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
+    flexDirection: "column",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    backgroundColor: "transparent",
+    borderWidth: 0,
   },
-  statusBadgeText: {
+  statusToggleLabel: {
     fontSize: 11,
     lineHeight: 14,
-  },
-  statusHintText: {
-    marginTop: 8,
-    fontSize: 10.5,
-    lineHeight: 15,
+    letterSpacing: 0.1,
   },
   quickActionsRow: {
     flexDirection: "row",

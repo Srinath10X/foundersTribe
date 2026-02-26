@@ -116,12 +116,6 @@ export default function MyServicesScreen() {
   return (
     <FlowScreen scroll={false}>
       <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
-        <TouchableOpacity
-          style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
-          onPress={nav.back}
-        >
-          <Ionicons name="arrow-back" size={16} color={palette.text} />
-        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <T weight="medium" color={palette.text} style={styles.title}>My Services</T>
           <T weight="regular" color={palette.subText} style={styles.subtitle}>Set service, price, and delivery time</T>
@@ -260,15 +254,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 12,
   },
   title: {
     fontSize: 18,

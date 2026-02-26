@@ -162,6 +162,17 @@ export class ServiceRepository {
             throw error;
         return (data || null);
     }
+    async updateServiceRequestStatus(requestId, status) {
+        const { data, error } = await this.db
+            .from("service_message_requests")
+            .update({ status })
+            .eq("id", requestId)
+            .select("*, service:freelancer_services(id, service_name, description, cost_amount, cost_currency, delivery_time_value, delivery_time_unit, is_active)")
+            .maybeSingle();
+        if (error)
+            throw error;
+        return (data || null);
+    }
     async insertServiceRequestMessage(payload) {
         const { data, error } = await this.db
             .from("service_request_messages")

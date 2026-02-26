@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
-  Dimensions,
+  Easing,
   Modal,
   PanResponder,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../context/ThemeContext";
 
 interface Props {
@@ -17,19 +20,26 @@ interface Props {
   onClose: () => void;
 }
 
-const MODES = ["system", "light", "dark"] as const;
-const LABELS: Record<(typeof MODES)[number], string> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
+const MODES = ["light", "dark"] as const;
+const OPTIONS: Record<(typeof MODES)[number], { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  light: { label: "Light", icon: "sunny-outline" },
+  dark: { label: "Dark", icon: "moon-outline" },
 };
+const PROFILE_FONTS = {
+  regular: "Poppins_400Regular",
+  medium: "Poppins_400Regular",
+  semiBold: "Poppins_500Medium",
+  bold: "Poppins_600SemiBold",
+} as const;
 
-const SHEET_HEIGHT = 300;
 const DISMISS_THRESHOLD = 80;
-const ANIM_DURATION = 250;
+const OPEN_DURATION = 280;
+const CLOSE_DURATION = 220;
 
 export default function AppearanceModal({ visible, onClose }: Props) {
   const { theme, themeMode, setThemeMode, isDark } = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   // 0 = fully off-screen / hidden, 1 = fully visible
   const progress = useRef(new Animated.Value(0)).current;
@@ -41,27 +51,37 @@ export default function AppearanceModal({ visible, onClose }: Props) {
   useEffect(() => {
     if (visible) {
       setModalVisible(true);
-      // small delay so Modal mounts before we animate
+      progress.setValue(0);
+      dragY.setValue(0);
       requestAnimationFrame(() => {
         Animated.timing(progress, {
           toValue: 1,
-          duration: ANIM_DURATION,
+          duration: OPEN_DURATION,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }).start();
       });
-    } else {
-      // close is handled by dismiss(), but in case visible is
-      // toggled externally, just hide immediately
-      progress.setValue(0);
-      dragY.setValue(0);
-      setModalVisible(false);
+      return;
     }
-  }, [visible]);
+
+    if (modalVisible) {
+      Animated.timing(progress, {
+        toValue: 0,
+        duration: CLOSE_DURATION,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        dragY.setValue(0);
+        setModalVisible(false);
+      });
+    }
+  }, [visible, modalVisible, progress, dragY]);
 
   const dismiss = useCallback(() => {
     Animated.timing(progress, {
       toValue: 0,
-      duration: ANIM_DURATION,
+      duration: CLOSE_DURATION,
+      easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(() => {
       dragY.setValue(0);
@@ -82,7 +102,7 @@ export default function AppearanceModal({ visible, onClose }: Props) {
         if (g.dy > DISMISS_THRESHOLD || g.vy > 0.5) {
           // Animate drag to full sheet height, then dismiss
           Animated.timing(dragY, {
-            toValue: SHEET_HEIGHT,
+            toValue: sheetHeight,
             duration: 180,
             useNativeDriver: true,
           }).start(() => {
@@ -102,7 +122,11 @@ export default function AppearanceModal({ visible, onClose }: Props) {
     })
   ).current;
 
-  const handleSelect = (mode: "system" | "light" | "dark") => {
+  const resolvedMode: "light" | "dark" =
+    themeMode === "light" || themeMode === "dark" ? themeMode : isDark ? "dark" : "light";
+  const sheetHeight = Math.max(280, Math.min(windowHeight * 0.52, windowHeight - insets.top - 24));
+
+  const handleSelect = (mode: "light" | "dark") => {
     setThemeMode(mode);
     dismiss();
   };
@@ -111,7 +135,7 @@ export default function AppearanceModal({ visible, onClose }: Props) {
   // Sheet slides up from bottom: SHEET_HEIGHT → 0
   const sheetBaseTranslate = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [SHEET_HEIGHT, 0],
+    outputRange: [sheetHeight + insets.bottom + 22, 0],
   });
   // Combine with drag offset
   const sheetTranslateY = Animated.add(sheetBaseTranslate, dragY);
@@ -120,20 +144,22 @@ export default function AppearanceModal({ visible, onClose }: Props) {
   const backdropOpacity = Animated.multiply(
     progress,
     dragY.interpolate({
-      inputRange: [0, SHEET_HEIGHT],
+      inputRange: [0, sheetHeight],
       outputRange: [1, 0.2],
       extrapolate: "clamp",
     })
   ).interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.4],
+    outputRange: [0, 0.46],
     extrapolate: "clamp",
   });
 
   const textColor = theme.text.primary;
   const subtextColor = theme.text.secondary;
-  const dividerColor = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
   const handleColor = isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.2)";
+  const borderColor = isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
+  const mutedSurface = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)";
+  const closeBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)";
 
   return (
     <Modal
@@ -160,6 +186,9 @@ export default function AppearanceModal({ visible, onClose }: Props) {
             styles.sheet,
             {
               backgroundColor: theme.surface,
+              maxHeight: sheetHeight,
+              marginBottom: Math.max(insets.bottom * 0.35, 8),
+              paddingBottom: Math.max(insets.bottom + 6, 18),
               transform: [{ translateY: sheetTranslateY }],
             },
           ]}
@@ -169,66 +198,62 @@ export default function AppearanceModal({ visible, onClose }: Props) {
             <View style={[styles.handle, { backgroundColor: handleColor }]} />
           </View>
 
-          {/* Title */}
-          <Text style={[styles.title, { color: textColor }]}>Appearance</Text>
+          <View style={styles.headerRow}>
+            <Text style={[styles.title, { color: textColor }]}>Appearance</Text>
+            <TouchableOpacity
+              activeOpacity={0.84}
+              style={[styles.closeBtn, { borderColor, backgroundColor: closeBg }]}
+              onPress={dismiss}
+            >
+              <Ionicons name="close" size={16} color={subtextColor} />
+            </TouchableOpacity>
+          </View>
 
-          {/* Divider */}
-          <View style={[styles.divider, { backgroundColor: dividerColor }]} />
-
-          {/* Radio options */}
-          {MODES.map((mode, index) => {
-            const isSelected = themeMode === mode;
-            const isLast = index === MODES.length - 1;
-            return (
-              <TouchableOpacity
-                key={mode}
-                activeOpacity={0.7}
-                style={[
-                  styles.row,
-                  !isLast && {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: dividerColor,
-                  },
-                ]}
-                onPress={() => handleSelect(mode)}
-              >
-                <Text
+          <View style={[styles.optionsWrap, { borderColor }]}>
+            {MODES.map((mode, index) => {
+              const isSelected = resolvedMode === mode;
+              const option = OPTIONS[mode];
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  activeOpacity={0.85}
                   style={[
-                    styles.label,
+                    styles.optionRow,
                     {
-                      color: isSelected ? textColor : subtextColor,
-                      fontWeight: isSelected ? "600" : "400",
+                      backgroundColor: mutedSurface,
+                      borderColor: "transparent",
                     },
                   ]}
+                  onPress={() => handleSelect(mode)}
                 >
-                  {LABELS[mode]}
-                </Text>
-                <View
-                  style={[
-                    styles.radio,
-                    {
-                      borderColor: isSelected
-                        ? "#E23744"
-                        : isDark
-                          ? "rgba(255,255,255,0.25)"
-                          : "rgba(0,0,0,0.2)",
-                    },
-                  ]}
-                >
-                  {isSelected && <View style={styles.radioFill} />}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-
-          {/* Cancel */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            style={styles.cancelBtn}
-            onPress={dismiss}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+                  <View style={styles.optionLeft}>
+                    <View style={[styles.optionIconWrap, { borderColor }]}>
+                      <Ionicons name={option.icon} size={16} color={subtextColor} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.optionLabel,
+                        isSelected ? styles.optionLabelActive : styles.optionLabelInactive,
+                        {
+                          color: isSelected ? textColor : subtextColor,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={isSelected ? "radio-button-on" : "radio-button-off"}
+                    size={18}
+                    color={isSelected ? "#E23744" : subtextColor}
+                  />
+                  {index < MODES.length - 1 ? (
+                    <View pointerEvents="none" style={styles.optionRowDivider} />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -248,66 +273,88 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     paddingHorizontal: 20,
-    paddingBottom: 36,
+    marginHorizontal: 8,
   },
   handleArea: {
     alignItems: "center",
-    paddingTop: 10,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 10,
   },
   handle: {
-    width: 40,
-    height: 5,
+    width: 34,
+    height: 4,
     borderRadius: 3,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 12,
+  headerRow: {
     marginTop: 2,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginBottom: 4,
-  },
-  row: {
+    marginBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
   },
-  label: {
-    fontSize: 15,
+  title: {
+    fontFamily: PROFILE_FONTS.bold,
+    fontSize: 19,
+    lineHeight: 24,
+    letterSpacing: 0.2,
   },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  radioFill: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#E23744",
+  optionsWrap: {
+    // borderWidth: 1,
+    // borderRadius: 14,
+    // paddingHorizontal: 6,
+    // paddingVertical: 4,
+    // gap: 0,
   },
-  cancelBtn: {
-    marginTop: 16,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: "#E23744",
+  optionRow: {
+    minHeight: 50,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    position: "relative",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  optionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  optionIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  cancelText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "600",
+  optionLabel: {
+    fontSize: 15.5,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+  },
+  optionLabelActive: {
+    fontFamily: PROFILE_FONTS.semiBold,
+  },
+  optionLabelInactive: {
+    fontFamily: PROFILE_FONTS.medium,
+  },
+  optionRowDivider: {
+    position: "absolute",
   },
 });
