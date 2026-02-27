@@ -10,7 +10,6 @@ export const proposalStatusEnum = pgEnum("proposal_status_enum", ["pending", "sh
 export const contractStatusEnum = pgEnum("contract_status_enum", ["active", "completed", "cancelled", "disputed"]);
 export const messageTypeEnum = pgEnum("message_type_enum", ["text", "file", "system"]);
 export const notificationTypeEnum = pgEnum("notification_type_enum", ["new_proposal", "proposal_accepted", "message", "contract_completed"]);
-export const postTypeEnum = pgEnum("post_type_enum", ["work_update", "showcase", "milestone", "hiring", "insight"]);
 export const serviceDurationUnitEnum = pgEnum("service_duration_unit_enum", ["days", "weeks"]);
 export const serviceRequestStatusEnum = pgEnum("service_request_status_enum", ["pending", "accepted", "declined", "cancelled"]);
 export const userProfiles = pgTable("user_profiles", {

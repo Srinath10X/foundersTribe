@@ -24,11 +24,10 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 
-const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
+const { height: windowHeight } = Dimensions.get("window");
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 const HEADER_HEIGHT = Platform.OS === "ios" ? 140 : 120; // Slightly more for better gradient fade
 
-const REEL_WIDTH = windowWidth;
 const REEL_HEIGHT = windowHeight - TAB_BAR_HEIGHT;
 
 interface Article {
@@ -41,6 +40,12 @@ interface Article {
   Category: string | null;
   "Company Name": string | null;
 }
+
+type InteractionRow = {
+  article_id: number | string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+};
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
 
@@ -71,12 +76,43 @@ export default function BookmarksScreen() {
         return;
       }
 
-      const { data: interactions, error: interactionsError } = await supabase
-        .from("user_interactions")
-        .select("article_id, updated_at")
-        .eq("user_id", user.id)
-        .eq("bookmarked", true)
-        .order("updated_at", { ascending: false });
+      let interactions: InteractionRow[] | null = null;
+      let interactionsError: any = null;
+
+      // Primary shape
+      {
+        const result = await supabase
+          .from("user_interactions")
+          .select("article_id, updated_at")
+          .eq("user_id", user.id)
+          .eq("bookmarked", true)
+          .order("updated_at", { ascending: false });
+        interactions = (result.data as InteractionRow[] | null) || null;
+        interactionsError = result.error;
+      }
+
+      // Fallback for schemas without updated_at
+      if (interactionsError) {
+        const fallback = await supabase
+          .from("user_interactions")
+          .select("article_id, created_at")
+          .eq("user_id", user.id)
+          .eq("bookmarked", true)
+          .order("created_at", { ascending: false });
+        interactions = (fallback.data as InteractionRow[] | null) || null;
+        interactionsError = fallback.error;
+      }
+
+      // Last fallback: no timestamp ordering
+      if (interactionsError) {
+        const fallback = await supabase
+          .from("user_interactions")
+          .select("article_id")
+          .eq("user_id", user.id)
+          .eq("bookmarked", true);
+        interactions = (fallback.data as InteractionRow[] | null) || null;
+        interactionsError = fallback.error;
+      }
 
       if (interactionsError) {
         console.error("Error fetching bookmark interactions:", interactionsError);
@@ -126,6 +162,28 @@ export default function BookmarksScreen() {
             .in("id", numericIds);
           articles = retry.data || [];
           articlesError = retry.error;
+        }
+      }
+
+      // Lowercase table/column fallback for environments with snake/lower-case schema.
+      if ((!articles || articles.length === 0) && !articlesError) {
+        const lowerSelect =
+          "id, title, summary, content, image_url, article_link, category, company_name";
+        const lower = await supabase
+          .from("articles")
+          .select(lowerSelect)
+          .in("id", articleIds as any[]);
+        if (!lower.error && Array.isArray(lower.data) && lower.data.length > 0) {
+          articles = lower.data.map((row: any) => ({
+            id: Number(row.id),
+            Title: row.title || "",
+            Summary: row.summary || "",
+            Content: row.content || "",
+            "Image URL": row.image_url || null,
+            "Article Link": row.article_link || "",
+            Category: row.category || null,
+            "Company Name": row.company_name || null,
+          }));
         }
       }
 
@@ -207,7 +265,7 @@ export default function BookmarksScreen() {
           End of Collection
         </Text>
         <Text style={[styles.footerSubtitle, { color: theme.text.tertiary }]}>
-          You've seen all your bookmarked articles.
+          You&apos;ve seen all your bookmarked articles.
         </Text>
         <TouchableOpacity
           style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]}
@@ -237,7 +295,7 @@ export default function BookmarksScreen() {
         No saved articles
       </Text>
       <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-        You haven't bookmarked any articles yet.
+        You haven&apos;t bookmarked any articles yet.
       </Text>
       <TouchableOpacity
         style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}

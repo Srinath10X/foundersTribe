@@ -9,7 +9,6 @@ function asSingleParam(value: string | string[] | undefined): string | undefined
 }
 
 export default function ContractChatThreadScreen() {
-  const router = useRouter();
   const params = useLocalSearchParams<{
     contractId?: string | string[];
     requestId?: string | string[];
@@ -17,21 +16,11 @@ export default function ContractChatThreadScreen() {
     title?: string | string[];
   }>();
   const contractId = asSingleParam(params.contractId);
+  const requestId = asSingleParam(params.requestId);
   const threadKindRaw = asSingleParam(params.threadKind);
+  const threadKind = threadKindRaw === "service" ? "service" : "contract";
   const title = asSingleParam(params.title);
-
-  useEffect(() => {
-    if (threadKindRaw === "service") {
-      router.replace("/freelancer-stack/contract-chat");
-    }
-  }, [router, threadKindRaw]);
-
-  if (threadKindRaw === "service") {
-    return null;
-  }
-
-  const threadKind = "contract";
-  const resolvedId = contractId;
+  const resolvedId = threadKind === "service" ? requestId : contractId;
 
   return <ThreadScreen threadId={resolvedId} title={title} threadKind={threadKind} />;
 }

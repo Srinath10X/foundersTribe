@@ -22,12 +22,23 @@ type Props = {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  onAddDetails?: () => void;
+  addDetailsLabel?: string;
+  showAddDetailsAction?: boolean;
 };
 
 const DISMISS_THRESHOLD = 80;
 const CLOSE_DURATION = 220;
 
-export default function ProfileOverviewSheet({ visible, title, onClose, children }: Props) {
+export default function ProfileOverviewSheet({
+  visible,
+  title,
+  onClose,
+  children,
+  onAddDetails,
+  addDetailsLabel = "Add Additional Details",
+  showAddDetailsAction = true,
+}: Props) {
   const { theme, isDark } = useTheme();
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -78,6 +89,14 @@ export default function ProfileOverviewSheet({ visible, title, onClose, children
     });
   }, [dragY, onClose, progress]);
 
+  const handleAddDetailsPress = useCallback(() => {
+    if (onAddDetails) {
+      onAddDetails();
+      return;
+    }
+    dismiss();
+  }, [dismiss, onAddDetails]);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -125,6 +144,14 @@ export default function ProfileOverviewSheet({ visible, title, onClose, children
   const borderColor = isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.08)";
   const handleColor = isDark ? "rgba(255,255,255,0.28)" : "rgba(0,0,0,0.2)";
   const closeBg = isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.04)";
+  const addBarBg = isDark ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.03)";
+  const addBarIconBg = isDark ? "rgba(226,55,68,0.2)" : "rgba(226,55,68,0.14)";
+  const addBarChevronBg = isDark ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.06)";
+  const addBarAccent = isDark ? "rgba(226,55,68,0.18)" : "rgba(226,55,68,0.1)";
+  const addBarSubText =
+    addDetailsLabel.toLowerCase().includes("add")
+      ? "Quickly add details to this section"
+      : "Quickly edit this section";
 
   return (
     <Modal
@@ -188,6 +215,33 @@ export default function ProfileOverviewSheet({ visible, title, onClose, children
             >
               {children}
             </ScrollView>
+
+            {showAddDetailsAction ? (
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={handleAddDetailsPress}
+                style={[
+                  styles.addBar,
+                  { borderColor, backgroundColor: addBarBg },
+                ]}
+              >
+                <View style={[styles.addBarAccentLayer, { backgroundColor: addBarAccent }]} />
+                <View style={[styles.addBarIconWrap, { backgroundColor: addBarIconBg }]}>
+                  <Ionicons name="sparkles-outline" size={14} color={theme.brand.primary} />
+                </View>
+                <View style={styles.addBarTextWrap}>
+                  <Text style={[styles.addBarText, { color: textColor }]} numberOfLines={1}>
+                    {addDetailsLabel}
+                  </Text>
+                  <Text style={[styles.addBarSubText, { color: subTextColor }]} numberOfLines={1}>
+                    {addBarSubText}
+                  </Text>
+                </View>
+                <View style={[styles.addBarChevronWrap, { backgroundColor: addBarChevronBg }]}>
+                  <Ionicons name="chevron-forward" size={14} color={subTextColor} />
+                </View>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </Animated.View>
       </View>
@@ -265,7 +319,55 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 12,
     gap: 10,
+  },
+  addBar: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: 14,
+    minHeight: 56,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    position: "relative",
+    overflow: "hidden",
+  },
+  addBarAccentLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+  },
+  addBarIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addBarTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  addBarText: {
+    fontSize: 12.5,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+  addBarSubText: {
+    marginTop: 1,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: "500",
+  },
+  addBarChevronWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

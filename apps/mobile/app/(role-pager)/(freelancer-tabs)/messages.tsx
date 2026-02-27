@@ -162,7 +162,7 @@ export default function FreelancerMessagesScreen() {
   const serviceRequests = useMemo(() => {
     const all = serviceRequestsData?.items ?? [];
     if (!currentUserId) return all;
-    return all.filter((request) => request.freelancer_id === currentUserId);
+    return all.filter((request) => request.founder_id === currentUserId || request.freelancer_id === currentUserId);
   }, [currentUserId, serviceRequestsData?.items]);
 
   const [query, setQuery] = useState("");

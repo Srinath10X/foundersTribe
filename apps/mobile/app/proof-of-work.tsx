@@ -16,27 +16,25 @@ import { FlowScreen, SurfaceCard, T, useFlowPalette } from "@/components/communi
 import { useAuth } from "@/context/AuthContext";
 import * as tribeApi from "@/lib/tribeApi";
 
-type PreviousWork = {
-  company?: string;
-  role?: string;
-  duration?: string;
+type ProofWorkItem = {
+  title?: string;
+  description?: string;
 };
 
-export default function ExperienceScreen() {
+export default function ProofOfWorkScreen() {
   const router = useRouter();
   const { palette } = useFlowPalette();
   const { session } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [works, setWorks] = useState<PreviousWork[]>([]);
+  const [items, setItems] = useState<ProofWorkItem[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [draftRole, setDraftRole] = useState("");
-  const [draftCompany, setDraftCompany] = useState("");
-  const [draftDuration, setDraftDuration] = useState("");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const loadExperience = useCallback(async () => {
+  const loadProofOfWork = useCallback(async () => {
     setLoading(true);
     try {
       const meta = session?.user?.user_metadata || {};
@@ -51,60 +49,57 @@ export default function ExperienceScreen() {
         }
       }
 
-      const rawWorks =
-        (Array.isArray(db?.previous_works) && db.previous_works) ||
-        (Array.isArray(metaProfile?.previous_works) ? metaProfile.previous_works : []);
+      const rawItems =
+        (Array.isArray(db?.completed_gigs) && db.completed_gigs) ||
+        (Array.isArray(metaProfile?.completed_gigs) ? metaProfile.completed_gigs : []);
 
-      const normalized = (rawWorks as PreviousWork[]).filter((item) => {
-        const role = String(item?.role || "").trim();
-        const company = String(item?.company || "").trim();
-        const duration = String(item?.duration || "").trim();
-        return role.length > 0 || company.length > 0 || duration.length > 0;
+      const normalized = (rawItems as ProofWorkItem[]).filter((item) => {
+        const title = String(item?.title || "").trim();
+        const description = String(item?.description || "").trim();
+        return title.length > 0 || description.length > 0;
       });
 
-      setWorks(normalized);
+      setItems(normalized);
     } finally {
       setLoading(false);
     }
   }, [session]);
 
   useEffect(() => {
-    loadExperience();
-  }, [loadExperience]);
+    loadProofOfWork();
+  }, [loadProofOfWork]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadExperience();
+    await loadProofOfWork();
     setRefreshing(false);
-  }, [loadExperience]);
+  }, [loadProofOfWork]);
 
-  const saveExperience = useCallback(async () => {
-    const role = draftRole.trim();
-    const company = draftCompany.trim();
-    const duration = draftDuration.trim();
-    if (!role && !company && !duration) {
-      Alert.alert("Missing info", "Please enter role, company, or duration.");
+  const saveWork = useCallback(async () => {
+    const title = draftTitle.trim();
+    const description = draftDescription.trim();
+    if (!title && !description) {
+      Alert.alert("Missing info", "Please enter title or description.");
       return;
     }
     if (!session?.access_token) return;
 
-    const nextWorks = [...works, { role, company, duration }];
+    const nextItems = [...items, { title, description }];
     setSaving(true);
     try {
       await tribeApi.updateMyProfile(session.access_token, {
-        previous_works: nextWorks,
+        completed_gigs: nextItems,
       });
-      setWorks(nextWorks);
-      setDraftRole("");
-      setDraftCompany("");
-      setDraftDuration("");
+      setItems(nextItems);
+      setDraftTitle("");
+      setDraftDescription("");
       setShowAddForm(false);
     } catch (error: any) {
-      Alert.alert("Error", error?.message || "Failed to add experience");
+      Alert.alert("Error", error?.message || "Failed to add work");
     } finally {
       setSaving(false);
     }
-  }, [draftCompany, draftDuration, draftRole, session?.access_token, works]);
+  }, [draftDescription, draftTitle, items, session?.access_token]);
 
   return (
     <FlowScreen scroll={false}>
@@ -119,7 +114,7 @@ export default function ExperienceScreen() {
           <Ionicons name="chevron-back" size={22} color={palette.text} />
         </TouchableOpacity>
         <T weight="bold" color={palette.text} style={styles.title}>
-          Experience
+          Proof of Work
         </T>
         <View style={styles.backBtn} />
       </View>
@@ -133,74 +128,56 @@ export default function ExperienceScreen() {
             <SurfaceCard style={styles.centerCard}>
               <ActivityIndicator size="small" color={palette.accent} />
             </SurfaceCard>
-          ) : works.length === 0 ? (
+          ) : items.length === 0 ? (
             <SurfaceCard style={styles.emptyCard}>
               <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                No experience added yet.
+                No proof of work added yet.
               </T>
             </SurfaceCard>
           ) : (
-            works.map((work, index) => {
-              const duration = String(work.duration || "Duration");
-              const isCurrent = /present|current/i.test(duration);
-
-              return (
-                <SurfaceCard key={`${work.company || "work"}-${index}`} style={styles.workCard}>
+            items.map((item, index) => (
+              <SurfaceCard key={`proof-${index}`} style={styles.itemCard}>
+                <View style={styles.itemHead}>
                   <View
                     style={[
-                      styles.workIconWrap,
+                      styles.itemIconWrap,
                       { backgroundColor: palette.accentSoft, borderColor: palette.borderLight },
                     ]}
                   >
-                    <Ionicons name="briefcase-outline" size={18} color={palette.accent} />
+                    <Ionicons name="folder-open-outline" size={15} color={palette.accent} />
                   </View>
-                  <View style={styles.workTextWrap}>
-                    <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
-                      {work.role || "Role"}
+                  <View style={[styles.itemIndexTag, { borderColor: palette.borderLight }]}>
+                    <T weight="bold" color={palette.accent} style={styles.itemIndexText}>
+                      Work {index + 1}
                     </T>
-                    <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
-                      {work.company || "Company"}
-                    </T>
-                    <View style={styles.workMetaRow}>
-                      {isCurrent ? (
-                        <View style={[styles.currentTag, { backgroundColor: palette.accentSoft }]}>
-                          <T weight="medium" color={palette.success} style={styles.currentTagText}>
-                            Current
-                          </T>
-                        </View>
-                      ) : null}
-                      <T weight="regular" color={palette.subText} style={styles.workDuration} numberOfLines={1}>
-                        {duration}
-                      </T>
-                    </View>
                   </View>
-                </SurfaceCard>
-              );
-            })
+                </View>
+                <T weight="semiBold" color={palette.text} style={styles.itemTitle} numberOfLines={2}>
+                  {String(item?.title || "Work")}
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.itemDescription} numberOfLines={5}>
+                  {String(item?.description || "Description")}
+                </T>
+              </SurfaceCard>
+            ))
           )}
 
           {showAddForm ? (
             <SurfaceCard style={styles.formCard}>
               <TextInput
-                value={draftRole}
-                onChangeText={setDraftRole}
-                placeholder="Role"
+                value={draftTitle}
+                onChangeText={setDraftTitle}
+                placeholder="Work title"
                 placeholderTextColor={palette.subText}
                 style={[styles.input, { borderColor: palette.borderLight, color: palette.text }]}
               />
               <TextInput
-                value={draftCompany}
-                onChangeText={setDraftCompany}
-                placeholder="Company"
+                value={draftDescription}
+                onChangeText={setDraftDescription}
+                placeholder="Work description"
                 placeholderTextColor={palette.subText}
-                style={[styles.input, { borderColor: palette.borderLight, color: palette.text }]}
-              />
-              <TextInput
-                value={draftDuration}
-                onChangeText={setDraftDuration}
-                placeholder="Duration (e.g. Jan 2025 - Present)"
-                placeholderTextColor={palette.subText}
-                style={[styles.input, { borderColor: palette.borderLight, color: palette.text }]}
+                multiline
+                style={[styles.input, styles.textArea, { borderColor: palette.borderLight, color: palette.text }]}
               />
               <View style={styles.formActions}>
                 <TouchableOpacity
@@ -208,9 +185,8 @@ export default function ExperienceScreen() {
                   style={[styles.secondaryBtn, { borderColor: palette.borderLight }]}
                   onPress={() => {
                     setShowAddForm(false);
-                    setDraftRole("");
-                    setDraftCompany("");
-                    setDraftDuration("");
+                    setDraftTitle("");
+                    setDraftDescription("");
                   }}
                   disabled={saving}
                 >
@@ -221,11 +197,11 @@ export default function ExperienceScreen() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   style={[styles.primaryBtn, { backgroundColor: palette.accent }]}
-                  onPress={saveExperience}
+                  onPress={saveWork}
                   disabled={saving}
                 >
                   <T weight="semiBold" color="#FFFFFF" style={styles.btnText}>
-                    {saving ? "Saving..." : "Save Experience"}
+                    {saving ? "Saving..." : "Save Work"}
                   </T>
                 </TouchableOpacity>
               </View>
@@ -244,10 +220,10 @@ export default function ExperienceScreen() {
                 </View>
                 <View>
                   <T weight="semiBold" color={palette.text} style={styles.actionTitle}>
-                    Add Experience
+                    Add Work
                   </T>
                   <T weight="regular" color={palette.subText} style={styles.actionHint}>
-                    Add role, company and duration
+                    Add project title and description
                   </T>
                 </View>
               </View>
@@ -335,6 +311,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
   },
+  textArea: {
+    minHeight: 92,
+    textAlignVertical: "top",
+    paddingTop: 10,
+  },
   formActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -371,53 +352,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
   },
-  workCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
+  itemCard: {
     padding: 12,
+    gap: 8,
   },
-  workIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-  },
-  workTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  workRole: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  workCompany: {
-    marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  workMetaRow: {
-    marginTop: 5,
+  itemHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  currentTag: {
+  itemIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  itemIndexTag: {
+    borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 8,
-    height: 20,
+    height: 22,
+    paddingHorizontal: 9,
     alignItems: "center",
     justifyContent: "center",
   },
-  currentTagText: {
+  itemIndexText: {
     fontSize: 10,
-    lineHeight: 13,
+    lineHeight: 12,
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
   },
-  workDuration: {
-    marginTop: 1,
-    fontSize: 10,
-    lineHeight: 13,
+  itemTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  itemDescription: {
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

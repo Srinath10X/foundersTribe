@@ -100,9 +100,10 @@ export default function FreelancerTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="create-post"
+        name="my-services"
         options={{
           href: null,
+          tabBarStyle: { display: "none" },
         }}
       />
       <Tabs.Screen

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
 import ProfileOverviewSheet from "@/components/ProfileOverviewSheet";
@@ -151,7 +151,7 @@ function normalizeBusinessIdeas(raw: unknown): string[] {
     return [text];
   };
 
-  return Array.from(new Set(toIdeaText(raw))).filter(Boolean);
+  return toIdeaText(raw).filter(Boolean);
 }
 
 function normalizeUrlList(raw: unknown): string[] {
@@ -174,6 +174,116 @@ function normalizeUrlList(raw: unknown): string[] {
   };
 
   return Array.from(new Set(toUrl(raw).map((u) => u.trim()).filter(Boolean)));
+}
+
+function normalizePreviousWorks(raw: unknown): PreviousWork[] {
+  const toItems = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value.flatMap((item) => toItems(item));
+    if (value && typeof value === "object") return [value];
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) return [];
+      if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+        try {
+          return toItems(JSON.parse(text));
+        } catch {
+          return [{ role: text }];
+        }
+      }
+      return [{ role: text }];
+    }
+    return [];
+  };
+
+  return toItems(raw)
+    .map((item) => {
+      const obj = item as Record<string, unknown>;
+      const role = String(obj?.role || "").trim();
+      const company = String(obj?.company || "").trim();
+      const duration = String(obj?.duration || "").trim();
+      return { role, company, duration };
+    })
+    .filter((item) => item.role || item.company || item.duration);
+}
+
+function normalizeSocialLinks(raw: unknown): SocialLink[] {
+  const toItems = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value.flatMap((item) => toItems(item));
+    if (value && typeof value === "object") return [value];
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) return [];
+      if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+        try {
+          return toItems(JSON.parse(text));
+        } catch {
+          return [{ url: text, label: "Link", platform: "Link" }];
+        }
+      }
+      return [{ url: text, label: "Link", platform: "Link" }];
+    }
+    return [];
+  };
+
+  return toItems(raw)
+    .map((item) => {
+      const obj = item as Record<string, unknown>;
+      const url = String(obj?.url || "").trim();
+      const label = String(obj?.label || obj?.platform || "").trim();
+      const platform = String(obj?.platform || obj?.label || "").trim();
+      return {
+        url,
+        label: label || "Link",
+        platform: platform || label || "Link",
+      };
+    })
+    .filter((item) => item.url);
+}
+
+function dedupeStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const value = String(item || "").trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function dedupePreviousWorks(items: PreviousWork[]): PreviousWork[] {
+  const seen = new Set<string>();
+  const out: PreviousWork[] = [];
+  for (const item of items) {
+    const role = String(item?.role || "").trim();
+    const company = String(item?.company || "").trim();
+    const duration = String(item?.duration || "").trim();
+    if (!role && !company && !duration) continue;
+    const key = `${role.toLowerCase()}|${company.toLowerCase()}|${duration.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ role, company, duration });
+  }
+  return out;
+}
+
+function dedupeSocialLinks(items: SocialLink[]): SocialLink[] {
+  const seen = new Set<string>();
+  const out: SocialLink[] = [];
+  for (const item of items) {
+    const url = String(item?.url || "").trim();
+    if (!url) continue;
+    const label = String(item?.label || item?.platform || "Link").trim();
+    const platform = String(item?.platform || label || "Link").trim();
+    const key = `${url.toLowerCase()}|${label.toLowerCase()}|${platform.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ url, label, platform });
+  }
+  return out;
 }
 
 function SectionTitle({ color, title }: { color: string; title: string }) {
@@ -299,6 +409,15 @@ export default function FreelancerProfileScreen() {
   const [activeOverviewSection, setActiveOverviewSection] = useState<
     "personal" | "experience" | "ideas" | "social" | null
   >(null);
+  const [showOverviewEditor, setShowOverviewEditor] = useState(false);
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const [draftExperienceRole, setDraftExperienceRole] = useState("");
+  const [draftExperienceCompany, setDraftExperienceCompany] = useState("");
+  const [draftExperienceDuration, setDraftExperienceDuration] = useState("");
+  const [draftIdeaText, setDraftIdeaText] = useState("");
+  const [draftIdeaPitch, setDraftIdeaPitch] = useState("");
+  const [draftSocialLabel, setDraftSocialLabel] = useState("");
+  const [draftSocialUrl, setDraftSocialUrl] = useState("");
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -320,6 +439,21 @@ export default function FreelancerProfileScreen() {
         (await resolveAvatar(db?.photo_url || db?.avatar_url || null, userId)) ||
         null;
 
+      const normalizedDbWorks = normalizePreviousWorks(db?.previous_works);
+      const normalizedMetaWorks = normalizePreviousWorks(metaProfile?.previous_works);
+      const normalizedDbLinks = normalizeSocialLinks(db?.social_links);
+      const normalizedMetaLinks = normalizeSocialLinks(metaProfile?.social_links);
+      const normalizedIdeas = dedupeStrings([
+        ...normalizeBusinessIdeas(db?.business_ideas ?? db?.business_idea),
+        ...normalizeBusinessIdeas(metaProfile?.business_ideas ?? metaProfile?.business_idea),
+      ]);
+      const normalizedIdeaUrls = normalizeUrlList([
+        ...(Array.isArray(db?.idea_video_urls) ? db.idea_video_urls : [db?.idea_video_urls]),
+        db?.idea_video_url,
+        ...(Array.isArray(metaProfile?.idea_video_urls) ? metaProfile.idea_video_urls : [metaProfile?.idea_video_urls]),
+        metaProfile?.idea_video_url,
+      ]);
+
       const merged: ProfileData = {
         id: userId,
         display_name: db?.display_name || db?.username || "User",
@@ -333,15 +467,11 @@ export default function FreelancerProfileScreen() {
         location: compactLocation(db?.location ?? metaProfile?.location),
         linkedin_url: db?.linkedin_url ?? metaProfile?.linkedin_url ?? null,
         role: db?.role ?? metaProfile?.role ?? null,
-        previous_works:
-          (Array.isArray(db?.previous_works) && db.previous_works) ||
-          (Array.isArray(metaProfile?.previous_works) ? metaProfile.previous_works : []),
-        social_links:
-          (Array.isArray(db?.social_links) && db.social_links) ||
-          (Array.isArray(metaProfile?.social_links) ? metaProfile.social_links : []),
-        business_ideas: normalizeBusinessIdeas(db?.business_ideas ?? metaProfile?.business_ideas),
+        previous_works: dedupePreviousWorks([...normalizedDbWorks, ...normalizedMetaWorks]),
+        social_links: dedupeSocialLinks([...normalizedDbLinks, ...normalizedMetaLinks]),
+        business_ideas: normalizedIdeas,
         idea_video_url: db?.idea_video_url ?? metaProfile?.idea_video_url ?? null,
-        idea_video_urls: normalizeUrlList(db?.idea_video_urls ?? metaProfile?.idea_video_urls),
+        idea_video_urls: normalizedIdeaUrls,
         updated_at: db?.updated_at ?? null,
       };
 
@@ -360,6 +490,17 @@ export default function FreelancerProfileScreen() {
   React.useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+  React.useEffect(() => {
+    setShowOverviewEditor(false);
+    setOverviewSaving(false);
+    setDraftExperienceRole("");
+    setDraftExperienceCompany("");
+    setDraftExperienceDuration("");
+    setDraftIdeaText("");
+    setDraftIdeaPitch("");
+    setDraftSocialLabel("");
+    setDraftSocialUrl("");
+  }, [activeOverviewSection]);
 
   const works = profile?.previous_works || [];
   const links = (profile?.social_links || []).filter((x) => x?.url);
@@ -399,6 +540,100 @@ export default function FreelancerProfileScreen() {
           : activeOverviewSection === "social"
             ? "Connect & Profiles"
             : "Professional Overview";
+  const overviewActionLabel =
+    activeOverviewSection === "experience" ||
+    activeOverviewSection === "ideas" ||
+    activeOverviewSection === "social"
+      ? "Add Additional Details"
+      : "Edit Details";
+  const showOverviewAction = activeOverviewSection !== "personal";
+  const saveOverviewDetails = useCallback(async () => {
+    if (!activeOverviewSection || !session?.access_token || !profile) return;
+
+    setOverviewSaving(true);
+    try {
+      if (activeOverviewSection === "experience") {
+        const role = draftExperienceRole.trim();
+        const company = draftExperienceCompany.trim();
+        const duration = draftExperienceDuration.trim();
+        if (!role && !company && !duration) {
+          Alert.alert("Missing details", "Please add role, company, or duration.");
+          return;
+        }
+
+        const nextWorks = dedupePreviousWorks([...(profile.previous_works || []), { role, company, duration }]);
+        await tribeApi.updateMyProfile(session.access_token, { previous_works: nextWorks });
+        setProfile((prev) => (prev ? { ...prev, previous_works: nextWorks } : prev));
+      } else if (activeOverviewSection === "ideas") {
+        const newIdeas = normalizeBusinessIdeas(draftIdeaText);
+        if (newIdeas.length === 0) {
+          Alert.alert("Missing details", "Please enter a business idea.");
+          return;
+        }
+
+        const pitch = draftIdeaPitch.trim();
+        const safePitch = pitch ? (/^https?:\/\//i.test(pitch) ? pitch : `https://${pitch}`) : "";
+        const existingIdeas = normalizeBusinessIdeas(profile.business_ideas);
+        const nextIdeas = dedupeStrings([...existingIdeas, ...newIdeas]);
+        const nextPitches = normalizeUrlList(profile.idea_video_urls);
+        if (safePitch) nextPitches.push(safePitch);
+
+        await tribeApi.updateMyProfile(session.access_token, {
+          business_ideas: nextIdeas,
+          idea_video_urls: nextPitches,
+          idea_video_url: nextPitches[0] || null,
+        });
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                business_ideas: nextIdeas,
+                idea_video_urls: nextPitches,
+                idea_video_url: nextPitches[0] || null,
+              }
+            : prev,
+        );
+      } else if (activeOverviewSection === "social") {
+        const label = draftSocialLabel.trim();
+        const url = draftSocialUrl.trim();
+        if (!url) {
+          Alert.alert("Missing details", "Please enter a social link URL.");
+          return;
+        }
+
+        const safeUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+        const resolvedLabel = label || "Link";
+        const nextLinks = dedupeSocialLinks([
+          ...(profile.social_links || []),
+          { label: resolvedLabel, platform: resolvedLabel, url: safeUrl },
+        ]);
+
+        await tribeApi.updateMyProfile(session.access_token, { social_links: nextLinks });
+        setProfile((prev) => (prev ? { ...prev, social_links: nextLinks } : prev));
+      }
+
+      setShowOverviewEditor(false);
+    } catch (error: any) {
+      Alert.alert("Update failed", error?.message || "Could not update details.");
+    } finally {
+      setOverviewSaving(false);
+    }
+  }, [
+    activeOverviewSection,
+    draftExperienceCompany,
+    draftExperienceDuration,
+    draftExperienceRole,
+    draftIdeaPitch,
+    draftIdeaText,
+    draftSocialLabel,
+    draftSocialUrl,
+    profile,
+    session?.access_token,
+  ]);
+  const handleOverviewAction = useCallback(() => {
+    if (!showOverviewAction) return;
+    setShowOverviewEditor((prev) => !prev);
+  }, [showOverviewAction]);
   const renderOverviewContent = () => {
     if (activeOverviewSection === "personal") {
       return (
@@ -426,7 +661,7 @@ export default function FreelancerProfileScreen() {
               No experience items added yet.
             </T>
           ) : (
-            works.slice(0, 8).map((work, index) => {
+            works.map((work, index) => {
               const duration = work.duration || "Duration";
               const isCurrent = /present|current/i.test(duration);
               return (
@@ -458,13 +693,60 @@ export default function FreelancerProfileScreen() {
               );
             })
           )}
+          {showOverviewEditor ? (
+            <View style={[styles.inlineEditorCard, { borderColor: palette.borderLight, backgroundColor: palette.card }]}>
+              <TextInput
+                value={draftExperienceRole}
+                onChangeText={setDraftExperienceRole}
+                placeholder="Role"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <TextInput
+                value={draftExperienceCompany}
+                onChangeText={setDraftExperienceCompany}
+                placeholder="Company"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <TextInput
+                value={draftExperienceDuration}
+                onChangeText={setDraftExperienceDuration}
+                placeholder="Duration (e.g. Jan 2026 - Present)"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <View style={styles.inlineActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.inlineBtn, { borderColor: palette.borderLight }]}
+                  onPress={() => setShowOverviewEditor(false)}
+                  disabled={overviewSaving}
+                >
+                  <T weight="medium" color={palette.text} style={styles.inlineBtnText}>
+                    Cancel
+                  </T>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.inlinePrimaryBtn, { backgroundColor: palette.accent }]}
+                  onPress={saveOverviewDetails}
+                  disabled={overviewSaving}
+                >
+                  <T weight="semiBold" color="#FFFFFF" style={styles.inlineBtnText}>
+                    {overviewSaving ? "Saving..." : "Save Experience"}
+                  </T>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
         </View>
       );
     }
 
     if (activeOverviewSection === "ideas") {
       return (
-        <View>
+        <View style={styles.sectionStack}>
           {businessIdeaItems.length === 0 ? (
             <T weight="regular" color={palette.subText} style={styles.emptyText}>
               No business ideas added.
@@ -481,29 +763,32 @@ export default function FreelancerProfileScreen() {
                   },
                 ]}
               >
-                <View style={styles.ideaHead}>
-                  <View style={styles.ideaHeadLeft}>
-                    <View style={[styles.ideaIndexTag, { borderColor: "rgba(226,55,68,0.28)" }]}>
-                      <T weight="bold" color="#E23744" style={styles.ideaIndexText}>
+                <View style={styles.previousWorkHead}>
+                  <View style={styles.previousWorkHeadLeft}>
+                    <View style={[styles.previousWorkIconWrap, { backgroundColor: palette.accentSoft }]}>
+                      <Ionicons name="bulb-outline" size={15} color={palette.accent} />
+                    </View>
+                    <View style={[styles.previousWorkIndexTag, { borderColor: palette.borderLight }]}>
+                      <T weight="bold" color={palette.accent} style={styles.previousWorkIndexText}>
                         Idea {index + 1}
                       </T>
                     </View>
                   </View>
-                  <View style={styles.ideaIconWrap}>
-                    <Ionicons name="bulb-outline" size={15} color="#6B7280" />
-                  </View>
                 </View>
-                <T weight="regular" color={palette.subText} style={styles.businessIdeaText}>
+                <T weight="semiBold" color={palette.text} style={styles.previousWorkTitle} numberOfLines={2}>
+                  {`Business Idea ${index + 1}`}
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.previousWorkDesc}>
                   {item.idea}
                 </T>
                 {!!item.pitchUrl && (
                   <TouchableOpacity
                     activeOpacity={0.82}
-                    style={[styles.pitchCta, { borderColor: "#E23744", alignSelf: "flex-start" }]}
+                    style={[styles.pitchCta, { borderColor: palette.accent, alignSelf: "flex-start" }]}
                     onPress={() => openUrl(item.pitchUrl as string)}
                   >
-                    <Ionicons name="link-outline" size={16} color="#E23744" />
-                    <T weight="medium" color="#E23744" style={styles.pitchTagText}>
+                    <Ionicons name="link-outline" size={16} color={palette.accent} />
+                    <T weight="medium" color={palette.accent} style={styles.pitchTagText}>
                       Pitch Video
                     </T>
                   </TouchableOpacity>
@@ -511,6 +796,51 @@ export default function FreelancerProfileScreen() {
               </View>
             ))
           )}
+          {showOverviewEditor ? (
+            <View style={[styles.inlineEditorCard, { borderColor: palette.borderLight, backgroundColor: palette.card }]}>
+              <TextInput
+                value={draftIdeaText}
+                onChangeText={setDraftIdeaText}
+                placeholder="Describe your business idea"
+                placeholderTextColor={palette.subText}
+                multiline
+                style={[
+                  styles.inlineInput,
+                  styles.inlineTextArea,
+                  { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface },
+                ]}
+              />
+              <TextInput
+                value={draftIdeaPitch}
+                onChangeText={setDraftIdeaPitch}
+                placeholder="Pitch video link (optional)"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <View style={styles.inlineActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.inlineBtn, { borderColor: palette.borderLight }]}
+                  onPress={() => setShowOverviewEditor(false)}
+                  disabled={overviewSaving}
+                >
+                  <T weight="medium" color={palette.text} style={styles.inlineBtnText}>
+                    Cancel
+                  </T>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.inlinePrimaryBtn, { backgroundColor: palette.accent }]}
+                  onPress={saveOverviewDetails}
+                  disabled={overviewSaving}
+                >
+                  <T weight="semiBold" color="#FFFFFF" style={styles.inlineBtnText}>
+                    {overviewSaving ? "Saving..." : "Save Idea"}
+                  </T>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
         </View>
       );
     }
@@ -520,7 +850,7 @@ export default function FreelancerProfileScreen() {
         {links.length === 0 ? (
           <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
         ) : (
-          links.slice(0, 12).map((item, index) => (
+          links.map((item, index) => (
             <MoreRow
               key={`${item.platform || "link"}-sheet-${index}`}
               icon="globe-outline"
@@ -530,6 +860,46 @@ export default function FreelancerProfileScreen() {
             />
           ))
         )}
+        {showOverviewEditor ? (
+          <View style={[styles.inlineEditorCard, { borderColor: palette.borderLight, backgroundColor: palette.card }]}>
+            <TextInput
+              value={draftSocialLabel}
+              onChangeText={setDraftSocialLabel}
+              placeholder="Platform / Label"
+              placeholderTextColor={palette.subText}
+              style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+            />
+            <TextInput
+              value={draftSocialUrl}
+              onChangeText={setDraftSocialUrl}
+              placeholder="Profile URL"
+              placeholderTextColor={palette.subText}
+              style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+            />
+            <View style={styles.inlineActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.inlineBtn, { borderColor: palette.borderLight }]}
+                onPress={() => setShowOverviewEditor(false)}
+                disabled={overviewSaving}
+              >
+                <T weight="medium" color={palette.text} style={styles.inlineBtnText}>
+                  Cancel
+                </T>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.inlinePrimaryBtn, { backgroundColor: palette.accent }]}
+                onPress={saveOverviewDetails}
+                disabled={overviewSaving}
+              >
+                <T weight="semiBold" color="#FFFFFF" style={styles.inlineBtnText}>
+                  {overviewSaving ? "Saving..." : "Save Link"}
+                </T>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
       </View>
     );
   };
@@ -549,11 +919,11 @@ export default function FreelancerProfileScreen() {
             <View style={styles.heroPatternB} />
             <View style={styles.heroPatternC} />
             <View style={styles.heroPatternD} />
-            
+
             <View style={styles.heroTop}>
               <View style={styles.avatarSection}>
                 <View style={styles.heroAvatarRing}>
-                  <Avatar source={profile?.photo_url || null} size={60} />
+                  <Avatar source={profile?.photo_url || people.alex} size={60} />
                   <View style={styles.statusDot} />
                 </View>
               </View>
@@ -667,7 +1037,13 @@ export default function FreelancerProfileScreen() {
           <ProfileOverviewSheet
             visible={Boolean(activeOverviewSection)}
             title={activeOverviewTitle}
-            onClose={() => setActiveOverviewSection(null)}
+            onClose={() => {
+              setActiveOverviewSection(null);
+              setShowOverviewEditor(false);
+            }}
+            onAddDetails={handleOverviewAction}
+            addDetailsLabel={overviewActionLabel}
+            showAddDetailsAction={showOverviewAction}
           >
             {renderOverviewContent()}
           </ProfileOverviewSheet>
@@ -1120,6 +1496,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pitchCta: {
+    marginTop: 6,
     borderWidth: 1,
     borderRadius: 999,
     height: 32,
@@ -1129,6 +1506,49 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   pitchTagText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  inlineEditorCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+  },
+  inlineInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  inlineTextArea: {
+    minHeight: 82,
+    textAlignVertical: "top",
+  },
+  inlineActions: {
+    marginTop: 2,
+    flexDirection: "row",
+    gap: 8,
+  },
+  inlineBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlinePrimaryBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlineBtnText: {
     fontSize: 11,
     lineHeight: 14,
   },

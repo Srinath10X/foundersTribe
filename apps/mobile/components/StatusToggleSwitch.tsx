@@ -1,27 +1,25 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Easing, Pressable, StyleProp, StyleSheet, ViewStyle } from "react-native";
+import { Animated, Pressable, StyleSheet, View } from "react-native";
 
-type StatusToggleSwitchProps = {
+type Props = {
   value: boolean;
   onValueChange: (next: boolean) => void;
-  style?: StyleProp<ViewStyle>;
   disabled?: boolean;
 };
 
 const TRACK_WIDTH = 34;
 const TRACK_HEIGHT = 18;
-const KNOB_SIZE = 12;
-const KNOB_OFFSET = 2;
-const KNOB_TRAVEL = TRACK_WIDTH - KNOB_SIZE - KNOB_OFFSET * 2;
+const KNOB_SIZE = 14;
+const KNOB_TRAVEL = TRACK_WIDTH - KNOB_SIZE - 4;
 
-export default function StatusToggleSwitch({ value, onValueChange, style, disabled }: StatusToggleSwitchProps) {
+export default function StatusToggleSwitch({ value, onValueChange, disabled = false }: Props) {
   const progress = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
-    Animated.timing(progress, {
+    Animated.spring(progress, {
       toValue: value ? 1 : 0,
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
+      friction: 10,
+      tension: 88,
       useNativeDriver: true,
     }).start();
   }, [progress, value]);
@@ -31,50 +29,77 @@ export default function StatusToggleSwitch({ value, onValueChange, style, disabl
     outputRange: [0, KNOB_TRAVEL],
   });
 
+  const trackOn = "rgba(34,197,94,0.24)";
+  const trackOff = "rgba(239,68,68,0.18)";
+
   return (
     <Pressable
       accessibilityRole="switch"
-      accessibilityState={{ checked: value, disabled: Boolean(disabled) }}
+      accessibilityState={{ checked: value, disabled }}
+      onPress={() => {
+        if (!disabled) onValueChange(!value);
+      }}
       disabled={disabled}
-      hitSlop={6}
-      onPress={() => onValueChange(!value)}
-      style={({ pressed }) => [
-        styles.track,
-        value ? styles.trackOn : styles.trackOff,
-        pressed && !disabled ? styles.trackPressed : null,
-        style,
-      ]}
+      style={({ pressed }) => [styles.pressWrap, disabled ? styles.disabled : null, pressed ? styles.pressed : null]}
     >
-      <Animated.View style={[styles.knob, { transform: [{ translateX }] }]} />
+      <Animated.View
+        style={[
+          styles.track,
+          {
+            backgroundColor: value ? trackOn : trackOff,
+            borderColor: value ? "rgba(34,197,94,0.42)" : "rgba(239,68,68,0.35)",
+          },
+        ]}
+      >
+        <View style={styles.glassLayer} pointerEvents="none" />
+        <Animated.View style={[styles.knobWrap, { transform: [{ translateX }] }]}>
+          <View style={styles.knob} />
+        </Animated.View>
+      </Animated.View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  pressWrap: {
+    width: TRACK_WIDTH,
+    height: TRACK_HEIGHT,
+  },
   track: {
     width: TRACK_WIDTH,
     height: TRACK_HEIGHT,
-    borderRadius: 999,
+    borderRadius: TRACK_HEIGHT / 2,
     borderWidth: 1,
-    padding: KNOB_OFFSET,
+    padding: 2,
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    overflow: "hidden",
   },
-  trackOn: {
-    borderColor: "rgba(74,222,128,0.62)",
-    backgroundColor: "rgba(74,222,128,0.48)",
+  glassLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
-  trackOff: {
-    borderColor: "rgba(248,113,113,0.58)",
-    backgroundColor: "rgba(248,113,113,0.38)",
-  },
-  trackPressed: {
-    opacity: 0.9,
+  knobWrap: {
+    width: KNOB_SIZE,
+    height: KNOB_SIZE,
+    borderRadius: KNOB_SIZE / 2,
   },
   knob: {
     width: KNOB_SIZE,
     height: KNOB_SIZE,
     borderRadius: KNOB_SIZE / 2,
-    backgroundColor: "rgba(255,255,255,0.98)",
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 0.75,
+    borderColor: "rgba(255,255,255,0.65)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 1.6,
+    elevation: 1.5,
+  },
+  pressed: {
+    opacity: 0.9,
+  },
+  disabled: {
+    opacity: 0.5,
   },
 });

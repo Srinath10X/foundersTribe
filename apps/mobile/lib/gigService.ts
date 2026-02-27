@@ -388,34 +388,6 @@ export const gigService = {
   },
 
   /**
-   * Accept a pending service request (freelancer action)
-   * POST /api/services/requests/:id/accept
-   */
-  acceptServiceRequest: async (requestId: string): Promise<ServiceMessageRequest> => {
-    const response = await fetchWithAuth<{ data: ServiceMessageRequest }>(
-      `/api/services/requests/${requestId}/accept`,
-      {
-        method: "POST",
-      }
-    );
-    return response.data!;
-  },
-
-  /**
-   * Decline a pending service request (freelancer action)
-   * POST /api/services/requests/:id/decline
-   */
-  declineServiceRequest: async (requestId: string): Promise<ServiceMessageRequest> => {
-    const response = await fetchWithAuth<{ data: ServiceMessageRequest }>(
-      `/api/services/requests/${requestId}/decline`,
-      {
-        method: "POST",
-      }
-    );
-    return response.data!;
-  },
-
-  /**
    * List messages in a service request thread
    * GET /api/services/requests/:id/messages
    */

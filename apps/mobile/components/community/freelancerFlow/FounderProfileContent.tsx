@@ -751,7 +751,21 @@ export default function FounderProfileScreen() {
                   />
                 </View>
               </SurfaceCard>
-            </View>
+
+              <TouchableOpacity
+                activeOpacity={0.86}
+                style={[styles.logoutBtn, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}
+                onPress={async () => {
+                  await supabase.auth.signOut();
+                  router.replace("/login");
+                }}
+              >
+                <Ionicons name="log-out-outline" size={15} color={palette.accent} />
+                <T weight="medium" color={palette.accent} style={styles.logoutBtnText}>
+                  Logout
+                </T>
+              </TouchableOpacity>
+            </>
           ) : null}
 
           <View style={{ height: 120 }} />

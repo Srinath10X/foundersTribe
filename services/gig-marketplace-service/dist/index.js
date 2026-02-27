@@ -15,7 +15,6 @@ import contractMessagesRoutes from "./routes/contractMessages.js";
 import contractRatingsRoutes from "./routes/contractRatings.js";
 import notificationsRoutes from "./routes/notifications.js";
 import usersRoutes from "./routes/users.js";
-import feedRoutes from "./routes/feed.js";
 import servicesRoutes from "./routes/services.js";
 const app = express();
 // Cloud Run terminates TLS/load-balancing upstream and forwards client IP via X-Forwarded-*.
@@ -38,7 +37,6 @@ app.use("/api/contracts/:id/messages", contractMessagesRoutes);
 app.use("/api/contracts/:id/rate", contractRatingsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/users", usersRoutes);
-app.use("/api/feed", feedRoutes);
 app.use("/api/services", servicesRoutes);
 app.use(errorHandler);
 app.listen(env.PORT, () => {

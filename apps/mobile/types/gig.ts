@@ -21,7 +21,6 @@ export type UserRole = "founder" | "freelancer" | "both";
 export type AvailabilityStatus = "open" | "busy" | "inactive";
 export type Gender = "male" | "female" | "non_binary" | "prefer_not_to_say" | "other";
 export type NotificationType = "new_proposal" | "proposal_accepted" | "message" | "contract_completed";
-export type FeedPostType = "work_update" | "showcase" | "milestone" | "hiring" | "insight";
 export type ServiceDurationUnit = "days" | "weeks";
 export type ServiceRequestStatus = "pending" | "accepted" | "declined" | "cancelled";
 

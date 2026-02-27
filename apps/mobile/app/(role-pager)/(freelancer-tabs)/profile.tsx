@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
 import ProfileOverviewSheet from "@/components/ProfileOverviewSheet";
@@ -19,6 +19,7 @@ const STORAGE_BUCKET = "tribe-media";
 
 type PreviousWork = { company?: string; role?: string; duration?: string };
 type SocialLink = { platform?: string; url?: string; label?: string };
+type CompletedGig = { title?: string; description?: string };
 
 type ProfileData = {
   id: string;
@@ -35,7 +36,7 @@ type ProfileData = {
   role?: string | null;
   previous_works?: PreviousWork[] | null;
   social_links?: SocialLink[] | null;
-  completed_gigs?: { title?: string; description?: string }[] | null;
+  completed_gigs?: CompletedGig[] | null;
   updated_at?: string | null;
 };
 type ReviewerProfileLite = {
@@ -107,6 +108,146 @@ function compactLocation(raw: unknown): string | null {
     return line.length > 0 ? line : null;
   }
   return null;
+}
+
+function normalizePreviousWorks(raw: unknown): PreviousWork[] {
+  const toItems = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value.flatMap((item) => toItems(item));
+    if (value && typeof value === "object") return [value];
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) return [];
+      if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+        try {
+          return toItems(JSON.parse(text));
+        } catch {
+          return [{ role: text }];
+        }
+      }
+      return [{ role: text }];
+    }
+    return [];
+  };
+
+  return toItems(raw)
+    .map((item) => {
+      const obj = item as Record<string, unknown>;
+      const role = String(obj?.role || "").trim();
+      const company = String(obj?.company || "").trim();
+      const duration = String(obj?.duration || "").trim();
+      return { role, company, duration };
+    })
+    .filter((item) => item.role || item.company || item.duration);
+}
+
+function normalizeSocialLinks(raw: unknown): SocialLink[] {
+  const toItems = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value.flatMap((item) => toItems(item));
+    if (value && typeof value === "object") return [value];
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) return [];
+      if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+        try {
+          return toItems(JSON.parse(text));
+        } catch {
+          return [{ url: text, label: "Link", platform: "Link" }];
+        }
+      }
+      return [{ url: text, label: "Link", platform: "Link" }];
+    }
+    return [];
+  };
+
+  return toItems(raw)
+    .map((item) => {
+      const obj = item as Record<string, unknown>;
+      const url = String(obj?.url || "").trim();
+      const label = String(obj?.label || obj?.platform || "").trim();
+      const platform = String(obj?.platform || obj?.label || "").trim();
+      return {
+        url,
+        label: label || "Link",
+        platform: platform || label || "Link",
+      };
+    })
+    .filter((item) => item.url);
+}
+
+function normalizeCompletedGigs(raw: unknown): CompletedGig[] {
+  const toItems = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value.flatMap((item) => toItems(item));
+    if (value && typeof value === "object") return [value];
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (!text) return [];
+      if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+        try {
+          return toItems(JSON.parse(text));
+        } catch {
+          return [{ title: text, description: "" }];
+        }
+      }
+      return [{ title: text, description: "" }];
+    }
+    return [];
+  };
+
+  return toItems(raw)
+    .map((item) => {
+      const obj = item as Record<string, unknown>;
+      const title = String(obj?.title || "").trim();
+      const description = String(obj?.description || "").trim();
+      return { title, description };
+    })
+    .filter((item) => item.title || item.description);
+}
+
+function dedupePreviousWorks(items: PreviousWork[]): PreviousWork[] {
+  const seen = new Set<string>();
+  const out: PreviousWork[] = [];
+  for (const item of items) {
+    const role = String(item?.role || "").trim();
+    const company = String(item?.company || "").trim();
+    const duration = String(item?.duration || "").trim();
+    if (!role && !company && !duration) continue;
+    const key = `${role.toLowerCase()}|${company.toLowerCase()}|${duration.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ role, company, duration });
+  }
+  return out;
+}
+
+function dedupeSocialLinks(items: SocialLink[]): SocialLink[] {
+  const seen = new Set<string>();
+  const out: SocialLink[] = [];
+  for (const item of items) {
+    const url = String(item?.url || "").trim();
+    if (!url) continue;
+    const label = String(item?.label || item?.platform || "Link").trim();
+    const platform = String(item?.platform || label || "Link").trim();
+    const key = `${url.toLowerCase()}|${label.toLowerCase()}|${platform.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ url, label, platform });
+  }
+  return out;
+}
+
+function dedupeCompletedGigs(items: CompletedGig[]): CompletedGig[] {
+  const seen = new Set<string>();
+  const out: CompletedGig[] = [];
+  for (const item of items) {
+    const title = String(item?.title || "").trim();
+    const description = String(item?.description || "").trim();
+    if (!title && !description) continue;
+    const key = `${title.toLowerCase()}|${description.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ title, description });
+  }
+  return out;
 }
 
 function SectionTitle({ color, title }: { color: string; title: string }) {
@@ -247,8 +388,15 @@ export default function FreelancerProfileScreen() {
   const [showAppearanceModal, setShowAppearanceModal] = useState(false);
   const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
   const [activeOverviewSection, setActiveOverviewSection] = useState<
-    "personal" | "experience" | "previousWorks" | "testimonials" | "social" | null
+    "personal" | "experience" | "testimonials" | "social" | null
   >(null);
+  const [showOverviewEditor, setShowOverviewEditor] = useState(false);
+  const [overviewSaving, setOverviewSaving] = useState(false);
+  const [draftExperienceRole, setDraftExperienceRole] = useState("");
+  const [draftExperienceCompany, setDraftExperienceCompany] = useState("");
+  const [draftExperienceDuration, setDraftExperienceDuration] = useState("");
+  const [draftSocialLabel, setDraftSocialLabel] = useState("");
+  const [draftSocialUrl, setDraftSocialUrl] = useState("");
   const [storedTestimonials, setStoredTestimonials] = useState<Testimonial[]>([]);
   const [reviewerProfilesById, setReviewerProfilesById] = useState<Record<string, ReviewerProfileLite>>({});
   const profileIdForTestimonials = profile?.id || session?.user?.id || "";
@@ -358,6 +506,13 @@ export default function FreelancerProfileScreen() {
         (await resolveAvatar(db?.photo_url || db?.avatar_url || null, userId)) ||
         null;
 
+      const normalizedDbWorks = normalizePreviousWorks(db?.previous_works);
+      const normalizedMetaWorks = normalizePreviousWorks(metaProfile?.previous_works);
+      const normalizedDbLinks = normalizeSocialLinks(db?.social_links);
+      const normalizedMetaLinks = normalizeSocialLinks(metaProfile?.social_links);
+      const normalizedDbGigs = normalizeCompletedGigs(db?.completed_gigs);
+      const normalizedMetaGigs = normalizeCompletedGigs(metaProfile?.completed_gigs);
+
       const merged: ProfileData = {
         id: userId,
         display_name: db?.display_name || db?.username || "User",
@@ -371,15 +526,9 @@ export default function FreelancerProfileScreen() {
         location: compactLocation(db?.location ?? metaProfile?.location),
         linkedin_url: db?.linkedin_url ?? metaProfile?.linkedin_url ?? null,
         role: db?.role ?? metaProfile?.role ?? null,
-        previous_works:
-          (Array.isArray(db?.previous_works) && db.previous_works) ||
-          (Array.isArray(metaProfile?.previous_works) ? metaProfile.previous_works : []),
-        social_links:
-          (Array.isArray(db?.social_links) && db.social_links) ||
-          (Array.isArray(metaProfile?.social_links) ? metaProfile.social_links : []),
-        completed_gigs:
-          (Array.isArray(db?.completed_gigs) && db.completed_gigs) ||
-          (Array.isArray(metaProfile?.completed_gigs) ? metaProfile.completed_gigs : []),
+        previous_works: dedupePreviousWorks([...normalizedDbWorks, ...normalizedMetaWorks]),
+        social_links: dedupeSocialLinks([...normalizedDbLinks, ...normalizedMetaLinks]),
+        completed_gigs: dedupeCompletedGigs([...normalizedDbGigs, ...normalizedMetaGigs]),
         updated_at: db?.updated_at ?? null,
       };
 
@@ -398,6 +547,15 @@ export default function FreelancerProfileScreen() {
   React.useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+  React.useEffect(() => {
+    setShowOverviewEditor(false);
+    setOverviewSaving(false);
+    setDraftExperienceRole("");
+    setDraftExperienceCompany("");
+    setDraftExperienceDuration("");
+    setDraftSocialLabel("");
+    setDraftSocialUrl("");
+  }, [activeOverviewSection]);
 
   React.useEffect(() => {
     if (testimonials.length > 0) return;
@@ -405,7 +563,6 @@ export default function FreelancerProfileScreen() {
   }, [loadStoredTestimonials, testimonials.length]);
 
   const works = profile?.previous_works || [];
-  const previousWorks = (Array.isArray(profile?.completed_gigs) ? profile.completed_gigs : []) || [];
   const links = (profile?.social_links || []).filter((x) => x?.url);
   const testimonialPool = testimonials.length > 0 ? testimonials : storedTestimonials;
   const founderTestimonials = testimonialPool.filter((item) => {
@@ -505,13 +662,73 @@ export default function FreelancerProfileScreen() {
       ? "Personal Details"
       : activeOverviewSection === "experience"
         ? "Experience"
-        : activeOverviewSection === "previousWorks"
-          ? "Previous Works"
-          : activeOverviewSection === "testimonials"
-            ? "Testimonials"
-            : activeOverviewSection === "social"
-              ? "Connect & Profiles"
-              : "Professional Overview";
+        : activeOverviewSection === "testimonials"
+          ? "Testimonials"
+          : activeOverviewSection === "social"
+            ? "Connect & Profiles"
+            : "Professional Overview";
+  const overviewActionLabel =
+    activeOverviewSection === "experience" || activeOverviewSection === "social"
+      ? "Add Additional Details"
+      : "Edit Details";
+  const showOverviewAction =
+    activeOverviewSection !== "personal" && activeOverviewSection !== "testimonials";
+  const saveOverviewDetails = useCallback(async () => {
+    if (!activeOverviewSection || !session?.access_token || !profile) return;
+
+    setOverviewSaving(true);
+    try {
+      if (activeOverviewSection === "experience") {
+        const role = draftExperienceRole.trim();
+        const company = draftExperienceCompany.trim();
+        const duration = draftExperienceDuration.trim();
+        if (!role && !company && !duration) {
+          Alert.alert("Missing details", "Please add role, company, or duration.");
+          return;
+        }
+
+        const nextWorks = dedupePreviousWorks([...(profile.previous_works || []), { role, company, duration }]);
+        await tribeApi.updateMyProfile(session.access_token, { previous_works: nextWorks });
+        setProfile((prev) => (prev ? { ...prev, previous_works: nextWorks } : prev));
+      } else if (activeOverviewSection === "social") {
+        const label = draftSocialLabel.trim();
+        const url = draftSocialUrl.trim();
+        if (!url) {
+          Alert.alert("Missing details", "Please enter a social link URL.");
+          return;
+        }
+
+        const safeUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+        const resolvedLabel = label || "Link";
+        const nextLinks = dedupeSocialLinks([
+          ...(profile.social_links || []),
+          { label: resolvedLabel, platform: resolvedLabel, url: safeUrl },
+        ]);
+
+        await tribeApi.updateMyProfile(session.access_token, { social_links: nextLinks });
+        setProfile((prev) => (prev ? { ...prev, social_links: nextLinks } : prev));
+      }
+
+      setShowOverviewEditor(false);
+    } catch (error: any) {
+      Alert.alert("Update failed", error?.message || "Could not update details.");
+    } finally {
+      setOverviewSaving(false);
+    }
+  }, [
+    activeOverviewSection,
+    draftExperienceCompany,
+    draftExperienceDuration,
+    draftExperienceRole,
+    draftSocialLabel,
+    draftSocialUrl,
+    profile,
+    session?.access_token,
+  ]);
+  const handleOverviewAction = useCallback(() => {
+    if (!showOverviewAction) return;
+    setShowOverviewEditor((prev) => !prev);
+  }, [showOverviewAction]);
   const renderOverviewContent = () => {
     if (activeOverviewSection === "personal") {
       return (
@@ -539,7 +756,7 @@ export default function FreelancerProfileScreen() {
               No experience items added yet.
             </T>
           ) : (
-            works.slice(0, 8).map((work, index) => {
+            works.map((work, index) => {
               const duration = work.duration || "Duration";
               const isCurrent = /present|current/i.test(duration);
               return (
@@ -571,47 +788,53 @@ export default function FreelancerProfileScreen() {
               );
             })
           )}
-        </View>
-      );
-    }
-
-    if (activeOverviewSection === "previousWorks") {
-      return (
-        <View style={styles.sectionStack}>
-          {previousWorks.length === 0 ? (
-            <T weight="regular" color={palette.subText} style={styles.emptyText}>
-              No previous works added yet.
-            </T>
-          ) : (
-            previousWorks.slice(0, 12).map((work, index) => (
-              <View
-                key={`prev-sheet-${index}`}
-                style={[
-                  styles.previousWorkCard,
-                  { borderColor: palette.borderLight, backgroundColor: palette.card },
-                ]}
-              >
-                <View style={styles.previousWorkHead}>
-                  <View style={styles.previousWorkHeadLeft}>
-                    <View style={[styles.previousWorkIconWrap, { backgroundColor: "rgba(14, 165, 233, 0.14)" }]}>
-                      <Ionicons name="briefcase-outline" size={15} color="#0EA5E9" />
-                    </View>
-                    <View style={[styles.previousWorkIndexTag, { borderColor: "rgba(14, 165, 233, 0.3)" }]}>
-                      <T weight="bold" color="#0EA5E9" style={styles.previousWorkIndexText}>
-                        Work {index + 1}
-                      </T>
-                    </View>
-                  </View>
-                </View>
-                <T weight="semiBold" color={palette.text} style={styles.previousWorkTitle} numberOfLines={2}>
-                  {String(work?.title || "Work")}
-                </T>
-                <T weight="regular" color={palette.subText} style={styles.previousWorkDesc} numberOfLines={4}>
-                  {String(work?.description || "Description")}
-                </T>
+          {showOverviewEditor ? (
+            <View style={[styles.inlineEditorCard, { borderColor: palette.borderLight, backgroundColor: palette.card }]}>
+              <TextInput
+                value={draftExperienceRole}
+                onChangeText={setDraftExperienceRole}
+                placeholder="Role"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <TextInput
+                value={draftExperienceCompany}
+                onChangeText={setDraftExperienceCompany}
+                placeholder="Company"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <TextInput
+                value={draftExperienceDuration}
+                onChangeText={setDraftExperienceDuration}
+                placeholder="Duration (e.g. Jan 2026 - Present)"
+                placeholderTextColor={palette.subText}
+                style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <View style={styles.inlineActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.inlineBtn, { borderColor: palette.borderLight }]}
+                  onPress={() => setShowOverviewEditor(false)}
+                  disabled={overviewSaving}
+                >
+                  <T weight="medium" color={palette.text} style={styles.inlineBtnText}>
+                    Cancel
+                  </T>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.inlinePrimaryBtn, { backgroundColor: palette.accent }]}
+                  onPress={saveOverviewDetails}
+                  disabled={overviewSaving}
+                >
+                  <T weight="semiBold" color="#FFFFFF" style={styles.inlineBtnText}>
+                    {overviewSaving ? "Saving..." : "Save Experience"}
+                  </T>
+                </TouchableOpacity>
               </View>
-            ))
-          )}
+            </View>
+          ) : null}
         </View>
       );
     }
@@ -624,7 +847,7 @@ export default function FreelancerProfileScreen() {
               No founder reviews yet.
             </T>
           ) : (
-            testimonialItemsWithTribeProfiles.slice(0, 12).map((item) => {
+            testimonialItemsWithTribeProfiles.map((item) => {
               const reviewer = testimonialName(item);
               const avatarSource = testimonialAvatarSource(item);
               const gigTitle = item.contract?.gig?.title || "Project";
@@ -688,7 +911,7 @@ export default function FreelancerProfileScreen() {
         {links.length === 0 ? (
           <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
         ) : (
-          links.slice(0, 12).map((item, index) => (
+          links.map((item, index) => (
             <MoreRow
               key={`${item.platform || "link"}-sheet-${index}`}
               icon="globe-outline"
@@ -698,6 +921,46 @@ export default function FreelancerProfileScreen() {
             />
           ))
         )}
+        {showOverviewEditor ? (
+          <View style={[styles.inlineEditorCard, { borderColor: palette.borderLight, backgroundColor: palette.card }]}>
+            <TextInput
+              value={draftSocialLabel}
+              onChangeText={setDraftSocialLabel}
+              placeholder="Platform / Label"
+              placeholderTextColor={palette.subText}
+              style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+            />
+            <TextInput
+              value={draftSocialUrl}
+              onChangeText={setDraftSocialUrl}
+              placeholder="Profile URL"
+              placeholderTextColor={palette.subText}
+              style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+            />
+            <View style={styles.inlineActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.inlineBtn, { borderColor: palette.borderLight }]}
+                onPress={() => setShowOverviewEditor(false)}
+                disabled={overviewSaving}
+              >
+                <T weight="medium" color={palette.text} style={styles.inlineBtnText}>
+                  Cancel
+                </T>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[styles.inlinePrimaryBtn, { backgroundColor: palette.accent }]}
+                onPress={saveOverviewDetails}
+                disabled={overviewSaving}
+              >
+                <T weight="semiBold" color="#FFFFFF" style={styles.inlineBtnText}>
+                  {overviewSaving ? "Saving..." : "Save Link"}
+                </T>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
       </View>
     );
   };
@@ -721,7 +984,7 @@ export default function FreelancerProfileScreen() {
           <View style={styles.heroTop}>
             <View style={styles.avatarSection}>
               <View style={styles.heroAvatarRing}>
-                <Avatar source={profile?.photo_url || null} size={60} />
+                <Avatar source={profile?.photo_url || people.alex} size={60} />
                 <View style={styles.statusDot} />
               </View>
             </View>
@@ -792,7 +1055,7 @@ export default function FreelancerProfileScreen() {
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
               <SectionTitle color="#F59E0B" title="Professional Overview" />
               <MoreRow icon="person-outline" title="Personal Details" onPress={() => setActiveOverviewSection("personal")} />
-              <MoreRow icon="folder-open-outline" title="Previous Works" onPress={() => setActiveOverviewSection("previousWorks")} />
+              <MoreRow icon="folder-open-outline" title="Proof of Work" onPress={() => router.push("/proof-of-work")} />
             </SurfaceCard>
           </View>
 
@@ -825,7 +1088,13 @@ export default function FreelancerProfileScreen() {
           <ProfileOverviewSheet
             visible={Boolean(activeOverviewSection)}
             title={activeOverviewTitle}
-            onClose={() => setActiveOverviewSection(null)}
+            onClose={() => {
+              setActiveOverviewSection(null);
+              setShowOverviewEditor(false);
+            }}
+            onAddDetails={handleOverviewAction}
+            addDetailsLabel={overviewActionLabel}
+            showAddDetailsAction={showOverviewAction}
           >
             {renderOverviewContent()}
           </ProfileOverviewSheet>
@@ -1231,6 +1500,45 @@ const styles = StyleSheet.create({
   testimonialText: {
     fontSize: 11,
     lineHeight: 16,
+  },
+  inlineEditorCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 8,
+  },
+  inlineInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  inlineActions: {
+    marginTop: 2,
+    flexDirection: "row",
+    gap: 8,
+  },
+  inlineBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlinePrimaryBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlineBtnText: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   emptyText: {
     marginTop: 10,

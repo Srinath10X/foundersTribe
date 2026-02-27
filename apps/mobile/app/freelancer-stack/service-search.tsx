@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -112,28 +112,15 @@ export default function ServiceSearchScreen() {
   const initialQuery = typeof params.q === "string" ? params.q : "";
 
   const [searchText, setSearchText] = useState(initialQuery);
-  const [committedQuery, setCommittedQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(initialQuery || null);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<ServiceSort>("relevance");
   const [maxDeliveryDays, setMaxDeliveryDays] = useState<number | null>(null);
   const [costBand, setCostBand] = useState<CostBand>("any");
   const [publicProfilesById, setPublicProfilesById] = useState<Record<string, TribeProfileLite>>({});
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSearchTextChange = useCallback((text: string) => {
-    setSearchText(text);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const trimmed = text.trim();
-      if (trimmed) {
-        setCommittedQuery(trimmed);
-        setSelectedCategory(trimmed);
-      }
-    }, 500);
-  }, []);
-
-  const effectiveServiceQuery = committedQuery || selectedCategory || "";
+  const searchKeyword = searchText.trim();
+  const effectiveServiceQuery = searchKeyword || selectedCategory || "";
   const activeCostBand = costBands.find((band) => band.key === costBand) || costBands[0];
 
   const serviceFilters = useMemo(
@@ -223,30 +210,9 @@ export default function ServiceSearchScreen() {
   const openSearch = (seed?: string) => {
     const value = (seed ?? searchText).trim();
     if (!value) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
     setSearchText(value);
-    setCommittedQuery(value);
     setSelectedCategory(value);
   };
-
-  // Filter results to also match by username/display_name
-  const filteredResults = useMemo(() => {
-    if (!effectiveServiceQuery) return freelancerServiceResults;
-    const query = effectiveServiceQuery.toLowerCase();
-    return freelancerServiceResults.filter((item) => {
-      // Always include if services matched from API
-      const serviceMatch = item.services.some((s) =>
-        s.service_name.toLowerCase().includes(query)
-      );
-      if (serviceMatch) return true;
-      // Also match by username or display_name
-      const profile = publicProfilesById[item.freelancer_id];
-      if (!profile) return true; // Keep if profile not loaded yet
-      const nameMatch = profile.display_name.toLowerCase().includes(query);
-      const usernameMatch = profile.username.toLowerCase().includes(query);
-      return nameMatch || usernameMatch;
-    });
-  }, [freelancerServiceResults, effectiveServiceQuery, publicProfilesById]);
 
   return (
     <FlowScreen scroll={false}>
@@ -273,8 +239,8 @@ export default function ServiceSearchScreen() {
             <Ionicons name="search" size={15} color={palette.subText} />
             <TextInput
               value={searchText}
-              onChangeText={handleSearchTextChange}
-              placeholder="Search services or usernames"
+              onChangeText={setSearchText}
+              placeholder="Search services"
               placeholderTextColor={palette.subText}
               style={[styles.searchInput, { color: palette.text }]}
               returnKeyType="search"
@@ -394,36 +360,31 @@ export default function ServiceSearchScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <T weight="medium" color={palette.text} style={styles.sectionTitle}>Results</T>
-              <T weight="regular" color={palette.subText} style={styles.sectionMeta}>{filteredResults.length} found</T>
+              <T weight="regular" color={palette.subText} style={styles.sectionMeta}>{freelancerServiceResults.length} found</T>
             </View>
 
             {!effectiveServiceQuery ? (
               <SurfaceCard style={styles.emptyCard}>
-                <View style={[styles.emptyIconCircle, { backgroundColor: palette.accentSoft }]}>
-                  <Ionicons name="search" size={22} color={palette.accent} />
-                </View>
+                <Ionicons name="search" size={20} color={palette.subText} />
                 <T weight="medium" color={palette.text} style={styles.emptyTitle}>Start searching</T>
-                <T weight="regular" color={palette.subText} style={styles.emptySub}>Search by service name or username to find freelancers.</T>
+                <T weight="regular" color={palette.subText} style={styles.emptySub}>Type a service and press search.</T>
               </SurfaceCard>
             ) : isLoading || isFetching ? (
               <View style={styles.centerWrap}>
                 <ActivityIndicator size="small" color={palette.accent} />
               </View>
-            ) : filteredResults.length === 0 ? (
+            ) : freelancerServiceResults.length === 0 ? (
               <SurfaceCard style={styles.emptyCard}>
-                <View style={[styles.emptyIconCircle, { backgroundColor: "rgba(255,45,85,0.1)" }]}>
-                  <Ionicons name="search" size={22} color="#FF2D55" />
-                </View>
-                <T weight="medium" color={palette.text} style={styles.emptyTitle}>No matches found</T>
+                <Ionicons name="search" size={22} color={palette.subText} />
+                <T weight="medium" color={palette.text} style={styles.emptyTitle}>No service matches</T>
                 <T weight="regular" color={palette.subText} style={styles.emptySub}>Try another keyword or relax filters.</T>
               </SurfaceCard>
             ) : (
               <View style={styles.stack}>
-                {filteredResults.map((item) => {
+                {freelancerServiceResults.map((item) => {
                   const profile = publicProfilesById[item.freelancer_id];
                   const primary = item.services[0];
                   const displayName = profile?.display_name || "Freelancer";
-                  const username = profile?.username || "member";
                   const avatarUri = isValidImageUri(profile?.avatar_url) ? profile?.avatar_url : null;
                   return (
                     <TouchableOpacity
@@ -439,7 +400,7 @@ export default function ServiceSearchScreen() {
                     >
                       <SurfaceCard style={styles.freelancerCard}>
                         {avatarUri ? (
-                          <Avatar source={{ uri: avatarUri }} size={46} />
+                          <Avatar source={{ uri: avatarUri }} size={42} />
                         ) : (
                           <View style={[styles.avatarFallback, { backgroundColor: palette.accentSoft }]}>
                             <T weight="medium" color={palette.accent} style={styles.avatarLetter}>
@@ -448,34 +409,18 @@ export default function ServiceSearchScreen() {
                           </View>
                         )}
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={styles.nameRow}>
-                            <T weight="medium" color={palette.text} style={styles.freelancerName} numberOfLines={1}>
-                              {displayName}
-                            </T>
-                            <T weight="regular" color={palette.subText} style={styles.freelancerUsername} numberOfLines={1}>
-                              @{username}
-                            </T>
-                          </View>
-                          <T weight="regular" color={palette.subText} style={styles.freelancerBio} numberOfLines={2}>
-                            {item.services.slice(0, 3).map((service) => service.service_name).join(" · ")}
+                          <T weight="medium" color={palette.text} style={styles.freelancerName} numberOfLines={1}>
+                            {displayName}
                           </T>
-                          <View style={styles.metaRow}>
-                            <View style={[styles.metaBadge, { backgroundColor: palette.accentSoft }]}>
-                              <Ionicons name="cash-outline" size={10} color={palette.accent} />
-                              <T weight="medium" color={palette.accent} style={styles.metaText}>
-                                From ₹{Math.round(item.min_cost_amount).toLocaleString()}
-                              </T>
-                            </View>
-                            <View style={[styles.metaBadge, { backgroundColor: "rgba(52,199,89,0.1)" }]}>
-                              <Ionicons name="time-outline" size={10} color="#34C759" />
-                              <T weight="medium" color="#34C759" style={styles.metaText}>
-                                {formatServiceDuration(item.min_delivery_days)}
-                              </T>
-                            </View>
-                          </View>
+                          <T weight="regular" color={palette.subText} style={styles.freelancerBio} numberOfLines={2}>
+                            {item.services.slice(0, 2).map((service) => service.service_name).join(" • ")}
+                          </T>
+                          <T weight="regular" color={palette.subText} style={styles.freelancerHint} numberOfLines={1}>
+                            From ₹{Math.round(item.min_cost_amount).toLocaleString()} • Fastest {formatServiceDuration(item.min_delivery_days)}
+                          </T>
                         </View>
                         <View style={styles.freelancerRight}>
-                          <Ionicons name="chevron-forward" size={16} color={palette.subText} />
+                          <Ionicons name="chevron-forward" size={15} color={palette.subText} />
                         </View>
                       </SurfaceCard>
                     </TouchableOpacity>
@@ -526,20 +471,19 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   searchBox: {
-    height: 46,
+    height: 42,
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     fontFamily: "Poppins_400Regular",
-    fontSize: 13,
-    textAlignVertical: "center",
-    paddingVertical: 0,
+    fontSize: 12,
+    lineHeight: 16,
   },
   filtersCard: {
     padding: 10,
@@ -609,89 +553,56 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stack: {
-    gap: 10,
+    gap: 8,
   },
   freelancerCard: {
-    padding: 14,
+    padding: 10,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    borderRadius: 14,
+    gap: 10,
   },
   avatarFallback: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarLetter: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  freelancerName: {
     fontSize: 14,
     lineHeight: 18,
   },
-  freelancerUsername: {
+  freelancerName: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  freelancerBio: {
+    marginTop: 2,
     fontSize: 11,
     lineHeight: 14,
   },
-  freelancerBio: {
-    marginTop: 3,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 6,
-  },
-  metaBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  metaText: {
+  freelancerHint: {
+    marginTop: 2,
     fontSize: 10,
     lineHeight: 13,
   },
   freelancerRight: {
     alignItems: "flex-end",
-    justifyContent: "center",
-    paddingLeft: 4,
+    gap: 5,
   },
   emptyCard: {
-    paddingVertical: 28,
-    paddingHorizontal: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: "center",
-    gap: 8,
-    borderRadius: 14,
-  },
-  emptyIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
+    gap: 4,
   },
   emptyTitle: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
   },
   emptySub: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     textAlign: "center",
   },
 });

@@ -103,9 +103,6 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
   });
   const activeThread = threadKind === "service" ? serviceThread : contractThread;
   const resolvedContractId = threadKind === "service" ? serviceThread.requestId : contractThread.contractId;
-  const serviceRequestStatus = threadKind === "service" ? serviceThread.requestStatus : null;
-  const acceptServiceRequest = useAcceptServiceRequest();
-  const declineServiceRequest = useDeclineServiceRequest();
   const {
     isRealtimeConnected,
     currentUserId,

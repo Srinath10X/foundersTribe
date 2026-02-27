@@ -83,28 +83,6 @@ export default function FounderDashboardScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
-
-  // Rotating placeholder animation
-  const [placeholderIdx, setPlaceholderIdx] = useState(0);
-  const placeholderFade = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      Animated.timing(placeholderFade, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        setPlaceholderIdx((prev) => (prev + 1) % SEARCH_PLACEHOLDERS.length);
-        Animated.timing(placeholderFade, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposalSummary, setProposalSummary] = useState<ProposalSummary>({
@@ -303,28 +281,20 @@ export default function FounderDashboardScreen() {
             onPress={() => openServiceSearch()}
             style={[styles.searchBox, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
           >
-            <Ionicons name="search" size={17} color={palette.subText} />
+            <Ionicons name="search" size={15} color={palette.subText} />
             <View style={styles.searchInput}>
-              {searchText ? (
-                <T weight="regular" color={palette.text} style={styles.searchInputText} numberOfLines={1}>
-                  {searchText}
-                </T>
-              ) : (
-                <Animated.View style={{ opacity: placeholderFade }}>
-                  <T weight="regular" color={palette.subText} style={styles.searchInputText} numberOfLines={1}>
-                    {SEARCH_PLACEHOLDERS[placeholderIdx]}
-                  </T>
-                </Animated.View>
-              )}
+              <T weight="regular" color={searchText ? palette.text : palette.subText} style={styles.searchInputText} numberOfLines={1}>
+                {searchText || "Search by service (e.g. UI Design, Reel Editing)"}
+              </T>
             </View>
-            <View style={styles.searchArrow}>
-              <Ionicons name="arrow-forward" size={14} color={palette.subText} />
+            <View>
+              <Ionicons name="arrow-forward-circle" size={20} color={palette.accent} />
             </View>
           </TouchableOpacity>
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <T weight="semiBold" color={palette.text} style={styles.sectionTitle}>
+              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
                 Popular Categories
               </T>
             </View>
@@ -342,12 +312,8 @@ export default function FounderDashboardScreen() {
                     style={[
                       styles.categoryCell,
                       {
-                        borderColor: active
-                          ? isDark ? "rgba(255,45,85,0.35)" : "rgba(255,45,85,0.25)"
-                          : palette.borderLight,
-                        backgroundColor: active
-                          ? isDark ? "rgba(255,45,85,0.10)" : "rgba(255,45,85,0.06)"
-                          : palette.surface,
+                        borderColor: active ? palette.accent : palette.borderLight,
+                        backgroundColor: active ? palette.accentSoft : palette.surface,
                       },
                     ]}
                   >
@@ -581,10 +547,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   searchInputText: {
-    fontSize: 13,
-    lineHeight: 18,
-    padding: 0,
-    textAlignVertical: "center",
+    fontFamily: "Poppins_400Regular",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  filtersCard: {
+    padding: 10,
+    gap: 8,
+  },
+  filterRowWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  filterChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterChipText: {
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  errorCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
   searchArrow: {
     width: 28,
@@ -674,12 +662,14 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: 0.2,
   },
-  kpiIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+  freelancerHint: {
+    marginTop: 2,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  freelancerRight: {
+    alignItems: "flex-end",
+    gap: 5,
   },
   kpiValue: {
     marginTop: SP._8,
