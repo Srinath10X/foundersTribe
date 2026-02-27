@@ -65,6 +65,13 @@ export default function FreelancerTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="create-post"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
         name="gig-details"
         options={{
           href: null,
