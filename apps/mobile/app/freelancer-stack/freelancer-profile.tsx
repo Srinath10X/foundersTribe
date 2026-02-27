@@ -12,7 +12,6 @@ import {
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useContracts, useCreateServiceRequest, useFreelancerServicesByUser, useUserTestimonials } from "@/hooks/useGig";
@@ -112,54 +111,24 @@ function SectionTitle({ color, title }: { color: string; title: string }) {
   );
 }
 
-function DetailRow({
-  icon,
-  label,
-  value,
-  onPress,
-  valueColor,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value?: string | null;
-  onPress?: () => void;
-  valueColor?: string;
-}) {
-  const { palette } = useFlowPalette();
-  const isPressable = typeof onPress === "function";
-
-  return (
-    <TouchableOpacity activeOpacity={0.85} disabled={!isPressable} style={styles.detailRow} onPress={onPress}>
-      <View style={styles.detailRowLeft}>
-        <View style={[styles.detailIcon, { backgroundColor: palette.card }]}>
-          <Ionicons name={icon} size={16} color="#9CA3AF" />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <T weight="medium" color={valueColor || palette.text} style={styles.detailValue} numberOfLines={2}>
-            {value || "Not provided"}
-          </T>
-          <T weight="regular" color={palette.subText} style={styles.detailLabel}>
-            {label}
-          </T>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 function MoreRow({
   icon,
   title,
   subtitle,
   onPress,
+  showChevron,
+  trailingIcon,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle?: string | null;
   onPress?: () => void;
+  showChevron?: boolean;
+  trailingIcon?: keyof typeof Ionicons.glyphMap;
 }) {
   const { palette } = useFlowPalette();
   const isPressable = typeof onPress === "function";
+  const shouldShowChevron = showChevron ?? isPressable;
 
   return (
     <TouchableOpacity
@@ -183,7 +152,12 @@ function MoreRow({
           )}
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+      {shouldShowChevron ? (
+        <View style={styles.moreRight}>
+          {trailingIcon ? <Ionicons name={trailingIcon} size={15} color="#9CA3AF" /> : null}
+          <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -221,7 +195,6 @@ export default function FreelancerProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<PublicProfileData | null>(null);
-  const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
   const testimonialScrollRef = React.useRef<ScrollView | null>(null);
 
   const targetUserId = (typeof id === "string" && id) || profile?.id || "";
@@ -313,15 +286,10 @@ export default function FreelancerProfileScreen() {
   const isFounderProfile = String(profile?.user_type || profile?.role || "")
     .toLowerCase()
     .includes("founder");
-  const expCount = works.length;
+  const availabilityLabel = isFounderProfile ? "Open to Hire" : "Open to Work";
   const profileBio = String(profile?.bio || "").trim();
   const testimonialCardWidth = Math.max(220, Math.min(screenWidth - 72, 320));
   const canSlideTestimonials = testimonialItems.length > 1;
-  const profileHighlights = [
-    { label: "Services", value: String(freelancerServices.length), icon: "briefcase-outline" as const },
-    { label: "Experience", value: String(expCount), icon: "sparkles-outline" as const },
-    { label: "Reviews", value: String(testimonialItems.length), icon: "star-outline" as const },
-  ];
 
   const contracts = contractsData?.items ?? [];
   const targetFreelancerId = (typeof id === "string" && id) || profile?.id || "";
@@ -464,30 +432,12 @@ export default function FreelancerProfileScreen() {
           </View>
 
           <View style={styles.statusRow}>
-            <View style={styles.statusToggleWrap}>
-              <T
-                weight="semiBold"
-                color={availabilityEnabled ? "#FFFFFF" : "rgba(255,255,255,0)"}
-                style={styles.statusToggleLabel}
-              >
-                {isFounderProfile ? "Open to Hire" : "Open to Work"}
+            <View style={styles.statusPill}>
+              <View style={styles.statusPillDot} />
+              <T weight="semiBold" color="#FFFFFF" style={styles.statusPillText}>
+                {availabilityLabel}
               </T>
-              <StatusToggleSwitch value={availabilityEnabled} onValueChange={setAvailabilityEnabled} />
             </View>
-          </View>
-
-          <View style={styles.heroHighlightsRow}>
-            {profileHighlights.map((item) => (
-              <View key={item.label} style={styles.heroHighlightPill}>
-                <Ionicons name={item.icon} size={13} color="rgba(255,255,255,0.85)" />
-                <T weight="semiBold" color="#FFFFFF" style={styles.heroHighlightValue}>
-                  {item.value}
-                </T>
-                <T weight="regular" color="rgba(255,255,255,0.72)" style={styles.heroHighlightLabel}>
-                  {item.label}
-                </T>
-              </View>
-            ))}
           </View>
         </View>
       </View>
@@ -573,123 +523,124 @@ export default function FreelancerProfileScreen() {
           ) : null}
 
           <View style={styles.blockWrap}>
-            <SectionTitle color="#E23744" title="Personal Details" />
+            <SectionTitle color="#E23744" title="Profile Details" />
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
-              <DetailRow icon="call-outline" label="Phone" value={profile.contact} />
-              <DetailRow icon="home-outline" label="Address" value={profile.address} />
-              <DetailRow icon="location-outline" label="Location" value={profile.location} />
-              <DetailRow
+              <MoreRow icon="briefcase-outline" title="Role" subtitle={profile.role || "Not provided"} showChevron={false} />
+              <MoreRow icon="shield-checkmark-outline" title="Availability" subtitle={availabilityLabel} showChevron={false} />
+              <MoreRow icon="call-outline" title="Phone" subtitle={profile.contact || "Not provided"} showChevron={false} />
+              <MoreRow icon="location-outline" title="Location" subtitle={profile.location || "Not provided"} showChevron={false} />
+              <MoreRow icon="home-outline" title="Address" subtitle={profile.address || "Not provided"} showChevron={false} />
+              <MoreRow
                 icon="link-outline"
-                label="LinkedIn"
-                value={profile.linkedin_url}
-                valueColor={profile.linkedin_url ? "#3B82F6" : undefined}
+                title="LinkedIn"
+                subtitle={profile.linkedin_url || "Not provided"}
                 onPress={profile.linkedin_url ? () => openExternalUrl(profile.linkedin_url || "") : undefined}
+                showChevron={Boolean(profile.linkedin_url)}
               />
-              <DetailRow icon="briefcase-outline" label="Role" value={profile.role} />
             </SurfaceCard>
           </View>
 
-          <SurfaceCard style={styles.sectionCard}>
-            <View style={styles.sectionHeadRow}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                Services
-              </T>
-              <T weight="regular" color={palette.subText} style={styles.sectionMeta}>
-                {freelancerServices.length}
-              </T>
-            </View>
-            {freelancerServices.length === 0 ? (
-              <T weight="regular" color={palette.subText} style={styles.emptyLine}>
-                No active services listed yet.
-              </T>
-            ) : (
-              <View style={styles.servicesStack}>
-                {freelancerServices.map((service) => (
-                  <View
-                    key={service.id}
-                    style={[styles.serviceRow, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
-                  >
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <T weight="medium" color={palette.text} style={styles.serviceName} numberOfLines={1}>
-                        {service.service_name}
-                      </T>
-                      <T weight="regular" color={palette.subText} style={styles.serviceMeta} numberOfLines={2}>
-                        ₹{Math.round(Number(service.cost_amount || 0)).toLocaleString()} • {service.delivery_time_value} {service.delivery_time_unit}
-                      </T>
-                    </View>
-                    {!linkedContract ? (
-                      <TouchableOpacity
-                        activeOpacity={0.84}
-                        style={[styles.requestBtn, { backgroundColor: palette.accentSoft }]}
-                        onPress={() => sendServiceRequest(service.id)}
-                        disabled={createServiceRequest.isPending}
-                      >
-                        <T weight="medium" color={palette.accent} style={styles.requestBtnText}>
-                          Request
-                        </T>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                ))}
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#06B6D4" title="Services" />
+            <SurfaceCard style={styles.sectionCard}>
+              <View style={styles.sectionHeadRow}>
+                <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                  Available offerings
+                </T>
               </View>
-            )}
-          </SurfaceCard>
-
-          <SurfaceCard style={styles.sectionCard}>
-            <View style={styles.sectionHeadRow}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                Experience
-              </T>
-              <T weight="regular" color={palette.subText} style={styles.sectionMeta}>
-                {expCount} item{expCount === 1 ? "" : "s"}
-              </T>
-            </View>
-            <View style={styles.sectionStack}>
-              {works.length === 0 ? (
-                <T weight="regular" color={palette.subText} style={styles.emptyText}>
-                  No experience items added yet.
+              {freelancerServices.length === 0 ? (
+                <T weight="regular" color={palette.subText} style={styles.emptyLine}>
+                  No active services listed yet.
                 </T>
               ) : (
-                works.slice(0, 4).map((work, index) => {
-                  const duration = work.duration || "Duration";
-                  const description = String(work.description || "").trim();
-                  const isCurrent = /present|current/i.test(duration);
-                  return (
-                    <View key={`${work.company || "work"}-${index}`} style={styles.workCard}>
-                      <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
-                        <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
-                      </View>
+                <View style={styles.servicesStack}>
+                  {freelancerServices.map((service) => (
+                    <View
+                      key={service.id}
+                      style={[styles.serviceRow, { borderColor: palette.borderLight, backgroundColor: palette.bg }]}
+                    >
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
-                          {work.role || "Role"}
+                        <T weight="medium" color={palette.text} style={styles.serviceName} numberOfLines={1}>
+                          {service.service_name}
                         </T>
-                        <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
-                          {work.company || "Company"}
+                        <T weight="regular" color={palette.subText} style={styles.serviceMeta} numberOfLines={2}>
+                          ₹{Math.round(Number(service.cost_amount || 0)).toLocaleString()} • {service.delivery_time_value} {service.delivery_time_unit}
                         </T>
-                        {!!description && (
-                          <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={3}>
-                            {description}
+                      </View>
+                      {!linkedContract ? (
+                        <TouchableOpacity
+                          activeOpacity={0.84}
+                          style={[styles.requestBtn, { backgroundColor: palette.accentSoft }]}
+                          onPress={() => sendServiceRequest(service.id)}
+                          disabled={createServiceRequest.isPending}
+                        >
+                          <T weight="medium" color={palette.accent} style={styles.requestBtnText}>
+                            Request
                           </T>
-                        )}
-                        <View style={styles.workMetaRow}>
-                          {isCurrent ? (
-                            <View style={styles.currentTag}>
-                              <T weight="medium" color="#2F9254" style={styles.currentTagText}>
-                                Current
-                              </T>
-                            </View>
-                          ) : null}
-                          <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
-                            {duration}
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </SurfaceCard>
+          </View>
+
+          <View style={styles.blockWrap}>
+            <SectionTitle color="#3B82F6" title="Experience" />
+            <SurfaceCard style={styles.sectionCard}>
+              <View style={styles.sectionHeadRow}>
+                <T weight="medium" color={palette.text} style={styles.sectionTitle}>
+                  Work history
+                </T>
+              </View>
+              <View style={styles.sectionStack}>
+                {works.length === 0 ? (
+                  <T weight="regular" color={palette.subText} style={styles.emptyText}>
+                    No experience items added yet.
+                  </T>
+                ) : (
+                  works.slice(0, 4).map((work, index) => {
+                    const duration = work.duration || "Duration";
+                    const description = String(work.description || "").trim();
+                    const isCurrent = /present|current/i.test(duration);
+                    return (
+                      <View key={`${work.company || "work"}-${index}`} style={styles.workCard}>
+                        <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
+                          <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
+                            {work.role || "Role"}
                           </T>
+                          <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
+                            {work.company || "Company"}
+                          </T>
+                          {!!description && (
+                            <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={3}>
+                              {description}
+                            </T>
+                          )}
+                          <View style={styles.workMetaRow}>
+                            {isCurrent ? (
+                              <View style={styles.currentTag}>
+                                <T weight="medium" color="#2F9254" style={styles.currentTagText}>
+                                  Current
+                                </T>
+                              </View>
+                            ) : null}
+                            <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
+                              {duration}
+                            </T>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  );
-                })
-              )}
-            </View>
+                    );
+                  })
+                )}
+              </View>
             </SurfaceCard>
+          </View>
 
           <View style={styles.blockWrap}>
             <SectionTitle color="#0EA5E9" title="Previous Works" />
@@ -991,49 +942,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
   },
-  statusToggleWrap: {
-    minWidth: 0,
-    justifyContent: "center",
+  statusPill: {
+    minHeight: 28,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    flexDirection: "column",
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    backgroundColor: "transparent",
-    borderWidth: 0,
+    gap: 6,
   },
-  statusToggleLabel: {
+  statusPillDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#22C55E",
+  },
+  statusPillText: {
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 0.1,
-  },
-  heroHighlightsRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    gap: 8,
-  },
-  heroHighlightPill: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.14)",
-    gap: 2,
-  },
-  heroHighlightValue: {
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  heroHighlightLabel: {
-    fontSize: 9.5,
-    lineHeight: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
   },
   quickActionsRow: {
     flexDirection: "row",
@@ -1123,10 +1052,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
   },
-  sectionMeta: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
   emptyLine: {
     marginTop: 10,
     fontSize: 11,
@@ -1146,13 +1071,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   serviceName: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 17,
   },
   serviceMeta: {
     marginTop: 1,
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 14,
   },
   requestBtn: {
     borderRadius: 8,
@@ -1166,37 +1091,6 @@ const styles = StyleSheet.create({
   sectionStack: {
     marginTop: 10,
     gap: 10,
-  },
-  detailRow: {
-    minHeight: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0,0,0,0.05)",
-  },
-  detailRowLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  detailIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  detailValue: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  detailLabel: {
-    marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
   },
   workCard: {
     flexDirection: "row",
@@ -1216,18 +1110,18 @@ const styles = StyleSheet.create({
     borderColor: "rgba(59, 130, 246, 0.2)",
   },
   workRole: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
   },
   workCompany: {
     marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 15,
   },
   workDescription: {
     marginTop: 4,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 16,
   },
   workMetaRow: {
     marginTop: 5,
@@ -1304,7 +1198,7 @@ const styles = StyleSheet.create({
   },
   testimonialScroll: {
     marginTop: 6,
-    paddingHorizontal: 18,
+    paddingHorizontal: 6,
     gap: 8,
   },
   testimonialItemCard: {
@@ -1365,6 +1259,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     flex: 1,
+  },
+  moreRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   moreIcon: {
     width: 40,
