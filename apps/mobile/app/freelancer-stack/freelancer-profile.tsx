@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 
 import {
@@ -16,6 +16,7 @@ import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useContracts, useCreateServiceRequest, useFreelancerServicesByUser, useUserTestimonials } from "@/hooks/useGig";
+import { useAuth } from "@/context/AuthContext";
 import gigApi from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
@@ -309,6 +310,12 @@ export default function FreelancerProfileScreen() {
     return role === "founder" || role === "both";
   });
   const testimonialItems = founderTestimonials.length > 0 ? founderTestimonials : testimonials;
+  const isFounderProfile = String(profile?.user_type || profile?.role || "")
+    .toLowerCase()
+    .includes("founder");
+  const expCount = works.length;
+  const testimonialCardWidth = Math.max(220, Math.min(screenWidth - 72, 320));
+  const canSlideTestimonials = testimonialItems.length > 1;
 
   const contracts = contractsData?.items ?? [];
   const targetFreelancerId = (typeof id === "string" && id) || profile?.id || "";
@@ -532,7 +539,7 @@ export default function FreelancerProfileScreen() {
               <DetailRow icon="briefcase-outline" label="Role" value={profile.role} />
             </SurfaceCard>
           </View>
-
+          <SurfaceCard style={styles.sectionCard}>
             <View style={styles.heroActions}>
               {linkedContract ? (
                 <TouchableOpacity
@@ -639,11 +646,11 @@ export default function FreelancerProfileScreen() {
               </T>
             </View>
             <View style={styles.sectionStack}>
-              <FieldRow icon="call-outline" label="Phone" value={profile.contact} />
-              <FieldRow icon="location-outline" label="Address" value={profile.address} />
-              <FieldRow icon="navigate-outline" label="Location" value={profile.location} />
-              <FieldRow icon="logo-linkedin" label="LinkedIn" value={profile.linkedin_url} />
-              <FieldRow icon="briefcase-outline" label="Role" value={profile.role} />
+              <DetailRow icon="call-outline" label="Phone" value={profile.contact} />
+              <DetailRow icon="location-outline" label="Address" value={profile.address} />
+              <DetailRow icon="navigate-outline" label="Location" value={profile.location} />
+              <DetailRow icon="logo-linkedin" label="LinkedIn" value={profile.linkedin_url} />
+              <DetailRow icon="briefcase-outline" label="Role" value={profile.role} />
             </View>
           </SurfaceCard>
 
@@ -694,8 +701,8 @@ export default function FreelancerProfileScreen() {
                   );
                 })
               )}
+            </View>
             </SurfaceCard>
-          </View>
 
           <View style={styles.blockWrap}>
             <SectionTitle color="#0EA5E9" title="Previous Works" />
@@ -1060,6 +1067,41 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     gap: 0,
   },
+  sectionHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  sectionMeta: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  heroActions: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  actionBtn: {
+    minHeight: 40,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBtnText: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  actionHint: {
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 14,
+  },
   emptyLine: {
     marginTop: 10,
     fontSize: 11,
@@ -1130,37 +1172,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     lineHeight: 14,
-  },
-  servicesStack: {
-    marginTop: 10,
-    gap: 8,
-  },
-  serviceRow: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  serviceName: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  serviceMeta: {
-    marginTop: 1,
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  requestBtn: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  requestBtnText: {
-    fontSize: 10,
-    lineHeight: 13,
   },
   workCard: {
     flexDirection: "row",
@@ -1338,11 +1349,6 @@ const styles = StyleSheet.create({
   },
   moreSubtitle: {
     marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  emptyLine: {
-    marginTop: 10,
     fontSize: 11,
     lineHeight: 14,
   },

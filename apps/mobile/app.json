@@ -12,17 +12,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.founderstribe.ai",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio",
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio", "audio"],
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/app_store_1024.png",
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/icon.png"
+        "foregroundImage": "./assets/images/play_store_512.png",
       },
       "package": "com.founderstribe.ai",
       "edgeToEdgeEnabled": true,

@@ -17,7 +17,7 @@ import type { Testimonial } from "@/types/gig";
 
 const STORAGE_BUCKET = "tribe-media";
 
-type PreviousWork = { company?: string; role?: string; duration?: string };
+type PreviousWork = { company?: string; role?: string; duration?: string; description?: string };
 type SocialLink = { platform?: string; url?: string; label?: string };
 type CompletedGig = { title?: string; description?: string };
 
@@ -135,9 +135,10 @@ function normalizePreviousWorks(raw: unknown): PreviousWork[] {
       const role = String(obj?.role || "").trim();
       const company = String(obj?.company || "").trim();
       const duration = String(obj?.duration || "").trim();
-      return { role, company, duration };
+      const description = String(obj?.description || "").trim();
+      return { role, company, duration, description };
     })
-    .filter((item) => item.role || item.company || item.duration);
+    .filter((item) => item.role || item.company || item.duration || item.description);
 }
 
 function normalizeSocialLinks(raw: unknown): SocialLink[] {
@@ -210,11 +211,12 @@ function dedupePreviousWorks(items: PreviousWork[]): PreviousWork[] {
     const role = String(item?.role || "").trim();
     const company = String(item?.company || "").trim();
     const duration = String(item?.duration || "").trim();
-    if (!role && !company && !duration) continue;
-    const key = `${role.toLowerCase()}|${company.toLowerCase()}|${duration.toLowerCase()}`;
+    const description = String(item?.description || "").trim();
+    if (!role && !company && !duration && !description) continue;
+    const key = `${role.toLowerCase()}|${company.toLowerCase()}|${duration.toLowerCase()}|${description.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ role, company, duration });
+    out.push({ role, company, duration, description });
   }
   return out;
 }
@@ -395,6 +397,7 @@ export default function FreelancerProfileScreen() {
   const [draftExperienceRole, setDraftExperienceRole] = useState("");
   const [draftExperienceCompany, setDraftExperienceCompany] = useState("");
   const [draftExperienceDuration, setDraftExperienceDuration] = useState("");
+  const [draftExperienceDescription, setDraftExperienceDescription] = useState("");
   const [draftSocialLabel, setDraftSocialLabel] = useState("");
   const [draftSocialUrl, setDraftSocialUrl] = useState("");
   const [storedTestimonials, setStoredTestimonials] = useState<Testimonial[]>([]);
@@ -553,6 +556,7 @@ export default function FreelancerProfileScreen() {
     setDraftExperienceRole("");
     setDraftExperienceCompany("");
     setDraftExperienceDuration("");
+    setDraftExperienceDescription("");
     setDraftSocialLabel("");
     setDraftSocialUrl("");
   }, [activeOverviewSection]);
@@ -682,12 +686,17 @@ export default function FreelancerProfileScreen() {
         const role = draftExperienceRole.trim();
         const company = draftExperienceCompany.trim();
         const duration = draftExperienceDuration.trim();
+        const description = draftExperienceDescription.trim();
         if (!role && !company && !duration) {
           Alert.alert("Missing details", "Please add role, company, or duration.");
           return;
         }
+        if (!description) {
+          Alert.alert("Missing details", "Please add an experience description.");
+          return;
+        }
 
-        const nextWorks = dedupePreviousWorks([...(profile.previous_works || []), { role, company, duration }]);
+        const nextWorks = dedupePreviousWorks([...(profile.previous_works || []), { role, company, duration, description }]);
         await tribeApi.updateMyProfile(session.access_token, { previous_works: nextWorks });
         setProfile((prev) => (prev ? { ...prev, previous_works: nextWorks } : prev));
       } else if (activeOverviewSection === "social") {
@@ -718,6 +727,7 @@ export default function FreelancerProfileScreen() {
   }, [
     activeOverviewSection,
     draftExperienceCompany,
+    draftExperienceDescription,
     draftExperienceDuration,
     draftExperienceRole,
     draftSocialLabel,
@@ -758,6 +768,7 @@ export default function FreelancerProfileScreen() {
           ) : (
             works.map((work, index) => {
               const duration = work.duration || "Duration";
+              const description = String(work.description || "").trim();
               const isCurrent = /present|current/i.test(duration);
               return (
                 <View key={`${work.company || "work"}-sheet-${index}`} style={styles.workCard}>
@@ -771,6 +782,11 @@ export default function FreelancerProfileScreen() {
                     <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
                       {work.company || "Company"}
                     </T>
+                    {!!description && (
+                      <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={3}>
+                        {description}
+                      </T>
+                    )}
                     <View style={styles.workMetaRow}>
                       {isCurrent ? (
                         <View style={styles.currentTag}>
@@ -810,6 +826,19 @@ export default function FreelancerProfileScreen() {
                 placeholder="Duration (e.g. Jan 2026 - Present)"
                 placeholderTextColor={palette.subText}
                 style={[styles.inlineInput, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
+              />
+              <TextInput
+                value={draftExperienceDescription}
+                onChangeText={setDraftExperienceDescription}
+                placeholder="Description (required)"
+                placeholderTextColor={palette.subText}
+                multiline
+                textAlignVertical="top"
+                style={[
+                  styles.inlineInput,
+                  styles.inlineTextArea,
+                  { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface },
+                ]}
               />
               <View style={styles.inlineActions}>
                 <TouchableOpacity
@@ -1378,6 +1407,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
   },
+  workDescription: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   workMetaRow: {
     marginTop: 5,
     flexDirection: "row",
@@ -1515,6 +1549,10 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     fontSize: 12,
     lineHeight: 16,
+  },
+  inlineTextArea: {
+    minHeight: 86,
+    paddingTop: 10,
   },
   inlineActions: {
     marginTop: 2,

@@ -23,7 +23,7 @@ import {
   View,
 } from "react-native";
 
-type PreviousWork = { company: string; role: string; duration: string };
+type PreviousWork = { company: string; role: string; duration: string; description: string };
 type SocialLink = { platform: string; url: string; label: string };
 type BusinessIdeaItem = { idea: string; pitch_url?: string };
 const STORAGE_BUCKET = "tribe-media";
@@ -101,6 +101,50 @@ export default function EditProfileScreen() {
     if (primaryArr.length > 0) return primaryArr;
     return Array.isArray(fallback) ? (fallback as T[]) : [];
   };
+  const normalizePreviousWorks = (raw: unknown): PreviousWork[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((item) => {
+        const obj = (item || {}) as Record<string, unknown>;
+        return {
+          company: String(obj.company || "").trim(),
+          role: String(obj.role || "").trim(),
+          duration: String(obj.duration || "").trim(),
+          description: String(obj.description || "").trim(),
+        };
+      })
+      .filter((item) => item.company || item.role || item.duration || item.description);
+  };
+  const normalizePitchUrls = (raw: unknown): string[] => {
+    const toUrls = (value: unknown): string[] => {
+      if (Array.isArray(value)) return value.flatMap((item) => toUrls(item));
+      if (typeof value === "string") {
+        const text = value.trim();
+        if (!text) return [];
+        if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+          try {
+            return toUrls(JSON.parse(text));
+          } catch {
+            return [text];
+          }
+        }
+        return [text];
+      }
+      if (value && typeof value === "object") {
+        return Object.values(value as Record<string, unknown>).flatMap((item) => toUrls(item));
+      }
+      return [];
+    };
+
+    return Array.from(
+      new Set(
+        toUrls(raw)
+          .map((url) => String(url || "").trim())
+          .filter(Boolean)
+          .map((url) => (/^https?:\/\//i.test(url) ? url : `https://${url}`)),
+      ),
+    );
+  };
 
   const resolvePhotoUrl = async (storedPhotoValue: string) => {
     if (!storedPhotoValue) return "";
@@ -148,7 +192,7 @@ export default function EditProfileScreen() {
         setLocation(firstFilledString(cached.location));
         setRole(firstFilledString(cached.role));
         setUserType(parseUserType(cached.userType));
-        if (Array.isArray(cached.previousWorks)) setPreviousWorks(cached.previousWorks);
+        if (Array.isArray(cached.previousWorks)) setPreviousWorks(normalizePreviousWorks(cached.previousWorks));
         if (Array.isArray(cached.socialLinks)) setSocialLinks(cached.socialLinks);
         if (Array.isArray(cached.completedGigs)) setCompletedGigs(cached.completedGigs);
         if (Array.isArray(cached.businessIdeas)) setBusinessIdeas(cached.businessIdeas);
@@ -221,15 +265,10 @@ export default function EditProfileScreen() {
       } else {
         setBusinessIdeas([{ idea: "", pitch_url: "" }]);
       }
-      setPreviousWorks(
-        preferNonEmptyArray<PreviousWork>(
-          data.previous_works,
-          preferNonEmptyArray<PreviousWork>(
-            metadataProfile?.previous_works,
-            cached?.previousWorks,
-          ),
-        ),
-      );
+      const dbWorks = normalizePreviousWorks(data.previous_works);
+      const metaWorks = normalizePreviousWorks(metadataProfile?.previous_works);
+      const cachedWorks = normalizePreviousWorks(cached?.previousWorks);
+      setPreviousWorks(preferNonEmptyArray<PreviousWork>(dbWorks, preferNonEmptyArray<PreviousWork>(metaWorks, cachedWorks)));
       const incomingSocialLinks: SocialLink[] = preferNonEmptyArray<SocialLink>(
         data.social_links,
         preferNonEmptyArray<SocialLink>(
@@ -244,12 +283,15 @@ export default function EditProfileScreen() {
         .filter(isPitchLink)
         .map((link) => ({ url: link.url || "" }))
         .filter((item) => !!item.url.trim());
-      const allPitch = [
-        ...(typeof data.idea_video_url === "string" && data.idea_video_url.trim()
-          ? [data.idea_video_url]
-          : []),
-        ...pitchFromLinks.map((item) => item.url),
-      ];
+      const allPitch = Array.from(
+        new Set([
+          ...normalizePitchUrls(data.idea_video_urls),
+          ...normalizePitchUrls(data.idea_video_url),
+          ...normalizePitchUrls(metadataProfile?.idea_video_urls),
+          ...normalizePitchUrls(metadataProfile?.idea_video_url),
+          ...pitchFromLinks.flatMap((item) => normalizePitchUrls(item.url)),
+        ]),
+      );
       if (allPitch.length > 0) {
         setBusinessIdeas((prev) => {
           const seeded = prev.length > 0 ? [...prev] : [{ idea: "", pitch_url: "" }];
@@ -456,7 +498,25 @@ export default function EditProfileScreen() {
         company: (w?.company || "").trim(),
         role: (w?.role || "").trim(),
         duration: (w?.duration || "").trim(),
-      })).filter((w) => w.company || w.role || w.duration);
+        description: (w?.description || "").trim(),
+      })).filter((w) => w.company || w.role || w.duration || w.description);
+      const missingExperienceDescriptionIndex = normalizedExperience.findIndex((w) => !w.description);
+      if (missingExperienceDescriptionIndex >= 0) {
+        Alert.alert("Missing info", `Please add a description for experience ${missingExperienceDescriptionIndex + 1}.`);
+        setSaving(false);
+        return;
+      }
+      const missingExperienceCoreFieldsIndex = normalizedExperience.findIndex(
+        (w) => !w.company && !w.role && !w.duration,
+      );
+      if (missingExperienceCoreFieldsIndex >= 0) {
+        Alert.alert(
+          "Missing info",
+          `Please add role, company, or duration for experience ${missingExperienceCoreFieldsIndex + 1}.`,
+        );
+        setSaving(false);
+        return;
+      }
       if (normalizedExperience.length === 0) {
         Alert.alert("Missing info", "Please add at least one experience entry.");
         setSaving(false);
@@ -515,6 +575,10 @@ export default function EditProfileScreen() {
         linkedin_url: normalizeUrl(linkedinUrl),
         business_ideas: cleanedIdeas,
         business_idea: cleanedIdeas.length ? cleanedIdeas[0] : null,
+        idea_video_urls:
+          userType === "founder" || userType === "both"
+            ? pitchUrlsForPayload
+            : [],
         idea_video_url:
           userType === "founder" || userType === "both"
             ? pitchUrlsForPayload[0] || null
@@ -613,7 +677,7 @@ export default function EditProfileScreen() {
   const addWork = () =>
     setPreviousWorks([
       ...previousWorks,
-      { company: "", role: "", duration: "" },
+      { company: "", role: "", duration: "", description: "" },
     ]);
 
   const updateWork = (
@@ -1060,7 +1124,7 @@ export default function EditProfileScreen() {
                 <Ionicons name="add-circle" size={24} color={theme.brand.primary} />
               </TouchableOpacity>
             </View>
-            <Text style={[styles.cardSubtitle, { color: mutedText }]}>Add your relevant roles and durations.</Text>
+            <Text style={[styles.cardSubtitle, { color: mutedText }]}>Add your relevant roles and durations. Description is required.</Text>
 
             {previousWorks.length === 0 ? (
               <Text style={[styles.emptyHint, { color: theme.text.muted }]}>Tap + to add work experience</Text>
@@ -1094,6 +1158,16 @@ export default function EditProfileScreen() {
                   onChangeText={(v) => updateWork(index, "duration", v)}
                   placeholder="Duration (e.g. Jan 2025 - Present)"
                   placeholderTextColor={theme.text.muted}
+                />
+                <TextInput
+                  style={[...inputStyle, styles.multiline]}
+                  value={work.description}
+                  onChangeText={(v) => updateWork(index, "description", v)}
+                  placeholder="Description (required)"
+                  placeholderTextColor={theme.text.muted}
+                  multiline
+                  textAlignVertical="top"
+                  maxLength={2000}
                 />
               </View>
             ))}

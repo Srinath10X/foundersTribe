@@ -765,7 +765,7 @@ export default function FounderProfileScreen() {
                   Logout
                 </T>
               </TouchableOpacity>
-            </>
+            </View>
           ) : null}
 
           <View style={{ height: 120 }} />

@@ -20,6 +20,7 @@ type PreviousWork = {
   company?: string;
   role?: string;
   duration?: string;
+  description?: string;
 };
 
 export default function ExperienceScreen() {
@@ -34,6 +35,7 @@ export default function ExperienceScreen() {
   const [draftRole, setDraftRole] = useState("");
   const [draftCompany, setDraftCompany] = useState("");
   const [draftDuration, setDraftDuration] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
   const loadExperience = useCallback(async () => {
@@ -59,7 +61,8 @@ export default function ExperienceScreen() {
         const role = String(item?.role || "").trim();
         const company = String(item?.company || "").trim();
         const duration = String(item?.duration || "").trim();
-        return role.length > 0 || company.length > 0 || duration.length > 0;
+        const description = String(item?.description || "").trim();
+        return role.length > 0 || company.length > 0 || duration.length > 0 || description.length > 0;
       });
 
       setWorks(normalized);
@@ -82,13 +85,18 @@ export default function ExperienceScreen() {
     const role = draftRole.trim();
     const company = draftCompany.trim();
     const duration = draftDuration.trim();
+    const description = draftDescription.trim();
     if (!role && !company && !duration) {
       Alert.alert("Missing info", "Please enter role, company, or duration.");
       return;
     }
+    if (!description) {
+      Alert.alert("Missing info", "Please add an experience description.");
+      return;
+    }
     if (!session?.access_token) return;
 
-    const nextWorks = [...works, { role, company, duration }];
+    const nextWorks = [...works, { role, company, duration, description }];
     setSaving(true);
     try {
       await tribeApi.updateMyProfile(session.access_token, {
@@ -98,13 +106,14 @@ export default function ExperienceScreen() {
       setDraftRole("");
       setDraftCompany("");
       setDraftDuration("");
+      setDraftDescription("");
       setShowAddForm(false);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to add experience");
     } finally {
       setSaving(false);
     }
-  }, [draftCompany, draftDuration, draftRole, session?.access_token, works]);
+  }, [draftCompany, draftDescription, draftDuration, draftRole, session?.access_token, works]);
 
   return (
     <FlowScreen scroll={false}>
@@ -142,6 +151,7 @@ export default function ExperienceScreen() {
           ) : (
             works.map((work, index) => {
               const duration = String(work.duration || "Duration");
+              const description = String(work.description || "").trim();
               const isCurrent = /present|current/i.test(duration);
 
               return (
@@ -161,6 +171,11 @@ export default function ExperienceScreen() {
                     <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
                       {work.company || "Company"}
                     </T>
+                    {!!description && (
+                      <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={4}>
+                        {description}
+                      </T>
+                    )}
                     <View style={styles.workMetaRow}>
                       {isCurrent ? (
                         <View style={[styles.currentTag, { backgroundColor: palette.accentSoft }]}>
@@ -202,6 +217,16 @@ export default function ExperienceScreen() {
                 placeholderTextColor={palette.subText}
                 style={[styles.input, { borderColor: palette.borderLight, color: palette.text }]}
               />
+              <TextInput
+                value={draftDescription}
+                onChangeText={setDraftDescription}
+                placeholder="Description (required)"
+                placeholderTextColor={palette.subText}
+                style={[styles.input, styles.multilineInput, { borderColor: palette.borderLight, color: palette.text }]}
+                multiline
+                textAlignVertical="top"
+                maxLength={2000}
+              />
               <View style={styles.formActions}>
                 <TouchableOpacity
                   activeOpacity={0.85}
@@ -211,6 +236,7 @@ export default function ExperienceScreen() {
                     setDraftRole("");
                     setDraftCompany("");
                     setDraftDuration("");
+                    setDraftDescription("");
                   }}
                   disabled={saving}
                 >
@@ -247,7 +273,7 @@ export default function ExperienceScreen() {
                     Add Experience
                   </T>
                   <T weight="regular" color={palette.subText} style={styles.actionHint}>
-                    Add role, company and duration
+                    Add role, company, duration, and description
                   </T>
                 </View>
               </View>
@@ -335,6 +361,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
   },
+  multilineInput: {
+    minHeight: 92,
+    paddingTop: 10,
+  },
   formActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -397,6 +427,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     lineHeight: 14,
+  },
+  workDescription: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 15,
   },
   workMetaRow: {
     marginTop: 5,

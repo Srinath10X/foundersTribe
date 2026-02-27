@@ -4,6 +4,7 @@ const previousWorkItem = z.object({
   company: z.string().max(200).default(""),
   role: z.string().max(200).default(""),
   duration: z.string().max(100).default(""),
+  description: z.string().max(5000).default(""),
 });
 
 const socialLinkItem = z.object({
