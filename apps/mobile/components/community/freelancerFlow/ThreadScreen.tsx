@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePathname } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -14,7 +13,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useAcceptServiceRequest, useDeclineServiceRequest } from "@/hooks/useGig";
 import { useContractRealtimeChat } from "@/hooks/useContractRealtimeChat";
 import { useServiceRequestRealtimeChat } from "@/hooks/useServiceRequestRealtimeChat";
 
@@ -127,9 +125,10 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
   const composerBottom = Platform.OS === "ios" ? Math.max(8, insets.bottom) : 8;
   const androidKeyboardGap = 16;
   const [androidKeyboardOffset, setAndroidKeyboardOffset] = useState(0);
-  const isServicePending = threadKind === "service" && serviceRequestStatus === "pending";
-  const isServiceActionPending = acceptServiceRequest.isPending || declineServiceRequest.isPending;
-  const canSendMessage = !!resolvedContractId && (threadKind !== "service" || serviceRequestStatus === "accepted");
+  const serviceRequestStatus = threadKind === "service" ? serviceThread.serviceRequestStatus : null;
+  const canSendMessage =
+    !!resolvedContractId &&
+    (threadKind !== "service" || (serviceRequestStatus !== "declined" && serviceRequestStatus !== "cancelled"));
 
   const requestStatusMeta = useMemo(() => {
     if (threadKind !== "service") return null;
@@ -146,8 +145,8 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
       label: "Pending",
       hint:
         resolvedViewerRole === "freelancer"
-          ? "Accept or decline this request to continue"
-          : "Waiting for freelancer to accept",
+          ? "Request is pending. You can continue chatting."
+          : "Waiting for freelancer response. You can continue chatting.",
       color: "#D97706",
     };
   }, [resolvedViewerRole, serviceRequestStatus, threadKind]);
@@ -181,26 +180,6 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
     if (!body || !canSendMessage) return;
     setDraft("");
     await sendTextMessage(body);
-  };
-
-  const handleAcceptServiceRequest = async () => {
-    if (threadKind !== "service" || !resolvedContractId) return;
-    try {
-      await acceptServiceRequest.mutateAsync({ requestId: resolvedContractId });
-      await serviceThread.refresh(true);
-    } catch (error: any) {
-      Alert.alert("Unable to accept", error?.message || "Please try again.");
-    }
-  };
-
-  const handleDeclineServiceRequest = async () => {
-    if (threadKind !== "service" || !resolvedContractId) return;
-    try {
-      await declineServiceRequest.mutateAsync({ requestId: resolvedContractId });
-      await serviceThread.refresh(true);
-    } catch (error: any) {
-      Alert.alert("Unable to decline", error?.message || "Please try again.");
-    }
   };
 
   const openProfile = () => {
@@ -307,45 +286,6 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
                   {requestStatusMeta.hint}
                 </T>
               </View>
-            </View>
-          ) : null}
-
-          {isServicePending && resolvedViewerRole === "freelancer" ? (
-            <View style={styles.requestActionsRow}>
-              <TouchableOpacity
-                activeOpacity={0.86}
-                onPress={handleDeclineServiceRequest}
-                disabled={isServiceActionPending}
-                style={[
-                  styles.requestActionBtn,
-                  {
-                    borderColor: palette.borderLight,
-                    backgroundColor: palette.surface,
-                    opacity: isServiceActionPending ? 0.6 : 1,
-                  },
-                ]}
-              >
-                <T weight="medium" color={palette.subText} style={styles.requestActionText}>
-                  Reject
-                </T>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.86}
-                onPress={handleAcceptServiceRequest}
-                disabled={isServiceActionPending}
-                style={[
-                  styles.requestActionBtn,
-                  {
-                    borderColor: palette.accent,
-                    backgroundColor: palette.accentSoft,
-                    opacity: isServiceActionPending ? 0.6 : 1,
-                  },
-                ]}
-              >
-                <T weight="medium" color={palette.accent} style={styles.requestActionText}>
-                  Accept
-                </T>
-              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -485,7 +425,7 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
                   canSendMessage
                     ? "Type a message"
                     : threadKind === "service"
-                      ? "Chat unlocks after request acceptance"
+                      ? "Messaging unavailable for this request status"
                       : "Type a message"
                 }
                 placeholderTextColor={palette.subText}

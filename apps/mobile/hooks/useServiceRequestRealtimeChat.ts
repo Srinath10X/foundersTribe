@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { gigService } from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
-import type { ServiceRequestMessage } from "@/types/gig";
+import type { ServiceRequestMessage, ServiceRequestStatus } from "@/types/gig";
 
 export type ServiceChatMessage = ServiceRequestMessage & {
   pending?: boolean;
@@ -183,6 +183,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
   const [counterpartyId, setCounterpartyId] = useState<string | null>(null);
   const [founderId, setFounderId] = useState<string | null>(null);
   const [freelancerId, setFreelancerId] = useState<string | null>(null);
+  const [serviceRequestStatus, setServiceRequestStatus] = useState<ServiceRequestStatus | null>(null);
   const [viewerRole, setViewerRole] = useState<ViewerRole>(null);
   const [counterpartyProfile, setCounterpartyProfile] = useState<CounterpartyProfile | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -226,6 +227,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
       if (loggedInUserId && request) {
         setFounderId(request.founder_id || null);
         setFreelancerId(request.freelancer_id || null);
+        setServiceRequestStatus(request.status || null);
         const nextViewerRole: ViewerRole =
           request.founder_id === loggedInUserId
             ? "founder"
@@ -276,6 +278,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
         setCounterpartyId(null);
         setFounderId(null);
         setFreelancerId(null);
+        setServiceRequestStatus(null);
         setViewerRole(null);
         setCounterpartyProfile(null);
       }
@@ -427,6 +430,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
     currentUserId,
     founderId,
     freelancerId,
+    serviceRequestStatus,
     viewerRole,
     counterpartyProfile,
     sendTextMessage,
@@ -443,6 +447,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
     currentUserId,
     founderId,
     freelancerId,
+    serviceRequestStatus,
     viewerRole,
     counterpartyProfile,
     sendTextMessage,

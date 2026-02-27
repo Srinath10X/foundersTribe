@@ -24,7 +24,7 @@ import type { Testimonial } from "@/types/gig";
 
 const STORAGE_BUCKET = "tribe-media";
 
-type PreviousWork = { company?: string; role?: string; duration?: string };
+type PreviousWork = { company?: string; role?: string; duration?: string; description?: string };
 type SocialLink = { platform?: string; url?: string; label?: string };
 
 type PublicProfileData = {
@@ -314,8 +314,14 @@ export default function FreelancerProfileScreen() {
     .toLowerCase()
     .includes("founder");
   const expCount = works.length;
+  const profileBio = String(profile?.bio || "").trim();
   const testimonialCardWidth = Math.max(220, Math.min(screenWidth - 72, 320));
   const canSlideTestimonials = testimonialItems.length > 1;
+  const profileHighlights = [
+    { label: "Services", value: String(freelancerServices.length), icon: "briefcase-outline" as const },
+    { label: "Experience", value: String(expCount), icon: "sparkles-outline" as const },
+    { label: "Reviews", value: String(testimonialItems.length), icon: "star-outline" as const },
+  ];
 
   const contracts = contractsData?.items ?? [];
   const targetFreelancerId = (typeof id === "string" && id) || profile?.id || "";
@@ -325,9 +331,6 @@ export default function FreelancerProfileScreen() {
     if (gigId && contract.gig_id !== gigId) return false;
     return contract.status === "active" || contract.status === "completed";
   });
-  const lastUpdatedLabel = profile?.updated_at
-    ? new Date(profile.updated_at).toLocaleDateString()
-    : null;
   const preselectedService = freelancerServices.find((service) => service.id === serviceId)
     || freelancerServices[0]
     || null;
@@ -472,6 +475,20 @@ export default function FreelancerProfileScreen() {
               <StatusToggleSwitch value={availabilityEnabled} onValueChange={setAvailabilityEnabled} />
             </View>
           </View>
+
+          <View style={styles.heroHighlightsRow}>
+            {profileHighlights.map((item) => (
+              <View key={item.label} style={styles.heroHighlightPill}>
+                <Ionicons name={item.icon} size={13} color="rgba(255,255,255,0.85)" />
+                <T weight="semiBold" color="#FFFFFF" style={styles.heroHighlightValue}>
+                  {item.value}
+                </T>
+                <T weight="regular" color="rgba(255,255,255,0.72)" style={styles.heroHighlightLabel}>
+                  {item.label}
+                </T>
+              </View>
+            ))}
+          </View>
         </View>
       </View>
 
@@ -501,7 +518,9 @@ export default function FreelancerProfileScreen() {
               }}
               disabled={createServiceRequest.isPending}
             >
-              <Ionicons name={linkedContract ? "chatbubble-ellipses-outline" : "paper-plane-outline"} size={17} color="#E23744" />
+              <View style={[styles.quickActionIconWrap, { backgroundColor: palette.accentSoft }]}>
+                <Ionicons name={linkedContract ? "chatbubble-ellipses-outline" : "paper-plane-outline"} size={15} color={palette.accent} />
+              </View>
               <T weight="medium" color={palette.text} style={styles.quickActionText}>
                 {linkedContract ? "Open Chat" : createServiceRequest.isPending ? "Sending..." : "Send Request"}
               </T>
@@ -516,12 +535,42 @@ export default function FreelancerProfileScreen() {
               }}
               disabled={!profile.linkedin_url}
             >
-              <Ionicons name="logo-linkedin" size={17} color={palette.text} />
+              <View
+                style={[
+                  styles.quickActionIconWrap,
+                  { backgroundColor: profile.linkedin_url ? "rgba(59,130,246,0.12)" : palette.card },
+                ]}
+              >
+                <Ionicons name="logo-linkedin" size={15} color={profile.linkedin_url ? "#2563EB" : palette.subText} />
+              </View>
               <T weight="medium" color={palette.text} style={styles.quickActionText}>
                 {profile.linkedin_url ? "LinkedIn" : "No LinkedIn"}
               </T>
             </TouchableOpacity>
           </View>
+          <T weight="regular" color={palette.subText} style={styles.quickActionsHint}>
+            {linkedContract
+              ? "Active contract available. Jump into chat instantly."
+              : preselectedService
+                ? "Send a request to start a direct conversation."
+                : "No listed services yet. You can connect once services are added."}
+          </T>
+
+          {!!profileBio ? (
+            <View style={styles.blockWrap}>
+              <SectionTitle color="#8B5CF6" title="About" />
+              <SurfaceCard style={styles.sectionCard}>
+                <View style={styles.aboutRow}>
+                  <View style={[styles.aboutIconWrap, { backgroundColor: "rgba(139, 92, 246, 0.12)" }]}>
+                    <Ionicons name="sparkles-outline" size={16} color="#8B5CF6" />
+                  </View>
+                  <T weight="regular" color={palette.text} style={styles.aboutText}>
+                    {profileBio}
+                  </T>
+                </View>
+              </SurfaceCard>
+            </View>
+          ) : null}
 
           <View style={styles.blockWrap}>
             <SectionTitle color="#E23744" title="Personal Details" />
@@ -539,56 +588,6 @@ export default function FreelancerProfileScreen() {
               <DetailRow icon="briefcase-outline" label="Role" value={profile.role} />
             </SurfaceCard>
           </View>
-          <SurfaceCard style={styles.sectionCard}>
-            <View style={styles.heroActions}>
-              {linkedContract ? (
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
-                  onPress={() =>
-                    nav.push(
-                      `/freelancer-stack/contract-chat-thread?contractId=${linkedContract.id}&title=${encodeURIComponent(
-                        `${profile.display_name} • Contract Chat`,
-                      )}`,
-                    )
-                  }
-                >
-                  <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
-                    Message
-                  </T>
-                </TouchableOpacity>
-              ) : preselectedService ? (
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  style={[styles.actionBtn, { backgroundColor: palette.accentSoft }]}
-                  onPress={() => sendServiceRequest(preselectedService.id)}
-                  disabled={createServiceRequest.isPending}
-                >
-                  <T weight="medium" color={palette.accent} style={styles.actionBtnText}>
-                    {createServiceRequest.isPending ? "Sending..." : "Send Message Request"}
-                  </T>
-                </TouchableOpacity>
-              ) : null}
-              {profile.linkedin_url ? (
-                <TouchableOpacity
-                  activeOpacity={0.84}
-                  style={[styles.actionBtn, { backgroundColor: palette.border }]}
-                  onPress={() => openExternalUrl(profile.linkedin_url || "")}
-                >
-                  <T weight="medium" color={palette.text} style={styles.actionBtnText}>
-                    LinkedIn
-                  </T>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-            {!linkedContract ? (
-              <T weight="regular" color={palette.subText} style={styles.actionHint}>
-                {preselectedService
-                  ? "Send a request to start chatting before contract finalization."
-                  : "No listed services yet. Message is available once a contract is active."}
-              </T>
-            ) : null}
-          </SurfaceCard>
 
           <SurfaceCard style={styles.sectionCard}>
             <View style={styles.sectionHeadRow}>
@@ -639,24 +638,6 @@ export default function FreelancerProfileScreen() {
           <SurfaceCard style={styles.sectionCard}>
             <View style={styles.sectionHeadRow}>
               <T weight="medium" color={palette.text} style={styles.sectionTitle}>
-                Personal Details
-              </T>
-              <T weight="regular" color={palette.subText} style={styles.sectionMeta}>
-                Public fields
-              </T>
-            </View>
-            <View style={styles.sectionStack}>
-              <DetailRow icon="call-outline" label="Phone" value={profile.contact} />
-              <DetailRow icon="location-outline" label="Address" value={profile.address} />
-              <DetailRow icon="navigate-outline" label="Location" value={profile.location} />
-              <DetailRow icon="logo-linkedin" label="LinkedIn" value={profile.linkedin_url} />
-              <DetailRow icon="briefcase-outline" label="Role" value={profile.role} />
-            </View>
-          </SurfaceCard>
-
-          <SurfaceCard style={styles.sectionCard}>
-            <View style={styles.sectionHeadRow}>
-              <T weight="medium" color={palette.text} style={styles.sectionTitle}>
                 Experience
               </T>
               <T weight="regular" color={palette.subText} style={styles.sectionMeta}>
@@ -671,6 +652,7 @@ export default function FreelancerProfileScreen() {
               ) : (
                 works.slice(0, 4).map((work, index) => {
                   const duration = work.duration || "Duration";
+                  const description = String(work.description || "").trim();
                   const isCurrent = /present|current/i.test(duration);
                   return (
                     <View key={`${work.company || "work"}-${index}`} style={styles.workCard}>
@@ -684,6 +666,11 @@ export default function FreelancerProfileScreen() {
                         <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
                           {work.company || "Company"}
                         </T>
+                        {!!description && (
+                          <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={3}>
+                            {description}
+                          </T>
+                        )}
                         <View style={styles.workMetaRow}>
                           {isCurrent ? (
                             <View style={styles.currentTag}>
@@ -1020,6 +1007,34 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: 0.1,
   },
+  heroHighlightsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 8,
+  },
+  heroHighlightPill: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.14)",
+    gap: 2,
+  },
+  heroHighlightValue: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  heroHighlightLabel: {
+    fontSize: 9.5,
+    lineHeight: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   quickActionsRow: {
     flexDirection: "row",
     gap: 12,
@@ -1032,15 +1047,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 8,
+    gap: 8,
+    paddingHorizontal: 10,
+  },
+  quickActionIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   quickActionText: {
     fontSize: 13,
     lineHeight: 16,
   },
+  quickActionsHint: {
+    marginTop: -8,
+    paddingHorizontal: 2,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   blockWrap: {
     gap: 8,
+  },
+  aboutRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  aboutIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  aboutText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
   },
   sectionHeader: {
     paddingHorizontal: 4,
@@ -1078,27 +1124,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   sectionMeta: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  heroActions: {
-    flexDirection: "row",
-    gap: 10,
-    flexWrap: "wrap",
-  },
-  actionBtn: {
-    minHeight: 40,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionBtnText: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  actionHint: {
-    marginTop: 10,
     fontSize: 11,
     lineHeight: 14,
   },
@@ -1198,6 +1223,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     lineHeight: 14,
+  },
+  workDescription: {
+    marginTop: 4,
+    fontSize: 11,
+    lineHeight: 15,
   },
   workMetaRow: {
     marginTop: 5,

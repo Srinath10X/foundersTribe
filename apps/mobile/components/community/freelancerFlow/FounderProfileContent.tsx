@@ -10,7 +10,6 @@ import {
   FlowScreen,
   SurfaceCard,
   T,
-  people,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
@@ -24,7 +23,7 @@ import * as tribeApi from "@/lib/tribeApi";
 
 const STORAGE_BUCKET = "tribe-media";
 
-type PreviousWork = { company?: string; role?: string; duration?: string };
+type PreviousWork = { company?: string; role?: string; duration?: string; description?: string };
 type SocialLink = { platform?: string; url?: string; label?: string };
 
 type ProfileData = {
@@ -47,31 +46,6 @@ type ProfileData = {
   idea_video_urls?: string[] | null;
   updated_at?: string | null;
 };
-
-function toTitleCase(value: string) {
-  if (!value) return value;
-  if (value === value.toUpperCase()) {
-    return value.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
-  }
-  return value;
-}
-
-function normalizeName(raw?: string | null, email?: string | null) {
-  let value = (raw || "").trim();
-  if (!value) return (email || "").split("@")[0] || "User";
-
-  if (/^[A-Za-z0-9]+-/.test(value)) {
-    value = value.replace(/^[A-Za-z0-9]+-/, "").trim();
-  }
-
-  value = value
-    .replace(/\b(B\.?\s*Tech|M\.?\s*Tech|BTech|MTech).*/i, "")
-    .replace(/\([^)]*\)\s*$/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  return toTitleCase(value || (email || "").split("@")[0] || "User");
-}
 
 async function resolveAvatar(candidate: unknown, userId: string): Promise<string | null> {
   if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
@@ -243,7 +217,15 @@ function asSingleParam(value: string | string[] | undefined): string {
   return value || "";
 }
 
-export default function FounderProfileScreen() {
+type FounderProfileContentProps = {
+  showBackButton?: boolean;
+  title?: string;
+};
+
+export default function FounderProfileScreen({
+  showBackButton = false,
+  title = "Profile",
+}: FounderProfileContentProps) {
   const { palette, isDark } = useFlowPalette();
   const { themeMode } = useTheme();
   const nav = useFlowNav();
@@ -406,16 +388,31 @@ export default function FounderProfileScreen() {
 
   const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
   const isFounderProfile = String(profile?.user_type || "").toLowerCase() === "founder";
+  const profileBio = String(profile?.bio || "").trim();
   const selectAppearance = () => {
     setShowAppearanceModal(true);
   };
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.surface }]}>
+      <View
+        style={[
+          showBackButton ? styles.headerWithBack : styles.header,
+          { borderBottomColor: palette.borderLight, backgroundColor: palette.surface },
+        ]}
+      >
+        {showBackButton ? (
+          <TouchableOpacity
+            style={[styles.backBtn, { borderColor: palette.borderLight, backgroundColor: palette.surface }]}
+            onPress={nav.back}
+          >
+            <Ionicons name="arrow-back" size={15} color={palette.text} />
+          </TouchableOpacity>
+        ) : null}
         <T weight="bold" color={palette.text} style={styles.pageTitle}>
-          Profile
+          {title}
         </T>
+        {showBackButton ? <View style={styles.headerSpacer} /> : null}
       </View>
 
       <View style={styles.heroFixedWrap}>
@@ -529,6 +526,22 @@ export default function FounderProfileScreen() {
             </View>
           ) : null}
 
+          {!!profileBio ? (
+            <View style={styles.blockWrap}>
+              <SectionTitle color="#8B5CF6" title="About" />
+              <SurfaceCard style={styles.sectionCard}>
+                <View style={styles.bioRow}>
+                  <View style={[styles.bioIconWrap, { backgroundColor: "rgba(139, 92, 246, 0.12)" }]}>
+                    <Ionicons name="sparkles-outline" size={16} color="#8B5CF6" />
+                  </View>
+                  <T weight="regular" color={palette.text} style={styles.bioText}>
+                    {profileBio}
+                  </T>
+                </View>
+              </SurfaceCard>
+            </View>
+          ) : null}
+
           <View style={styles.blockWrap}>
             <SectionTitle color="#E23744" title="Personal Details" />
             <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
@@ -556,6 +569,7 @@ export default function FounderProfileScreen() {
               ) : (
                 works.slice(0, 4).map((work, index) => {
                   const duration = work.duration || "Duration";
+                  const description = String(work.description || "").trim();
                   const isCurrent = /present|current/i.test(duration);
                   return (
                     <View key={`${work.company || "work"}-${index}`} style={styles.workCard}>
@@ -569,6 +583,11 @@ export default function FounderProfileScreen() {
                         <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
                           {work.company || "Company"}
                         </T>
+                        {!!description && (
+                          <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={3}>
+                            {description}
+                          </T>
+                        )}
                         <View style={styles.workMetaRow}>
                           {isCurrent ? (
                             <View style={styles.currentTag}>
@@ -781,6 +800,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
+    alignItems: "center",
+  },
+  headerWithBack: {
+    paddingTop: 54,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerSpacer: {
+    width: 34,
+    height: 34,
   },
   pageTitle: {
     fontFamily: "Poppins_600SemiBold",
@@ -956,6 +997,24 @@ const styles = StyleSheet.create({
   blockWrap: {
     gap: 8,
   },
+  bioRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  bioIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  bioText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   sectionHeader: {
     paddingHorizontal: 4,
     flexDirection: "row",
@@ -1088,6 +1147,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     lineHeight: 15,
+  },
+  workDescription: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 16,
   },
   workMetaRow: {
     marginTop: 5,
@@ -1262,5 +1326,19 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(226, 55, 68, 0.06)",
     borderWidth: 1,
     borderColor: "rgba(226, 55, 68, 0.2)",
+  },
+  logoutBtn: {
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  logoutBtnText: {
+    fontSize: 12.5,
+    lineHeight: 16,
   },
 });
