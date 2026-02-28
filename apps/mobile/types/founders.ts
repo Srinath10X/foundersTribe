@@ -47,6 +47,6 @@ export interface SwipeResponse {
 }
 
 export interface MatchInfo {
-    matchId: string;
+    matchId: string | null;
     matchedUser: FounderCandidate;
 }

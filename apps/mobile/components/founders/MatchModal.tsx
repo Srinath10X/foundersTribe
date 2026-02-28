@@ -9,9 +9,14 @@ import {
     Modal,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
+    KeyboardAvoidingView,
+    Platform,
+    ActivityIndicator,
 } from "react-native";
+import gigService from "@/lib/gigService";
 
 import { useTheme } from "@/context/ThemeContext";
 import type { FounderCandidate } from "@/types/founders";
@@ -34,6 +39,8 @@ function MatchModalInner({
     onKeepSwiping,
 }: MatchModalProps) {
     const { theme, isDark } = useTheme();
+    const [message, setMessage] = React.useState("");
+    const [sending, setSending] = React.useState(false);
 
     if (!matchedUser) return null;
 
@@ -46,7 +53,10 @@ function MatchModalInner({
             animationType="fade"
             statusBarTranslucent
         >
-            <View style={styles.backdrop}>
+            <KeyboardAvoidingView
+                style={styles.backdrop}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+            >
                 <View
                     style={[
                         styles.container,
@@ -114,14 +124,65 @@ function MatchModalInner({
                         )}
                     </View>
 
-                    <TouchableOpacity
-                        style={[styles.primaryBtn, { backgroundColor: "#34C759" }]}
-                        activeOpacity={0.85}
-                        onPress={() => matchId && onChat(matchId)}
-                    >
-                        <Ionicons name="chatbubble" size={18} color="#fff" />
-                        <Text style={styles.primaryBtnText}>Go to Chat</Text>
-                    </TouchableOpacity>
+                    <View style={styles.inputContainer}>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                {
+                                    backgroundColor: isDark ? "#1E1E21" : "#F2F2F7",
+                                    color: theme.text.primary
+                                }
+                            ]}
+                            placeholder="Send a message..."
+                            placeholderTextColor={theme.text.tertiary}
+                            value={message}
+                            onChangeText={setMessage}
+                            multiline
+                            maxLength={500}
+                        />
+                        <TouchableOpacity
+                            style={[
+                                styles.sendBtn,
+                                { backgroundColor: message.trim() ? "#34C759" : theme.border }
+                            ]}
+                            disabled={!message.trim() || sending}
+                            onPress={async () => {
+                                if (!message.trim()) return;
+                                setSending(true);
+                                try {
+                                    let threadId = matchId;
+                                    if (threadId) {
+                                        await gigService.sendServiceRequestMessage(threadId, {
+                                            message_type: "text",
+                                            body: message.trim(),
+                                        });
+                                    } else {
+                                        const req = await gigService.createServiceRequest({
+                                            freelancer_id: matchedUser.id,
+                                            message: message.trim()
+                                        });
+                                        threadId = req.id;
+                                    }
+                                    setMessage("");
+                                    if (threadId) {
+                                        onChat(threadId); // Navigate to chat
+                                    } else {
+                                        onKeepSwiping();
+                                    }
+                                } catch (e) {
+                                    console.error("Failed to set up chat", e);
+                                } finally {
+                                    setSending(false);
+                                }
+                            }}
+                        >
+                            {sending ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Ionicons name="send" size={16} color="#fff" />
+                            )}
+                        </TouchableOpacity>
+                    </View>
 
                     <TouchableOpacity
                         style={[styles.secondaryBtn, { borderColor: theme.border }]}
@@ -131,11 +192,11 @@ function MatchModalInner({
                         <Text
                             style={[styles.secondaryBtnText, { color: theme.text.primary }]}
                         >
-                            Keep Swiping
+                            Maybe later
                         </Text>
                     </TouchableOpacity>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }
@@ -214,5 +275,30 @@ const styles = StyleSheet.create({
     secondaryBtnText: {
         fontSize: 15,
         fontFamily: "Poppins_500Medium",
+    },
+    inputContainer: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        width: "100%",
+        gap: 10,
+        marginTop: 6,
+    },
+    input: {
+        flex: 1,
+        minHeight: 44,
+        maxHeight: 100,
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 12,
+        fontSize: 14,
+        fontFamily: "Poppins_400Regular",
+    },
+    sendBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: "center",
+        justifyContent: "center",
     },
 });

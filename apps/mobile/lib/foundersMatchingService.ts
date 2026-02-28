@@ -174,9 +174,18 @@ export const foundersMatchingService = {
                     photo_url: profileInfo.photo_url || null,
                     bio: c.pitch || profileInfo.bio || null,
                     role: c.role || null,
+                    user_type: null,
                     location: profileInfo.location || null,
+                    country: null,
+                    timezone: null,
+                    startup_stage: null,
+                    experience_level: null,
                     skills: c.topSkills || [],
                     looking_for: profileInfo.looking_for || null,
+                    linkedin_url: null,
+                    portfolio_url: null,
+                    business_ideas: [],
+                    previous_works: []
                 };
                 return [candidate];
             }

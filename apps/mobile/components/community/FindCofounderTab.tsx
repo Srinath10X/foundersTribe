@@ -84,30 +84,16 @@ export default function FindCofounderTab() {
       if (!currentCandidate || creatingChat) return;
 
       if (direction === "right") {
-        setCreatingChat(true);
-        // Start chat immediately
-        gigService.createServiceRequest({
-          freelancer_id: currentCandidate.id,
-          message: "Hi! Let's connect.",
-        })
-          .then((req) => {
-            // We navigate to the service request thread
-            setMatchInfo({
-              matchId: req.id,
-              matchedUser: currentCandidate,
-            });
-          })
-          .catch((err) => {
-            console.error("Failed to crate chat:", err);
-          })
-          .finally(() => {
-            setCreatingChat(false);
-            advanceCard();
-          });
+        // Show MatchModal instantly for chat
+        setMatchInfo({
+          matchId: null, // Will be created when they send a message
+          matchedUser: currentCandidate,
+        });
 
         swipeMutation.mutate(
           { swipedUserId: currentCandidate.id, direction }
         );
+        advanceCard();
         return;
       }
 
