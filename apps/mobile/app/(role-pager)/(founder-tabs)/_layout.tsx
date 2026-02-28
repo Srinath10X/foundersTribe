@@ -50,6 +50,13 @@ export default function FounderTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="connections"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
         name="thread/[threadId]"
         options={{
           href: null,

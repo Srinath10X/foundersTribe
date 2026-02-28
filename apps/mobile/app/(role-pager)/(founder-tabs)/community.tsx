@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { Stack, useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -27,6 +26,7 @@ import CreateTribeModal from "@/components/CreateTribeModal";
 import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
+import { useFounderConnections } from "@/hooks/useFounderConnections";
 import * as tribeApi from "@/lib/tribeApi";
 import { Spacing, Layout } from "@/constants/DesignSystem";
 
@@ -73,6 +73,7 @@ export default function CommunityScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { session } = useAuth();
+  const { notificationCount } = useFounderConnections(true);
   const authToken = session?.access_token || "";
 
   const [activeView, setActiveView] = useState<ActiveView>("tribes");
@@ -189,9 +190,26 @@ export default function CommunityScreen() {
 
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Text style={[styles.brandLogoText, { color: theme.text.primary }]}>
-          Communities
-        </Text>
+        <View style={styles.headerTopRow}>
+          <Text style={[styles.brandLogoText, { color: theme.text.primary }]}>
+            Communities
+          </Text>
+          <TouchableOpacity
+            style={[styles.notifyBtn, { backgroundColor: theme.surface }]}
+            activeOpacity={0.82}
+            onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="notifications-outline" size={18} color={theme.text.primary} />
+            {notificationCount > 0 ? (
+              <View style={[styles.notifyBadge, { backgroundColor: theme.brand.primary }]}>
+                <Text style={styles.notifyBadgeText}>
+                  {notificationCount > 99 ? "99+" : String(notificationCount)}
+                </Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
 
         {showTribeHeaderActions && (
           <ScrollView
@@ -382,12 +400,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
   },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
+  },
   brandLogoText: {
     fontSize: 26,
     fontFamily: "Poppins_700Bold",
     letterSpacing: -0.5,
     marginVertical: Spacing.xs,
     marginLeft: Spacing.xs,
+  },
+  notifyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  notifyBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 8.5,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifyBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    lineHeight: 10,
+    fontFamily: "Poppins_700Bold",
   },
   headerActions: {
     flexDirection: "row",

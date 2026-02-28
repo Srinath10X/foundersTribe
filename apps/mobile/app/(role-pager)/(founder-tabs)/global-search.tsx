@@ -1,9 +1,10 @@
 import SearchTab from "@/components/home/SearchTab";
 import { useTheme } from "@/context/ThemeContext";
+import { useFounderConnections } from "@/hooks/useFounderConnections";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import React from "react";
 import {
   Platform,
@@ -15,6 +16,8 @@ import {
 
 export default function GlobalSearchScreen() {
   const { theme, isDark } = useTheme();
+  const router = useRouter();
+  const { notificationCount } = useFounderConnections(true);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -52,15 +55,18 @@ export default function GlobalSearchScreen() {
                 },
               ]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => {
-                // TODO: Navigate to notifications screen when available
-              }}
+              onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
             >
               <Ionicons
                 name="notifications-outline"
                 size={20}
                 color={isDark ? "#FFFFFF" : "#000000"}
               />
+              {notificationCount > 0 ? (
+                <View style={[styles.notificationBadge, { backgroundColor: theme.brand.primary }]}>
+                  <View style={styles.notificationDot} />
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -101,5 +107,22 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notificationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#fff",
   },
 });

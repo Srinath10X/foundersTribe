@@ -130,6 +130,14 @@ function buildMessageCacheKey(ownerId: string | null | undefined, requestId: str
   return `${ownerId || "anon"}::${requestId}`;
 }
 
+function normalizeServiceRequestStatus(value: unknown): ServiceRequestStatus | null {
+  if (typeof value !== "string") return null;
+  if (value === "pending" || value === "accepted" || value === "declined" || value === "cancelled") {
+    return value;
+  }
+  return null;
+}
+
 function getCachedMessages(cacheKey: string): ServiceChatMessage[] | null {
   const cached = messageCacheByRequestId.get(cacheKey);
   if (!cached) return null;
@@ -177,6 +185,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
   const [messages, setMessages] = useState<ServiceChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -334,6 +343,20 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
           }
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "service_message_requests",
+          filter: `id=eq.${resolvedRequestId}`,
+        },
+        (payload) => {
+          const nextStatus = normalizeServiceRequestStatus((payload.new as { status?: unknown })?.status);
+          if (!nextStatus) return;
+          setServiceRequestStatus((prev) => (prev === nextStatus ? prev : nextStatus));
+        },
+      )
       .subscribe((status) => {
         setIsRealtimeConnected(status === "SUBSCRIBED");
       });
@@ -346,6 +369,30 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
       }
     };
   }, [resolvedRequestId, currentUserId, syncReadState]);
+
+  useEffect(() => {
+    if (!resolvedRequestId) return;
+    if (serviceRequestStatus !== "pending") return;
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const request = await gigService.getServiceRequest(resolvedRequestId);
+        const nextStatus = normalizeServiceRequestStatus(request?.status);
+        if (!cancelled && nextStatus && nextStatus !== serviceRequestStatus) {
+          setServiceRequestStatus(nextStatus);
+        }
+      } catch {
+        // no-op
+      }
+    };
+
+    const intervalId = setInterval(poll, 3500);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [resolvedRequestId, serviceRequestStatus]);
 
   const sendTextMessage = useCallback(async (body: string) => {
     const text = body.trim();
@@ -420,11 +467,44 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
     await sendTextMessage(msg.body);
   }, [currentUserId, resolvedRequestId, sendTextMessage]);
 
+  const updateServiceRequestStatus = useCallback(async (nextStatus: ServiceRequestStatus) => {
+    if (!resolvedRequestId || !currentUserId) return false;
+    if (!["accepted", "declined", "cancelled"].includes(nextStatus)) return false;
+
+    const previousStatus = serviceRequestStatus;
+    setStatusUpdating(true);
+    setError(null);
+    setServiceRequestStatus(nextStatus);
+
+    try {
+      const { data, error: updateError } = await supabase
+        .from("service_message_requests")
+        .update({ status: nextStatus })
+        .eq("id", resolvedRequestId)
+        .select("status")
+        .single();
+
+      if (updateError) throw updateError;
+
+      const serverStatus = (data?.status as ServiceRequestStatus) || nextStatus;
+      setServiceRequestStatus(serverStatus);
+      await loadInitialMessages(resolvedRequestId, true);
+      return true;
+    } catch (e) {
+      setServiceRequestStatus(previousStatus);
+      setError(e instanceof Error ? e.message : "Failed to update request status");
+      return false;
+    } finally {
+      setStatusUpdating(false);
+    }
+  }, [currentUserId, loadInitialMessages, resolvedRequestId, serviceRequestStatus]);
+
   return useMemo(() => ({
     requestId: resolvedRequestId,
     messages,
     loading,
     sending,
+    statusUpdating,
     error,
     isRealtimeConnected,
     currentUserId,
@@ -435,6 +515,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
     counterpartyProfile,
     sendTextMessage,
     retryFailedMessage,
+    updateServiceRequestStatus,
     refresh: (forceRemote = false) =>
       (resolvedRequestId ? loadInitialMessages(resolvedRequestId, forceRemote) : Promise.resolve()),
   }), [
@@ -442,6 +523,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
     messages,
     loading,
     sending,
+    statusUpdating,
     error,
     isRealtimeConnected,
     currentUserId,
@@ -452,6 +534,7 @@ export function useServiceRequestRealtimeChat({ requestId }: Params) {
     counterpartyProfile,
     sendTextMessage,
     retryFailedMessage,
+    updateServiceRequestStatus,
     loadInitialMessages,
   ]);
 }

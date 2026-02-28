@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useContractRealtimeChat } from "@/hooks/useContractRealtimeChat";
 import { useServiceRequestRealtimeChat } from "@/hooks/useServiceRequestRealtimeChat";
+import type { ServiceRequestStatus } from "@/types/gig";
 
 import { Avatar, FlowScreen, T, useFlowNav, useFlowPalette } from "./shared";
 
@@ -109,9 +110,11 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
     messages,
     loading,
     sending,
+    statusUpdating,
     error,
     sendTextMessage,
     retryFailedMessage,
+    updateServiceRequestStatus,
   } = activeThread;
 
   const resolvedViewerRole = viewerRole || inferViewerRole(pathname);
@@ -126,9 +129,14 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
   const androidKeyboardGap = 16;
   const [androidKeyboardOffset, setAndroidKeyboardOffset] = useState(0);
   const serviceRequestStatus = threadKind === "service" ? serviceThread.serviceRequestStatus : null;
+  const canRespondToPendingRequest =
+    threadKind === "service" &&
+    !!resolvedContractId &&
+    resolvedViewerRole === "freelancer" &&
+    serviceRequestStatus === "pending";
   const canSendMessage =
     !!resolvedContractId &&
-    (threadKind !== "service" || (serviceRequestStatus !== "declined" && serviceRequestStatus !== "cancelled"));
+    (threadKind !== "service" || serviceRequestStatus === "accepted");
 
   const requestStatusMeta = useMemo(() => {
     if (threadKind !== "service") return null;
@@ -145,11 +153,16 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
       label: "Pending",
       hint:
         resolvedViewerRole === "freelancer"
-          ? "Request is pending. You can continue chatting."
-          : "Waiting for freelancer response. You can continue chatting.",
+          ? "Review this request to start chatting."
+          : "Waiting for freelancer to accept your request.",
       color: "#D97706",
     };
   }, [resolvedViewerRole, serviceRequestStatus, threadKind]);
+
+  const handleRequestStatus = async (nextStatus: ServiceRequestStatus) => {
+    if (threadKind !== "service") return;
+    await updateServiceRequestStatus(nextStatus);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -289,6 +302,46 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
             </View>
           ) : null}
 
+          {canRespondToPendingRequest ? (
+            <View style={styles.requestActionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.requestActionBtn,
+                  {
+                    borderColor: palette.borderLight,
+                    backgroundColor: palette.surface,
+                    opacity: statusUpdating ? 0.7 : 1,
+                  },
+                ]}
+                onPress={() => handleRequestStatus("declined")}
+                disabled={statusUpdating}
+                activeOpacity={0.86}
+              >
+                <T weight="medium" color={palette.text} style={styles.requestActionText}>
+                  {statusUpdating ? "Updating..." : "Decline"}
+                </T>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.requestActionBtn,
+                  {
+                    borderColor: palette.accent,
+                    backgroundColor: palette.accent,
+                    opacity: statusUpdating ? 0.7 : 1,
+                  },
+                ]}
+                onPress={() => handleRequestStatus("accepted")}
+                disabled={statusUpdating}
+                activeOpacity={0.86}
+              >
+                <T weight="medium" color="#fff" style={styles.requestActionText}>
+                  {statusUpdating ? "Updating..." : "Accept"}
+                </T>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           <FlatList
             ref={listRef}
             style={{ flex: 1 }}
@@ -422,11 +475,17 @@ export default function ThreadScreen({ threadId, title, avatar, threadKind = "co
             <View style={[styles.composer, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
               <TextInput
                 placeholder={
-                  canSendMessage
+                  threadKind !== "service"
                     ? "Type a message"
-                    : threadKind === "service"
-                      ? "Messaging unavailable for this request status"
-                      : "Type a message"
+                    : statusUpdating
+                      ? "Updating request..."
+                      : serviceRequestStatus === "pending"
+                        ? resolvedViewerRole === "freelancer"
+                          ? "Accept or decline to start chatting"
+                          : "Waiting for request acceptance"
+                        : canSendMessage
+                          ? "Type a message"
+                          : "Messaging unavailable for this request status"
                 }
                 placeholderTextColor={palette.subText}
                 style={[styles.input, { color: palette.text, backgroundColor: palette.bg }]}

@@ -2,11 +2,12 @@ import DiscoverTab from "@/components/home/DiscoverTab";
 import FeedTab from "@/components/home/FeedTab";
 import ForYouTab from "@/components/home/ForYouTab";
 import SubTabBar from "@/components/SubTabBar";
+import { useFounderConnections } from "@/hooks/useFounderConnections";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack, useFocusEffect, useNavigation } from "expo-router";
+import { Stack, useFocusEffect, useNavigation, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
@@ -56,7 +57,9 @@ const SUB_TABS: {
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
+  const router = useRouter();
   const navigation = useNavigation();
+  const { notificationCount } = useFounderConnections(true);
   const [activeTab, setActiveTab] = useState<SubTab>("feed");
   const [isSubTabVisible, setIsSubTabVisible] = useState(true);
   const subTabVisibility = useSharedValue(1);
@@ -156,12 +159,18 @@ export default function HomeScreen() {
                 },
               ]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
             >
               <Ionicons
                 name="notifications-outline"
                 size={20}
                 color="#FFFFFF"
               />
+              {notificationCount > 0 ? (
+                <View style={[styles.notificationBadge, { backgroundColor: theme.brand.primary }]}>
+                  <View style={styles.notificationDot} />
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -214,6 +223,23 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notificationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#fff",
   },
 
   // Bottom Sub-Tabs
