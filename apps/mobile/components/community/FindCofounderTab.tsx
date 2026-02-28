@@ -32,11 +32,11 @@ import Animated, {
 import { FounderCard } from "@/components/founders/FounderCard";
 import { MatchModal } from "@/components/founders/MatchModal";
 import { SwipeOverlay } from "@/components/founders/SwipeOverlay";
-import { BAR_HEIGHT, BAR_BOTTOM } from "@/components/CustomTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCandidates, useSwipe } from "@/hooks/useFoundersMatching";
 import type { FounderCandidate, MatchInfo } from "@/types/founders";
+import gigService from "@/lib/gigService";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const SWIPE_THRESHOLD = SCREEN_W * 0.28;
@@ -57,6 +57,7 @@ export default function FindCofounderTab() {
   // ─── State ─────────────────────────────────────────────
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
+  const [creatingChat, setCreatingChat] = useState(false);
 
   const currentCandidate: FounderCandidate | undefined =
     candidates?.[currentIndex];
@@ -80,25 +81,43 @@ export default function FindCofounderTab() {
 
   const handleSwipe = useCallback(
     (direction: "right" | "left") => {
-      if (!currentCandidate) return;
+      if (!currentCandidate || creatingChat) return;
+
+      if (direction === "right") {
+        setCreatingChat(true);
+        // Start chat immediately
+        gigService.createServiceRequest({
+          freelancer_id: currentCandidate.id,
+          message: "Hi! Let's connect.",
+        })
+          .then((req) => {
+            // We navigate to the service request thread
+            setMatchInfo({
+              matchId: req.id,
+              matchedUser: currentCandidate,
+            });
+          })
+          .catch((err) => {
+            console.error("Failed to crate chat:", err);
+          })
+          .finally(() => {
+            setCreatingChat(false);
+            advanceCard();
+          });
+
+        swipeMutation.mutate(
+          { swipedUserId: currentCandidate.id, direction }
+        );
+        return;
+      }
 
       swipeMutation.mutate(
-        { swipedUserId: currentCandidate.id, direction },
-        {
-          onSuccess: (response) => {
-            if (response.matched && response.matchId) {
-              setMatchInfo({
-                matchId: response.matchId,
-                matchedUser: currentCandidate,
-              });
-            }
-          },
-        }
+        { swipedUserId: currentCandidate.id, direction }
       );
 
       advanceCard();
     },
-    [currentCandidate, swipeMutation, advanceCard]
+    [currentCandidate, swipeMutation, advanceCard, creatingChat]
   );
 
   // ─── Pan Gesture ──────────────────────────────────────
@@ -161,21 +180,6 @@ export default function FindCofounderTab() {
     const ty = interpolate(drag, [0, SWIPE_THRESHOLD], [16, 0], Extrapolation.CLAMP);
     return { transform: [{ scale }, { translateY: ty }], opacity };
   });
-
-  // ─── Button handlers ──────────────────────────────────
-  const handlePassButton = useCallback(() => {
-    if (!currentCandidate) return;
-    translateX.value = withTiming(-SCREEN_W * 1.6, { duration: FLY_DURATION });
-    translateY.value = withTiming(-SCREEN_H * 0.12, { duration: FLY_DURATION });
-    handleSwipe("left");
-  }, [currentCandidate, handleSwipe, translateX, translateY]);
-
-  const handleConnectButton = useCallback(() => {
-    if (!currentCandidate) return;
-    translateX.value = withTiming(SCREEN_W * 1.6, { duration: FLY_DURATION });
-    translateY.value = withTiming(-SCREEN_H * 0.12, { duration: FLY_DURATION });
-    handleSwipe("right");
-  }, [currentCandidate, handleSwipe, translateX, translateY]);
 
   // ─── Edge states ──────────────────────────────────────
   const noCandidates =
@@ -276,29 +280,6 @@ export default function FindCofounderTab() {
         )}
       </View>
 
-      {/* Action Buttons */}
-      {currentCandidate && !isLoading && !isError && (
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={styles.passBtn}
-            onPress={handlePassButton}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close" size={24} color="#FF3B30" />
-            <Text style={styles.passBtnText}>Pass</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.connectBtn}
-            onPress={handleConnectButton}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="flash" size={20} color="#fff" />
-            <Text style={styles.connectBtnText}>Connect</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Match Modal */}
       <MatchModal
         visible={!!matchInfo}
@@ -307,7 +288,7 @@ export default function FindCofounderTab() {
         matchId={matchInfo?.matchId ?? null}
         onChat={(id) => {
           setMatchInfo(null);
-          router.push(`/freelancer-stack/contract-chat?id=${id}`);
+          router.push(`/freelancer-stack/contract-chat-thread?threadKind=service&requestId=${id}`);
         }}
         onKeepSwiping={() => setMatchInfo(null)}
       />
@@ -322,12 +303,13 @@ const styles = StyleSheet.create({
   stackContainer: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
+    justifyContent: "flex-start",
+    paddingTop: 8,
     overflow: "hidden",
   },
   cardAbsolute: {
     position: "absolute",
+    top: 8,
   },
   center: {
     alignItems: "center",
@@ -357,46 +339,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontFamily: "Poppins_600SemiBold",
-  },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    paddingBottom: BAR_HEIGHT + BAR_BOTTOM + 10,
-  },
-  passBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 52,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,59,48,0.35)",
-    backgroundColor: "rgba(255,59,48,0.08)",
-  },
-  passBtnText: {
-    fontSize: 15,
-    fontFamily: "Poppins_600SemiBold",
-    color: "#FF3B30",
-  },
-  connectBtn: {
-    flex: 1.6,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: "#7C3AED",
-  },
-  connectBtnText: {
-    fontSize: 15,
-    fontFamily: "Poppins_600SemiBold",
-    color: "#fff",
   },
 });

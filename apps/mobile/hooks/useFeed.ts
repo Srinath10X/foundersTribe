@@ -12,12 +12,13 @@
  */
 
 import {
+  InfiniteData,
   useQuery,
   useMutation,
   useInfiniteQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import feedService, { FeedServiceError } from "@/lib/feedService";
+import { feedService, FeedServiceError } from "@/lib/feedService";
 import type {
   FeedPost,
   FeedPostCreateInput,
@@ -148,10 +149,21 @@ export function useDeletePost() {
 export function useToggleLike() {
   const queryClient = useQueryClient();
 
+  const togglePostLike = (post: FeedPost, isLiked: boolean): FeedPost => ({
+    ...post,
+    is_liked: !isLiked,
+    likes_count: Math.max(0, post.likes_count + (isLiked ? -1 : 1)),
+  });
+
   return useMutation<
     { liked: boolean },
     FeedServiceError,
-    { postId: string; isLiked: boolean }
+    { postId: string; isLiked: boolean },
+    {
+      previousInfinite: [readonly unknown[], InfiniteData<PaginatedFeedPosts> | undefined][];
+      previousList: [readonly unknown[], PaginatedFeedPosts | undefined][];
+      previousDetail: FeedPost | undefined;
+    }
   >({
     mutationFn: ({ postId, isLiked }) =>
       isLiked ? feedService.unlikePost(postId) : feedService.likePost(postId),
@@ -159,8 +171,18 @@ export function useToggleLike() {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: feedQueryKeys.all });
 
+      const previousInfinite = queryClient.getQueriesData<InfiniteData<PaginatedFeedPosts>>({
+        queryKey: ["feed", "infinite"],
+      });
+      const previousList = queryClient.getQueriesData<PaginatedFeedPosts>({
+        queryKey: ["feed", "list"],
+      });
+      const previousDetail = queryClient.getQueryData<FeedPost>(
+        feedQueryKeys.detail(postId),
+      );
+
       // Optimistically update infinite feed pages
-      queryClient.setQueriesData<{ pages: { items: FeedPost[]; next_cursor: string | null }[] }>(
+      queryClient.setQueriesData<InfiniteData<PaginatedFeedPosts>>(
         { queryKey: ["feed", "infinite"] },
         (old) => {
           if (!old) return old;
@@ -170,20 +192,48 @@ export function useToggleLike() {
               ...page,
               items: page.items.map((p) =>
                 p.id === postId
-                  ? {
-                      ...p,
-                      is_liked: !isLiked,
-                      likes_count: p.likes_count + (isLiked ? -1 : 1),
-                    }
+                  ? togglePostLike(p, isLiked)
                   : p,
               ),
             })),
           };
         },
       );
+
+      // Optimistically update non-infinite feed queries
+      queryClient.setQueriesData<PaginatedFeedPosts>(
+        { queryKey: ["feed", "list"] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            items: old.items.map((p) =>
+              p.id === postId ? togglePostLike(p, isLiked) : p,
+            ),
+          };
+        },
+      );
+
+      // Optimistically update post detail screen
+      queryClient.setQueryData<FeedPost>(feedQueryKeys.detail(postId), (old) =>
+        old ? togglePostLike(old, isLiked) : old,
+      );
+
+      return { previousInfinite, previousList, previousDetail };
     },
-    onError: () => {
-      // Revert on error
+    onError: (_error, { postId }, context) => {
+      if (context) {
+        context.previousInfinite.forEach(([key, data]) => {
+          queryClient.setQueryData(key, data);
+        });
+        context.previousList.forEach(([key, data]) => {
+          queryClient.setQueryData(key, data);
+        });
+        queryClient.setQueryData(feedQueryKeys.detail(postId), context.previousDetail);
+      }
+    },
+    onSettled: (_data, _error, { postId }) => {
+      queryClient.invalidateQueries({ queryKey: feedQueryKeys.detail(postId) });
       queryClient.invalidateQueries({ queryKey: feedQueryKeys.all });
     },
   });

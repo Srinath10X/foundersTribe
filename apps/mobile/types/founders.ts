@@ -12,11 +12,17 @@ export interface FounderCandidate {
     photo_url: string | null;
     bio: string | null;
     role: string | null;
+    user_type: "founder" | "freelancer" | "both" | null;
     location: string | null;
+    country: string | null;
+    timezone: string | null;
+    startup_stage: string | null;
+    experience_level: string | null;
     skills: string[];
     looking_for: string | null;
     // Extended fields
     linkedin_url: string | null;
+    portfolio_url: string | null;
     business_ideas: string[];
     previous_works: PreviousWork[];
 }

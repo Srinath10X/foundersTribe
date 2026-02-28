@@ -18,10 +18,34 @@ import type { FounderCandidate } from "@/types/founders";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const CARD_W = SCREEN_W - 32;
-const CARD_H = SCREEN_H * 0.64;
+const CARD_H = SCREEN_H * 0.72;
 
 interface FounderCardProps {
     candidate: FounderCandidate;
+}
+
+function formatValue(value: string | null | undefined): string | null {
+    if (!value) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+
+function toTitle(value: string | null | undefined): string | null {
+    const safe = formatValue(value);
+    if (!safe) return null;
+    return safe
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(" ");
+}
+
+function getRoleLabel(candidate: FounderCandidate): string | null {
+    if (formatValue(candidate.role)) return candidate.role;
+    if (candidate.user_type === "both") return "Founder & Freelancer";
+    if (candidate.user_type === "founder") return "Founder";
+    if (candidate.user_type === "freelancer") return "Freelancer";
+    return null;
 }
 
 function FounderCardInner({ candidate }: FounderCardProps) {
@@ -29,6 +53,19 @@ function FounderCardInner({ candidate }: FounderCardProps) {
 
     const imageUri = candidate.photo_url || candidate.avatar_url;
     const initials = (candidate.display_name || "?").charAt(0).toUpperCase();
+    const roleLabel = getRoleLabel(candidate);
+    const experienceLabel = toTitle(candidate.experience_level);
+    const stageLabel = toTitle(candidate.startup_stage);
+    const detailPills = [experienceLabel, stageLabel].filter(Boolean) as string[];
+    const locationLine = formatValue(candidate.location) || formatValue(candidate.country);
+    const timezoneLine = formatValue(candidate.timezone);
+    const workSummary = candidate.previous_works.length > 0
+        ? `${candidate.previous_works.length} previous work ${candidate.previous_works.length === 1 ? "entry" : "entries"}`
+        : null;
+    const ideaPreview = candidate.business_ideas[0] || null;
+    const ideaLabel = ideaPreview
+        ? `Idea: ${ideaPreview}`
+        : null;
 
     return (
         <View style={styles.card}>
@@ -79,21 +116,43 @@ function FounderCardInner({ candidate }: FounderCardProps) {
                         <Text style={styles.name} numberOfLines={1}>
                             {candidate.display_name || "Founder"}
                         </Text>
-                        {candidate.role ? (
+                        {roleLabel ? (
                             <View style={styles.rolePill}>
                                 <Text style={styles.rolePillText} numberOfLines={1}>
-                                    {candidate.role}
+                                    {roleLabel}
                                 </Text>
                             </View>
                         ) : null}
                     </View>
 
+                    {/* Experience/stage pills */}
+                    {detailPills.length > 0 ? (
+                        <View style={styles.detailPillsRow}>
+                            {detailPills.map((pill) => (
+                                <View key={pill} style={styles.detailPill}>
+                                    <Text style={styles.detailPillText} numberOfLines={1}>
+                                        {pill}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    ) : null}
+
                     {/* Location */}
-                    {candidate.location ? (
+                    {locationLine ? (
                         <View style={styles.metaRow}>
                             <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.6)" />
                             <Text style={styles.metaText} numberOfLines={1}>
-                                {candidate.location}
+                                {locationLine}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {timezoneLine ? (
+                        <View style={styles.metaRow}>
+                            <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.55)" />
+                            <Text style={styles.metaText} numberOfLines={1}>
+                                {timezoneLine}
                             </Text>
                         </View>
                     ) : null}
@@ -129,6 +188,18 @@ function FounderCardInner({ candidate }: FounderCardProps) {
                                 {candidate.looking_for}
                             </Text>
                         </View>
+                    ) : null}
+
+                    {ideaLabel ? (
+                        <Text style={styles.extraLine} numberOfLines={1}>
+                            {ideaLabel}
+                        </Text>
+                    ) : null}
+
+                    {workSummary ? (
+                        <Text style={styles.extraLine} numberOfLines={1}>
+                            {workSummary}
+                        </Text>
                     ) : null}
                 </View>
             </LinearGradient>
@@ -200,6 +271,24 @@ const styles = StyleSheet.create({
         fontFamily: "Poppins_500Medium",
         color: "rgba(255,255,255,0.9)",
     },
+    detailPillsRow: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 6,
+    },
+    detailPill: {
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.14)",
+        backgroundColor: "rgba(255,255,255,0.08)",
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    detailPillText: {
+        fontSize: 10,
+        fontFamily: "Poppins_500Medium",
+        color: "rgba(255,255,255,0.82)",
+    },
     metaRow: {
         flexDirection: "row",
         alignItems: "center",
@@ -254,5 +343,12 @@ const styles = StyleSheet.create({
         fontFamily: "Poppins_400Regular",
         color: "rgba(255,255,255,0.65)",
         lineHeight: 18,
+    },
+    extraLine: {
+        marginTop: 1,
+        fontSize: 12,
+        lineHeight: 17,
+        fontFamily: "Poppins_400Regular",
+        color: "rgba(255,255,255,0.6)",
     },
 });

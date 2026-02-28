@@ -25,18 +25,19 @@ import { usePaginatedFeed } from "@/hooks/useFeed";
 import type { FeedPost } from "@/types/gig";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const NUM_COLUMNS = 3;
+const NUM_COLUMNS = 2;
 const GRID_GAP = 6; // slightly more gap for a better look
 const PADDING_H = 16;
 const AVAILABLE_WIDTH = SCREEN_WIDTH - PADDING_H * 2;
-const CELL_SIZE = (AVAILABLE_WIDTH - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
+const CELL_SIZE =
+  (AVAILABLE_WIDTH - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
 
-// Bento grid: some cells are larger for visual variety
-// Pattern repeats every 12 items:
-//   Row 0: [large 2x2] [small] [small]  (4 items, but large takes 2x2)
-//   Then regular 3-col rows
-// We'll use a simpler approach: alternating between 3-column rows
-// and occasionally a featured row with 1 large + 2 small stacked
+// Bento grid: max 2 columns with alternating featured rows.
+// Pattern repeats:
+//   large-left  -> 3 posts (left tall + 2 right stacked)
+//   row         -> 2 posts
+//   large-right -> 3 posts (right tall + 2 left stacked)
+//   row         -> 2 posts
 
 // Placeholder phrases for animated search bar
 const SEARCH_PHRASES = [
@@ -109,13 +110,14 @@ function AnimatedSearchBar({
         />
         {value.length === 0 && (
           <Animated.View
-            style={[
-              styles.searchPlaceholderOverlay,
-              { opacity: fadeAnim },
-            ]}
+            style={[styles.searchPlaceholderOverlay, { opacity: fadeAnim }]}
             pointerEvents="none"
           >
-            <T weight="regular" color={palette.mutedText} style={styles.searchPlaceholderText}>
+            <T
+              weight="regular"
+              color={palette.mutedText}
+              style={styles.searchPlaceholderText}
+            >
               {SEARCH_PHRASES[phraseIndex]}
             </T>
           </Animated.View>
@@ -143,11 +145,13 @@ function GridCell({
   onPress,
   palette,
   size,
+  height,
 }: {
   item: FeedPost;
   onPress: () => void;
   palette: any;
   size: number;
+  height?: number;
 }) {
   const hasImages = item.images && item.images.length > 0;
   const hasMultipleImages = item.images && item.images.length > 1;
@@ -170,7 +174,7 @@ function GridCell({
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={onPress}
-      style={[styles.gridCell, { width: size, height: size }]}
+      style={[styles.gridCell, { width: size, height: height ?? size }]}
     >
       {hasImages ? (
         <Image
@@ -203,29 +207,6 @@ function GridCell({
           <Ionicons name="copy-outline" size={14} color="#fff" />
         </View>
       )}
-
-      {/* Engagement overlay at bottom */}
-      <View style={styles.cellOverlay}>
-        <View style={styles.cellStats}>
-          <Ionicons
-            name={item.is_liked ? "heart" : "heart-outline"}
-            size={12}
-            color="#fff"
-          />
-          <T weight="medium" color="#fff" style={styles.cellStatText}>
-            {item.likes_count}
-          </T>
-          <Ionicons
-            name="chatbubble-outline"
-            size={11}
-            color="#fff"
-            style={{ marginLeft: 6 }}
-          />
-          <T weight="medium" color="#fff" style={styles.cellStatText}>
-            {item.comments_count}
-          </T>
-        </View>
-      </View>
     </TouchableOpacity>
   );
 }
@@ -250,24 +231,17 @@ function createBentoChunks(data: FeedPost[]): BentoChunk[] {
   while (i < data.length) {
     const remaining = data.length - i;
 
-    // Pattern repeating every 12 items:
-    // chunk 0: large-left (items 0,1,2)
-    // chunk 1: row (items 3,4,5)
-    // chunk 2: large-right (items 6,7,8)
-    // chunk 3: row (items 9,10,11)
-
     let type: ChunkType = "row";
     const patternPos = chunkIndex % 4;
+    const isFeatured = patternPos === 0 || patternPos === 2;
 
-    if (remaining < 3) {
+    if (isFeatured && remaining >= 3) {
+      type = patternPos === 0 ? "large-left" : "large-right";
+    } else if (remaining < 2) {
       type = "incomplete";
-    } else if (patternPos === 0) {
-      type = "large-left";
-    } else if (patternPos === 2) {
-      type = "large-right";
     }
 
-    const size = Math.min(3, remaining);
+    const size = type === "incomplete" ? 1 : type === "row" ? 2 : 3;
     chunks.push({
       id: `chunk_${i}`,
       type,
@@ -298,17 +272,17 @@ export default function FeedScreen() {
   // Filter data
   const filteredData = searchQuery.trim()
     ? data.filter(
-      (post) =>
-        post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (post.tags &&
-          post.tags.some((tag) =>
-            tag.toLowerCase().includes(searchQuery.toLowerCase()),
-          )) ||
-        (post.author?.full_name &&
-          post.author.full_name
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())),
-    )
+        (post) =>
+          post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (post.tags &&
+            post.tags.some((tag) =>
+              tag.toLowerCase().includes(searchQuery.toLowerCase())
+            )) ||
+          (post.author?.full_name &&
+            post.author.full_name
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()))
+      )
     : data;
 
   const bentoChunks = createBentoChunks(filteredData);
@@ -317,14 +291,14 @@ export default function FeedScreen() {
     (postId: string) => {
       nav.push(`/freelancer-stack/post-detail?id=${postId}`);
     },
-    [nav],
+    [nav]
   );
 
   const renderBentoChunk = useCallback(
     ({ item: chunk }: { item: BentoChunk }) => {
       const { type, items } = chunk;
 
-      // Handle incomplete chunks (less than 3 items at the end)
+      // Handle incomplete chunks (less than 2 items at the end)
       if (type === "incomplete" || type === "row") {
         return (
           <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
@@ -337,9 +311,9 @@ export default function FeedScreen() {
                 size={CELL_SIZE}
               />
             ))}
-            {/* Fill remaining space if < 3 items */}
-            {items.length < 3 &&
-              Array.from({ length: 3 - items.length }).map((_, idx) => (
+            {/* Fill remaining space if < 2 items */}
+            {items.length < 2 &&
+              Array.from({ length: 2 - items.length }).map((_, idx) => (
                 <View
                   key={`empty_${idx}`}
                   style={{ width: CELL_SIZE, height: CELL_SIZE }}
@@ -359,7 +333,8 @@ export default function FeedScreen() {
               item={items[0]}
               onPress={() => handlePressPost(items[0].id)}
               palette={palette}
-              size={largeSize}
+              size={CELL_SIZE}
+              height={largeSize}
             />
             <View style={styles.stackedCol}>
               <GridCell
@@ -403,7 +378,8 @@ export default function FeedScreen() {
               item={items[2]}
               onPress={() => handlePressPost(items[2].id)}
               palette={palette}
-              size={largeSize}
+              size={CELL_SIZE}
+              height={largeSize}
             />
           </View>
         );
@@ -411,7 +387,7 @@ export default function FeedScreen() {
 
       return null;
     },
-    [palette, handlePressPost],
+    [palette, handlePressPost]
   );
 
   const renderFooter = useCallback(() => {
@@ -430,16 +406,60 @@ export default function FeedScreen() {
       return (
         <View style={styles.emptyContainer}>
           <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
-            <View style={[styles.skeletonCell, { width: largeSize, height: largeSize, backgroundColor: palette.surface }]} />
+            <View
+              style={[
+                styles.skeletonCell,
+                {
+                  width: CELL_SIZE,
+                  height: largeSize,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+            />
             <View style={styles.stackedCol}>
-              <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
-              <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+              <View
+                style={[
+                  styles.skeletonCell,
+                  {
+                    width: CELL_SIZE,
+                    height: CELL_SIZE,
+                    backgroundColor: palette.surface,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.skeletonCell,
+                  {
+                    width: CELL_SIZE,
+                    height: CELL_SIZE,
+                    backgroundColor: palette.surface,
+                  },
+                ]}
+              />
             </View>
           </View>
           <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
-            <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
-            <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
-            <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+            <View
+              style={[
+                styles.skeletonCell,
+                {
+                  width: CELL_SIZE,
+                  height: CELL_SIZE,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonCell,
+                {
+                  width: CELL_SIZE,
+                  height: CELL_SIZE,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+            />
           </View>
         </View>
       );
@@ -482,10 +502,7 @@ export default function FeedScreen() {
             Explore
           </T>
           <TouchableOpacity
-            style={[
-              styles.createBtn,
-              { backgroundColor: palette.accent },
-            ]}
+            style={[styles.createBtn, { backgroundColor: palette.accent }]}
             activeOpacity={0.85}
             onPress={() => nav.push("/freelancer-stack/feed")}
           >
@@ -633,25 +650,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     padding: 3,
   },
-  cellOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  cellStats: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  cellStatText: {
-    fontSize: 10,
-    lineHeight: 13,
-    marginLeft: 2,
-  },
-
   // Footer / Loading
   footer: {
     paddingVertical: 24,

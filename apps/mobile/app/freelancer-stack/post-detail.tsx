@@ -330,6 +330,7 @@ export default function PostDetailScreen() {
 
     const handleLike = useCallback(() => {
         if (!post) return;
+        if (toggleLike.isPending) return;
         toggleLike.mutate({ postId: post.id, isLiked: post.is_liked });
     }, [post, toggleLike]);
 
@@ -512,6 +513,7 @@ export default function PostDetailScreen() {
                         <TouchableOpacity
                             style={styles.actionBtn}
                             activeOpacity={0.7}
+                            disabled={toggleLike.isPending}
                             onPress={handleLike}
                         >
                             <Ionicons
