@@ -49,7 +49,7 @@ const S = {
 } as const;
 
 const SEARCH_PLACEHOLDERS = [
-  "Search people, articles, communities...",
+  "Search people, articles, etc...",
   "Find a graphic designer...",
   "Discover startup articles...",
   "Search for communities...",

@@ -67,6 +67,14 @@ function FounderCardInner({ candidate }: FounderCardProps) {
         ? `Idea: ${ideaPreview}`
         : null;
 
+    const previousWorks = candidate.previous_works || [];
+    const topCompany = previousWorks[0]?.company;
+    const credibilitySignal = [
+        topCompany ? `Ex-${topCompany}` : null,
+        experienceLabel ? `${experienceLabel} Level` : null,
+        workSummary ? `(${workSummary})` : null
+    ].filter(Boolean).join(" • ");
+
     return (
         <View style={styles.card}>
             {/* Background */}
@@ -98,20 +106,20 @@ function FounderCardInner({ candidate }: FounderCardProps) {
 
             {/* Top vignette */}
             <LinearGradient
-                colors={["rgba(0,0,0,0.28)", "transparent"]}
+                colors={["rgba(0,0,0,0.35)", "transparent"]}
                 style={styles.gradientTop}
                 pointerEvents="none"
             />
 
             {/* Bottom info panel */}
             <LinearGradient
-                colors={["transparent", "rgba(0,0,0,0.5)", "rgba(0,0,0,0.88)", "rgba(0,0,0,0.95)"]}
-                locations={[0, 0.3, 0.7, 1]}
+                colors={["transparent", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.92)", "rgba(0,0,0,0.98)"]}
+                locations={[0, 0.4, 0.75, 1]}
                 style={styles.gradientBottom}
                 pointerEvents="none"
             >
                 <View style={styles.info}>
-                    {/* Name row */}
+                    {/* 1. Name + Role */}
                     <View style={styles.nameRow}>
                         <Text style={styles.name} numberOfLines={1}>
                             {candidate.display_name || "Founder"}
@@ -125,81 +133,52 @@ function FounderCardInner({ candidate }: FounderCardProps) {
                         ) : null}
                     </View>
 
-                    {/* Experience/stage pills */}
-                    {detailPills.length > 0 ? (
-                        <View style={styles.detailPillsRow}>
-                            {detailPills.map((pill) => (
-                                <View key={pill} style={styles.detailPill}>
-                                    <Text style={styles.detailPillText} numberOfLines={1}>
-                                        {pill}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-                    ) : null}
-
-                    {/* Location */}
-                    {locationLine ? (
-                        <View style={styles.metaRow}>
-                            <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.6)" />
-                            <Text style={styles.metaText} numberOfLines={1}>
-                                {locationLine}
-                            </Text>
-                        </View>
-                    ) : null}
-
-                    {timezoneLine ? (
-                        <View style={styles.metaRow}>
-                            <Ionicons name="time-outline" size={12} color="rgba(255,255,255,0.55)" />
-                            <Text style={styles.metaText} numberOfLines={1}>
-                                {timezoneLine}
-                            </Text>
-                        </View>
-                    ) : null}
-
-                    {/* Divider */}
-                    <View style={styles.divider} />
-
-                    {/* Bio */}
-                    {candidate.bio ? (
-                        <Text style={styles.bio} numberOfLines={2}>
-                            {candidate.bio}
+                    {/* 2. One-line Founder Intent */}
+                    {(candidate.looking_for || candidate.bio || ideaLabel) ? (
+                        <Text style={styles.intentText} numberOfLines={1}>
+                            {candidate.looking_for || ideaLabel || candidate.bio}
                         </Text>
                     ) : null}
 
-                    {/* Skills */}
+                    {/* 3. Credibility Signal */}
+                    {credibilitySignal ? (
+                        <View style={styles.credibilityRow}>
+                            <Ionicons name="shield-checkmark" size={14} color="#34C759" />
+                            <Text style={styles.credibilityText} numberOfLines={1}>
+                                {credibilitySignal}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {/* 4. Stage & Location Chips */}
+                    <View style={styles.tagsRow}>
+                        {stageLabel ? (
+                            <View style={styles.stageChip}>
+                                <Ionicons name="rocket-outline" size={12} color="#fff" />
+                                <Text style={styles.stageChipText}>{stageLabel}</Text>
+                            </View>
+                        ) : null}
+                        {locationLine ? (
+                            <View style={styles.metaChip}>
+                                <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.7)" />
+                                <Text style={styles.metaChipText}>
+                                    {locationLine}{timezoneLine ? ` (${timezoneLine})` : ''}
+                                </Text>
+                            </View>
+                        ) : null}
+                    </View>
+
+                    {/* 5. Skills (Max 3) */}
                     {candidate.skills && candidate.skills.length > 0 ? (
                         <View style={styles.skillsRow}>
-                            {candidate.skills.slice(0, 4).map((skill) => (
-                                <View key={skill} style={styles.chip}>
-                                    <Text style={styles.chipText} numberOfLines={1}>
+                            {candidate.skills.slice(0, 3).map((skill) => (
+                                <View key={skill} style={styles.skillChip}>
+                                    <Text style={styles.skillChipText} numberOfLines={1}>
                                         {skill}
                                     </Text>
                                 </View>
                             ))}
                         </View>
-                    ) : null}
-
-                    {/* Looking for */}
-                    {candidate.looking_for ? (
-                        <View style={styles.lookingForBox}>
-                            <Text style={styles.lookingForLabel}>LOOKING FOR</Text>
-                            <Text style={styles.lookingForText} numberOfLines={1}>
-                                {candidate.looking_for}
-                            </Text>
-                        </View>
-                    ) : null}
-
-                    {ideaLabel ? (
-                        <Text style={styles.extraLine} numberOfLines={1}>
-                            {ideaLabel}
-                        </Text>
-                    ) : null}
-
-                    {workSummary ? (
-                        <Text style={styles.extraLine} numberOfLines={1}>
-                            {workSummary}
-                        </Text>
                     ) : null}
                 </View>
             </LinearGradient>
@@ -271,84 +250,78 @@ const styles = StyleSheet.create({
         fontFamily: "Poppins_500Medium",
         color: "rgba(255,255,255,0.9)",
     },
-    detailPillsRow: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        gap: 6,
+    intentText: {
+        fontSize: 15,
+        fontFamily: "Poppins_400Regular",
+        color: "rgba(255,255,255,0.9)",
+        lineHeight: 22,
+        marginTop: 2,
     },
-    detailPill: {
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.14)",
-        backgroundColor: "rgba(255,255,255,0.08)",
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-    },
-    detailPillText: {
-        fontSize: 10,
-        fontFamily: "Poppins_500Medium",
-        color: "rgba(255,255,255,0.82)",
-    },
-    metaRow: {
+    credibilityRow: {
         flexDirection: "row",
         alignItems: "center",
+        gap: 6,
+        marginTop: 4,
+    },
+    credibilityText: {
+        fontSize: 13,
+        fontFamily: "Poppins_500Medium",
+        color: "rgba(255,255,255,0.85)",
+    },
+    tagsRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 8,
+        marginTop: 8,
+    },
+    stageChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "rgba(52, 199, 89, 0.2)",
+        borderColor: "rgba(52, 199, 89, 0.5)",
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
         gap: 4,
     },
-    metaText: {
-        fontSize: 12,
-        fontFamily: "Poppins_400Regular",
-        color: "rgba(255,255,255,0.6)",
+    stageChipText: {
+        fontSize: 11,
+        fontFamily: "Poppins_600SemiBold",
+        color: "#fff",
     },
-    divider: {
-        height: 1,
-        backgroundColor: "rgba(255,255,255,0.1)",
-        marginVertical: 4,
+    metaChip: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "rgba(255,255,255,0.08)",
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        gap: 4,
     },
-    bio: {
-        fontSize: 13,
-        lineHeight: 20,
+    metaChipText: {
+        fontSize: 11,
         fontFamily: "Poppins_400Regular",
-        color: "rgba(255,255,255,0.72)",
+        color: "rgba(255,255,255,0.8)",
     },
     skillsRow: {
         flexDirection: "row",
         flexWrap: "wrap",
-        gap: 6,
+        gap: 8,
+        marginTop: 10,
     },
-    chip: {
-        paddingHorizontal: 11,
-        paddingVertical: 4,
+    skillChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 999,
-        backgroundColor: "rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(255,255,255,0.15)",
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.18)",
+        borderColor: "rgba(255,255,255,0.25)",
     },
-    chipText: {
-        fontSize: 11,
-        fontFamily: "Poppins_500Medium",
-        color: "rgba(255,255,255,0.85)",
-    },
-    lookingForBox: {
-        marginTop: 2,
-        gap: 1,
-    },
-    lookingForLabel: {
-        fontSize: 9,
-        fontFamily: "Poppins_600SemiBold",
-        color: "rgba(255,255,255,0.4)",
-        letterSpacing: 1,
-    },
-    lookingForText: {
-        fontSize: 13,
-        fontFamily: "Poppins_400Regular",
-        color: "rgba(255,255,255,0.65)",
-        lineHeight: 18,
-    },
-    extraLine: {
-        marginTop: 1,
+    skillChipText: {
         fontSize: 12,
-        lineHeight: 17,
-        fontFamily: "Poppins_400Regular",
-        color: "rgba(255,255,255,0.6)",
+        fontFamily: "Poppins_500Medium",
+        color: "#fff",
     },
 });

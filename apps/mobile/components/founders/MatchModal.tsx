@@ -2,7 +2,7 @@
  * MatchModal – Shown when two founders match.
  */
 
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import React from "react";
 import {
     Image,
@@ -63,15 +63,15 @@ function MatchModalInner({
                         { backgroundColor: theme.surfaceElevated },
                     ]}
                 >
-                    <Ionicons name="sparkles" size={36} color="#FFD700" />
+                    <Ionicons name="checkmark-circle" size={48} color="#34C759" />
 
                     <Text style={[styles.title, { color: theme.text.primary }]}>
-                        You matched!
+                        Connection Established
                     </Text>
 
                     <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
-                        You and {matchedUser.display_name || "this founder"} are both
-                        interested in connecting.
+                        You and {matchedUser.display_name || "this founder"} have expressed
+                        mutual interest in collaborating.
                     </Text>
 
                     <View style={styles.avatarRow}>
@@ -99,7 +99,7 @@ function MatchModalInner({
                             </View>
                         )}
 
-                        <Ionicons name="heart" size={28} color="#FF3B30" />
+                        <FontAwesome5 name="handshake" size={28} color={theme.text.primary} />
 
                         {matchAvatar ? (
                             <Image
@@ -192,7 +192,7 @@ function MatchModalInner({
                         <Text
                             style={[styles.secondaryBtnText, { color: theme.text.primary }]}
                         >
-                            Maybe later
+                            Continue exploring
                         </Text>
                     </TouchableOpacity>
                 </View>

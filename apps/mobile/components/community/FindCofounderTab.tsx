@@ -219,7 +219,7 @@ export default function FindCofounderTab() {
               No more founders right now
             </Text>
             <Text style={[styles.emptyText, { color: theme.text.tertiary }]}>
-              Check back later for new matches.
+              Check back later for new connections.
             </Text>
             <TouchableOpacity
               style={[
