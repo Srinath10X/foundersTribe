@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import React, { useCallback, useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   FlatList,
   RefreshControl,
@@ -14,428 +16,269 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  Avatar,
   FlowScreen,
-  SurfaceCard,
   T,
   useFlowNav,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
-import { usePaginatedFeed, useToggleLike, useCreatePost } from "@/hooks/useFeed";
-import { supabase } from "@/lib/supabase";
-import type { FeedPost, FeedPostType } from "@/types/gig";
+import { usePaginatedFeed } from "@/hooks/useFeed";
+import type { FeedPost } from "@/types/gig";
 
-const STORAGE_BUCKET = "tribe-media";
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const CARD_PADDING = 14;
-const LIST_PADDING = 14;
-const IMAGE_GAP = 4;
-const IMAGE_AREA_WIDTH = SCREEN_WIDTH - LIST_PADDING * 2 - CARD_PADDING * 2;
+const NUM_COLUMNS = 3;
+const GRID_GAP = 6; // slightly more gap for a better look
+const PADDING_H = 16;
+const AVAILABLE_WIDTH = SCREEN_WIDTH - PADDING_H * 2;
+const CELL_SIZE = (AVAILABLE_WIDTH - GRID_GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
+
+// Bento grid: some cells are larger for visual variety
+// Pattern repeats every 12 items:
+//   Row 0: [large 2x2] [small] [small]  (4 items, but large takes 2x2)
+//   Then regular 3-col rows
+// We'll use a simpler approach: alternating between 3-column rows
+// and occasionally a featured row with 1 large + 2 small stacked
+
+// Placeholder phrases for animated search bar
+const SEARCH_PHRASES = [
+  "Search posts…",
+  "Find design work…",
+  "Discover showcases…",
+  "Browse milestones…",
+  "Explore portfolios…",
+];
 
 // ============================================================
-// HELPERS
+// ANIMATED SEARCH BAR
 // ============================================================
 
-function formatCount(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-}
-
-function timeAgo(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffSec = Math.floor((now - then) / 1000);
-  if (diffSec < 60) return "now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d`;
-  const diffWk = Math.floor(diffDay / 7);
-  return `${diffWk}w`;
-}
-
-function getTypeLabel(type: FeedPostType): { label: string; color: string; bg: string } | null {
-  switch (type) {
-    case "hiring":
-      return { label: "Hiring", color: "#34C759", bg: "rgba(52,199,89,0.12)" };
-    case "milestone":
-      return { label: "Milestone", color: "#FF9500", bg: "rgba(255,149,0,0.12)" };
-    case "showcase":
-      return { label: "Showcase", color: "#007AFF", bg: "rgba(0,122,255,0.12)" };
-    case "insight":
-      return { label: "Insight", color: "#AF52DE", bg: "rgba(175,82,222,0.12)" };
-    case "work_update":
-      return { label: "Update", color: "#5AC8FA", bg: "rgba(90,200,250,0.12)" };
-    default:
-      return null;
-  }
-}
-
-function getInitials(name: string | null | undefined): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return parts[0].substring(0, 2).toUpperCase();
-}
-
-/**
- * Resolve an avatar_url value to a displayable signed URL.
- * Handles: full https URL, Supabase storage path, or fallback folder scan.
- */
-async function resolveAvatarUrl(
-  candidate: string | null | undefined,
-  userId: string,
-): Promise<string | null> {
-  // Already a full URL — use as-is
-  if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
-    return candidate;
-  }
-
-  // Storage path — create a signed URL
-  if (typeof candidate === "string" && candidate.trim()) {
-    const { data: signedData, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .createSignedUrl(candidate.trim(), 60 * 60 * 24 * 30);
-    if (!error && signedData?.signedUrl) {
-      return `${signedData.signedUrl}&t=${Date.now()}`;
-    }
-  }
-
-  // Fallback — scan the user's profiles folder
-  if (!userId) return null;
-  const folder = `profiles/${userId}`;
-  const { data: files } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .list(folder, { limit: 20 });
-  if (!files?.length) return null;
-
-  const preferred = files.find((f) => /^avatar\./i.test(f.name)) || files[0];
-  if (!preferred?.name) return null;
-
-  const fullPath = `${folder}/${preferred.name}`;
-  const { data: signedData } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .createSignedUrl(fullPath, 60 * 60 * 24 * 30);
-  return signedData?.signedUrl ? `${signedData.signedUrl}&t=${Date.now()}` : null;
-}
-
-/** Cache resolved avatar URLs so we don't re-sign on every render */
-const avatarCache = new Map<string, string | null>();
-
-function useResolvedAvatar(
-  avatarUrl: string | null | undefined,
-  userId: string | undefined,
-): string | null {
-  const cacheKey = userId || "";
-  const [resolved, setResolved] = useState<string | null>(
-    avatarCache.get(cacheKey) ?? null,
-  );
+function AnimatedSearchBar({
+  palette,
+  onChangeText,
+  value,
+}: {
+  palette: any;
+  onChangeText: (text: string) => void;
+  value: string;
+}) {
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    if (!userId) return;
+    if (value.length > 0) return; // Don't animate when user is typing
 
-    // Already cached
-    if (avatarCache.has(cacheKey)) {
-      setResolved(avatarCache.get(cacheKey) ?? null);
-      return;
-    }
+    const interval = setInterval(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setPhraseIndex((prev) => (prev + 1) % SEARCH_PHRASES.length);
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, 3000);
 
-    let cancelled = false;
-    resolveAvatarUrl(avatarUrl, userId).then((url) => {
-      if (cancelled) return;
-      avatarCache.set(cacheKey, url);
-      setResolved(url);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [avatarUrl, userId, cacheKey]);
-
-  return resolved;
-}
-
-// ============================================================
-// COMPOSE BAR (inline, top of feed)
-// ============================================================
-
-function ComposeBar({
-  palette,
-  onPost,
-  isPending,
-}: {
-  palette: any;
-  onPost: (content: string) => void;
-  isPending: boolean;
-}) {
-  const [text, setText] = useState("");
-
-  const handlePost = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    onPost(trimmed);
-    setText("");
-  };
+    return () => clearInterval(interval);
+  }, [fadeAnim, value]);
 
   return (
-    <SurfaceCard style={styles.composeCard}>
-      <TextInput
-        style={[styles.composeInput, { color: palette.text, borderColor: palette.borderLight }]}
-        placeholder="Share a work update..."
-        placeholderTextColor={palette.mutedText}
-        value={text}
-        onChangeText={setText}
-        multiline
-        maxLength={5000}
+    <View
+      style={[
+        styles.searchContainer,
+        {
+          backgroundColor: palette.surface,
+          borderColor: palette.borderLight,
+        },
+      ]}
+    >
+      <Ionicons
+        name="search-outline"
+        size={18}
+        color={palette.mutedText}
+        style={styles.searchIcon}
       />
-      <View style={styles.composeActions}>
-        <TouchableOpacity
-          style={[
-            styles.postBtn,
-            { backgroundColor: text.trim() ? palette.accent : palette.borderLight },
-          ]}
-          activeOpacity={0.7}
-          onPress={handlePost}
-          disabled={!text.trim() || isPending}
-        >
-          {isPending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <T weight="medium" color="#fff" style={styles.postBtnText}>
-              Post
+      <View style={styles.searchInputWrap}>
+        <TextInput
+          style={[styles.searchInput, { color: palette.text }]}
+          value={value}
+          onChangeText={onChangeText}
+          placeholderTextColor="transparent" // Make native placeholder invisible just in case
+        />
+        {value.length === 0 && (
+          <Animated.View
+            style={[
+              styles.searchPlaceholderOverlay,
+              { opacity: fadeAnim },
+            ]}
+            pointerEvents="none"
+          >
+            <T weight="regular" color={palette.mutedText} style={styles.searchPlaceholderText}>
+              {SEARCH_PHRASES[phraseIndex]}
             </T>
-          )}
-        </TouchableOpacity>
+          </Animated.View>
+        )}
       </View>
-    </SurfaceCard>
+      {value.length > 0 && (
+        <TouchableOpacity
+          onPress={() => onChangeText("")}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close-circle" size={18} color={palette.mutedText} />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
 // ============================================================
-// POST CARD
+// GRID CELL
 // ============================================================
 
-function PostCard({
+function GridCell({
   item,
+  onPress,
   palette,
-  onToggleLike,
-  onPressAuthor,
+  size,
 }: {
   item: FeedPost;
+  onPress: () => void;
   palette: any;
-  onToggleLike: (postId: string, isLiked: boolean) => void;
-  onPressAuthor: (authorId: string) => void;
+  size: number;
 }) {
-  const typeLabel = getTypeLabel(item.post_type);
-  const authorName = item.author?.full_name || "Unknown";
-  const authorHandle = item.author?.handle ? `@${item.author.handle}` : "";
-  const images = item.images || [];
+  const hasImages = item.images && item.images.length > 0;
+  const hasMultipleImages = item.images && item.images.length > 1;
 
-  // Resolve avatar: storage path → signed URL
-  const resolvedAvatar = useResolvedAvatar(
-    item.author?.avatar_url,
-    item.author?.id || item.author_id,
-  );
-  const initials = getInitials(item.author?.full_name);
+  // Generate a deterministic gradient based on post ID
+  const hash = item.id.charCodeAt(0) + item.id.charCodeAt(item.id.length - 1);
+  const gradients: [string, string][] = [
+    ["#667eea", "#764ba2"],
+    ["#f093fb", "#f5576c"],
+    ["#4facfe", "#00f2fe"],
+    ["#43e97b", "#38f9d7"],
+    ["#fa709a", "#fee140"],
+    ["#a18cd1", "#fbc2eb"],
+    ["#ffecd2", "#fcb69f"],
+    ["#89f7fe", "#66a6ff"],
+  ];
+  const gradientPair = gradients[hash % gradients.length];
 
   return (
-    <SurfaceCard style={styles.postCard}>
-      {/* Author header */}
-      <TouchableOpacity
-        style={styles.authorRow}
-        activeOpacity={0.7}
-        onPress={() => onPressAuthor(item.author?.id || item.author_id)}
-      >
-        {resolvedAvatar ? (
-          <Avatar source={{ uri: resolvedAvatar }} size={44} />
-        ) : (
-          <View
-            style={[
-              styles.initialsCircle,
-              { backgroundColor: palette.accentSoft },
-            ]}
-          >
-            <T weight="medium" color={palette.accent} style={styles.initialsText}>
-              {initials}
-            </T>
-          </View>
-        )}
-        <View style={styles.authorInfo}>
-          <View style={styles.nameRow}>
-            <T weight="medium" color={palette.text} style={styles.authorName} numberOfLines={1}>
-              {authorName}
-            </T>
-          </View>
-          {authorHandle ? (
-            <T weight="regular" color={palette.subText} style={styles.authorHandle} numberOfLines={1}>
-              {authorHandle}
-            </T>
-          ) : null}
-        </View>
-        <View style={styles.headerRight}>
-          <T weight="regular" color={palette.mutedText} style={styles.timeText}>
-            {timeAgo(item.created_at)}
-          </T>
-          {typeLabel && (
-            <View style={[styles.typePill, { backgroundColor: typeLabel.bg }]}>
-              <T weight="medium" color={typeLabel.color} style={styles.typeText}>
-                {typeLabel.label}
-              </T>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-
-      {/* Content */}
-      <T weight="regular" color={palette.text} style={styles.postContent}>
-        {item.content}
-      </T>
-
-      {/* Images */}
-      {images.length === 1 && (
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: images[0] }}
-            style={styles.postImageSingle}
-            contentFit="cover"
-            transition={200}
-          />
-        </View>
-      )}
-      {images.length === 2 && (
-        <View style={styles.imageContainer}>
-          <View style={styles.imageRow}>
-            {images.map((uri, idx) => (
-              <Image
-                key={idx}
-                source={{ uri }}
-                style={[styles.postImageHalf, idx === 0 ? styles.imageRoundLeft : styles.imageRoundRight]}
-                contentFit="cover"
-                transition={200}
-              />
-            ))}
-          </View>
-        </View>
-      )}
-      {images.length === 3 && (
-        <View style={styles.imageContainer}>
-          <View style={styles.imageRow}>
-            <Image
-              source={{ uri: images[0] }}
-              style={[styles.postImageTwoThirds, styles.imageRoundLeft]}
-              contentFit="cover"
-              transition={200}
-            />
-            <View style={styles.imageColStack}>
-              <Image
-                source={{ uri: images[1] }}
-                style={[styles.postImageStackItem, { borderTopRightRadius: 10 }]}
-                contentFit="cover"
-                transition={200}
-              />
-              <Image
-                source={{ uri: images[2] }}
-                style={[styles.postImageStackItem, { borderBottomRightRadius: 10 }]}
-                contentFit="cover"
-                transition={200}
-              />
-            </View>
-          </View>
-        </View>
-      )}
-      {images.length >= 4 && (
-        <View style={styles.imageContainer}>
-          <View style={styles.imageRow}>
-            <Image
-              source={{ uri: images[0] }}
-              style={[styles.postImageQuadrant, { borderTopLeftRadius: 10 }]}
-              contentFit="cover"
-              transition={200}
-            />
-            <Image
-              source={{ uri: images[1] }}
-              style={[styles.postImageQuadrant, { borderTopRightRadius: 10 }]}
-              contentFit="cover"
-              transition={200}
-            />
-          </View>
-          <View style={styles.imageRow}>
-            <Image
-              source={{ uri: images[2] }}
-              style={[styles.postImageQuadrant, { borderBottomLeftRadius: 10 }]}
-              contentFit="cover"
-              transition={200}
-            />
-            <Image
-              source={{ uri: images[3] }}
-              style={[styles.postImageQuadrant, { borderBottomRightRadius: 10 }]}
-              contentFit="cover"
-              transition={200}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* Tags */}
-      {item.tags && item.tags.length > 0 && (
-        <View style={styles.tagsRow}>
-          {item.tags.map((tag) => (
-            <T key={tag} weight="regular" color={palette.accent} style={styles.tagText}>
-              #{tag}
-            </T>
-          ))}
-        </View>
-      )}
-
-      {/* Engagement stats */}
-      <View style={[styles.statsRow, { borderTopColor: palette.borderLight }]}>
-        <T weight="regular" color={palette.subText} style={styles.statText}>
-          {formatCount(item.likes_count)} likes
-        </T>
-        <T weight="regular" color={palette.subText} style={styles.statText}>
-          {formatCount(item.comments_count)} comments
-        </T>
-      </View>
-
-      {/* Action buttons */}
-      <View style={[styles.actionsRow, { borderTopColor: palette.borderLight }]}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          activeOpacity={0.7}
-          onPress={() => onToggleLike(item.id, item.is_liked)}
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={[styles.gridCell, { width: size, height: size }]}
+    >
+      {hasImages ? (
+        <Image
+          source={{ uri: item.images[0] }}
+          style={styles.cellImage}
+          contentFit="cover"
+          transition={200}
+        />
+      ) : (
+        <LinearGradient
+          colors={gradientPair}
+          style={styles.cellGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
         >
+          <T
+            weight="medium"
+            color="rgba(255,255,255,0.9)"
+            style={styles.cellTextPreview}
+            numberOfLines={3}
+          >
+            {item.content}
+          </T>
+        </LinearGradient>
+      )}
+
+      {/* Multi-image indicator */}
+      {hasMultipleImages && (
+        <View style={styles.multiImageBadge}>
+          <Ionicons name="copy-outline" size={14} color="#fff" />
+        </View>
+      )}
+
+      {/* Engagement overlay at bottom */}
+      <View style={styles.cellOverlay}>
+        <View style={styles.cellStats}>
           <Ionicons
             name={item.is_liked ? "heart" : "heart-outline"}
-            size={18}
-            color={item.is_liked ? "#FF2D55" : palette.subText}
+            size={12}
+            color="#fff"
           />
-          <T
-            weight="regular"
-            color={item.is_liked ? "#FF2D55" : palette.subText}
-            style={styles.actionText}
-          >
-            Like
+          <T weight="medium" color="#fff" style={styles.cellStatText}>
+            {item.likes_count}
           </T>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-          <Ionicons name="chatbubble-outline" size={17} color={palette.subText} />
-          <T weight="regular" color={palette.subText} style={styles.actionText}>
-            Comment
+          <Ionicons
+            name="chatbubble-outline"
+            size={11}
+            color="#fff"
+            style={{ marginLeft: 6 }}
+          />
+          <T weight="medium" color="#fff" style={styles.cellStatText}>
+            {item.comments_count}
           </T>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-          <Ionicons name="paper-plane-outline" size={17} color={palette.subText} />
-          <T weight="regular" color={palette.subText} style={styles.actionText}>
-            Share
-          </T>
-        </TouchableOpacity>
+        </View>
       </View>
-    </SurfaceCard>
+    </TouchableOpacity>
   );
+}
+
+// ============================================================
+// BENTO GRID LOGIC
+// ============================================================
+
+type ChunkType = "large-left" | "large-right" | "row" | "incomplete";
+
+interface BentoChunk {
+  id: string;
+  type: ChunkType;
+  items: FeedPost[];
+}
+
+function createBentoChunks(data: FeedPost[]): BentoChunk[] {
+  const chunks: BentoChunk[] = [];
+  let i = 0;
+  let chunkIndex = 0;
+
+  while (i < data.length) {
+    const remaining = data.length - i;
+
+    // Pattern repeating every 12 items:
+    // chunk 0: large-left (items 0,1,2)
+    // chunk 1: row (items 3,4,5)
+    // chunk 2: large-right (items 6,7,8)
+    // chunk 3: row (items 9,10,11)
+
+    let type: ChunkType = "row";
+    const patternPos = chunkIndex % 4;
+
+    if (remaining < 3) {
+      type = "incomplete";
+    } else if (patternPos === 0) {
+      type = "large-left";
+    } else if (patternPos === 2) {
+      type = "large-right";
+    }
+
+    const size = Math.min(3, remaining);
+    chunks.push({
+      id: `chunk_${i}`,
+      type,
+      items: data.slice(i, i + size),
+    });
+
+    i += size;
+    chunkIndex++;
+  }
+
+  return chunks;
 }
 
 // ============================================================
@@ -447,50 +290,128 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const nav = useFlowNav();
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const { data, loading, loadingMore, hasMore, loadMore, refresh, refreshing } =
     usePaginatedFeed();
 
-  const toggleLike = useToggleLike();
-  const createPost = useCreatePost();
+  // Filter data
+  const filteredData = searchQuery.trim()
+    ? data.filter(
+      (post) =>
+        post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (post.tags &&
+          post.tags.some((tag) =>
+            tag.toLowerCase().includes(searchQuery.toLowerCase()),
+          )) ||
+        (post.author?.full_name &&
+          post.author.full_name
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())),
+    )
+    : data;
 
-  const handleToggleLike = useCallback(
-    (postId: string, isLiked: boolean) => {
-      toggleLike.mutate({ postId, isLiked });
-    },
-    [toggleLike],
-  );
+  const bentoChunks = createBentoChunks(filteredData);
 
-  const handleCreatePost = useCallback(
-    (content: string) => {
-      createPost.mutate({ content });
-    },
-    [createPost],
-  );
-
-  const handlePressAuthor = useCallback(
-    (authorId: string) => {
-      nav.push(`/freelancer-stack/freelancer-profile?id=${authorId}`);
+  const handlePressPost = useCallback(
+    (postId: string) => {
+      nav.push(`/freelancer-stack/post-detail?id=${postId}`);
     },
     [nav],
   );
 
-  const renderPost = useCallback(
-    ({ item }: { item: FeedPost }) => (
-      <PostCard
-        item={item}
-        palette={palette}
-        onToggleLike={handleToggleLike}
-        onPressAuthor={handlePressAuthor}
-      />
-    ),
-    [palette, handleToggleLike, handlePressAuthor],
-  );
+  const renderBentoChunk = useCallback(
+    ({ item: chunk }: { item: BentoChunk }) => {
+      const { type, items } = chunk;
 
-  const renderHeader = useCallback(
-    () => (
-      <ComposeBar palette={palette} onPost={handleCreatePost} isPending={createPost.isPending} />
-    ),
-    [palette, handleCreatePost, createPost.isPending],
+      // Handle incomplete chunks (less than 3 items at the end)
+      if (type === "incomplete" || type === "row") {
+        return (
+          <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+            {items.map((post) => (
+              <GridCell
+                key={post.id}
+                item={post}
+                onPress={() => handlePressPost(post.id)}
+                palette={palette}
+                size={CELL_SIZE}
+              />
+            ))}
+            {/* Fill remaining space if < 3 items */}
+            {items.length < 3 &&
+              Array.from({ length: 3 - items.length }).map((_, idx) => (
+                <View
+                  key={`empty_${idx}`}
+                  style={{ width: CELL_SIZE, height: CELL_SIZE }}
+                />
+              ))}
+          </View>
+        );
+      }
+
+      // Large Left: | L | s |
+      //             |   | s |
+      if (type === "large-left") {
+        const largeSize = CELL_SIZE * 2 + GRID_GAP;
+        return (
+          <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+            <GridCell
+              item={items[0]}
+              onPress={() => handlePressPost(items[0].id)}
+              palette={palette}
+              size={largeSize}
+            />
+            <View style={styles.stackedCol}>
+              <GridCell
+                item={items[1]}
+                onPress={() => handlePressPost(items[1].id)}
+                palette={palette}
+                size={CELL_SIZE}
+              />
+              <GridCell
+                item={items[2]}
+                onPress={() => handlePressPost(items[2].id)}
+                palette={palette}
+                size={CELL_SIZE}
+              />
+            </View>
+          </View>
+        );
+      }
+
+      // Large Right: | s | L |
+      //              | s |   |
+      if (type === "large-right") {
+        const largeSize = CELL_SIZE * 2 + GRID_GAP;
+        return (
+          <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+            <View style={styles.stackedCol}>
+              <GridCell
+                item={items[0]}
+                onPress={() => handlePressPost(items[0].id)}
+                palette={palette}
+                size={CELL_SIZE}
+              />
+              <GridCell
+                item={items[1]}
+                onPress={() => handlePressPost(items[1].id)}
+                palette={palette}
+                size={CELL_SIZE}
+              />
+            </View>
+            <GridCell
+              item={items[2]}
+              onPress={() => handlePressPost(items[2].id)}
+              palette={palette}
+              size={largeSize}
+            />
+          </View>
+        );
+      }
+
+      return null;
+    },
+    [palette, handlePressPost],
   );
 
   const renderFooter = useCallback(() => {
@@ -504,23 +425,40 @@ export default function FeedScreen() {
 
   const renderEmpty = useCallback(() => {
     if (loading) {
+      // Skeleton bento
+      const largeSize = CELL_SIZE * 2 + GRID_GAP;
       return (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color={palette.accent} />
-          <T weight="regular" color={palette.subText} style={styles.emptyText}>
-            Loading feed...
-          </T>
+          <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+            <View style={[styles.skeletonCell, { width: largeSize, height: largeSize, backgroundColor: palette.surface }]} />
+            <View style={styles.stackedCol}>
+              <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+              <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+            </View>
+          </View>
+          <View style={[styles.gridRow, { marginBottom: GRID_GAP }]}>
+            <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+            <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+            <View style={[styles.skeletonCell, { width: CELL_SIZE, height: CELL_SIZE, backgroundColor: palette.surface }]} />
+          </View>
         </View>
       );
     }
     return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="newspaper-outline" size={48} color={palette.mutedText} />
+      <View style={styles.emptyStateContainer}>
+        <View
+          style={[
+            styles.emptyIconCircle,
+            { backgroundColor: palette.accentSoft },
+          ]}
+        >
+          <Ionicons name="images-outline" size={40} color={palette.accent} />
+        </View>
         <T weight="medium" color={palette.text} style={styles.emptyTitle}>
           No posts yet
         </T>
         <T weight="regular" color={palette.subText} style={styles.emptyText}>
-          Be the first to share a work update!
+          Be the first to share your work!
         </T>
       </View>
     );
@@ -528,32 +466,48 @@ export default function FeedScreen() {
 
   return (
     <FlowScreen scroll={false}>
+      {/* Header */}
       <View
         style={[
           styles.header,
           {
-            paddingTop: insets.top + 10,
-            borderBottomColor: palette.borderLight,
+            paddingTop: insets.top + 8,
             backgroundColor: palette.bg,
+            borderBottomColor: palette.borderLight,
           },
         ]}
       >
-        <T weight="medium" color={palette.text} style={styles.pageTitle}>
-          Feed
-        </T>
-        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-          Updates from professionals in your network
-        </T>
+        <View style={styles.headerTitleRow}>
+          <T weight="semiBold" color={palette.text} style={styles.pageTitle}>
+            Explore
+          </T>
+          <TouchableOpacity
+            style={[
+              styles.createBtn,
+              { backgroundColor: palette.accent },
+            ]}
+            activeOpacity={0.85}
+            onPress={() => nav.push("/freelancer-stack/feed")}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search bar */}
+        <AnimatedSearchBar
+          palette={palette}
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+        />
       </View>
 
+      {/* Bento grid */}
       <FlatList
-        data={data}
+        data={bentoChunks}
         keyExtractor={(item) => item.id}
-        renderItem={renderPost}
-        ListHeaderComponent={renderHeader}
+        renderItem={renderBentoChunk}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -566,7 +520,7 @@ export default function FeedScreen() {
           if (hasMore) loadMore();
         }}
         onEndReachedThreshold={0.5}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        contentContainerStyle={styles.gridContent}
       />
     </FlowScreen>
   );
@@ -578,235 +532,165 @@ export default function FeedScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    paddingHorizontal: 18,
-    paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
   },
+  headerTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20, // Increased spacing between title and search bar
+  },
   pageTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    letterSpacing: -0.2,
+    fontSize: 26,
+    lineHeight: 32,
+    letterSpacing: -0.5,
   },
-  pageSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  listContent: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 120,
-  },
-
-  // Compose
-  composeCard: {
-    padding: 14,
-    marginBottom: 10,
-  },
-  composeInput: {
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 44,
-    maxHeight: 120,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    textAlignVertical: "top",
-  },
-  composeActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 8,
-  },
-  postBtn: {
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    minWidth: 60,
-    alignItems: "center",
-  },
-  postBtnText: {
-    fontSize: 13,
-    lineHeight: 17,
-  },
-
-  // Post card
-  postCard: {
-    padding: 14,
-  },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    marginBottom: 12,
-  },
-  authorInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  authorName: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  authorHandle: {
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 1,
-  },
-  initialsCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  createBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },
-  initialsText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  headerRight: {
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  timeText: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  typePill: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  typeText: {
-    fontSize: 10,
-    lineHeight: 13,
-  },
-  postContent: {
-    fontSize: 13,
-    lineHeight: 20,
-    letterSpacing: -0.1,
-  },
 
-  // Images
-  imageContainer: {
-    marginTop: 12,
-    borderRadius: 10,
-    overflow: "hidden",
-    gap: IMAGE_GAP,
-  },
-  imageRow: {
-    flexDirection: "row",
-    gap: IMAGE_GAP,
-  },
-  postImageSingle: {
-    width: IMAGE_AREA_WIDTH,
-    height: 220,
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  postImageHalf: {
-    width: (IMAGE_AREA_WIDTH - IMAGE_GAP) / 2,
-    height: 180,
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  imageRoundLeft: {
-    borderTopLeftRadius: 10,
-    borderBottomLeftRadius: 10,
-  },
-  imageRoundRight: {
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-  },
-  postImageTwoThirds: {
-    width: (IMAGE_AREA_WIDTH - IMAGE_GAP) * 0.6,
-    height: 200,
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  imageColStack: {
-    flex: 1,
-    gap: IMAGE_GAP,
-  },
-  postImageStackItem: {
-    flex: 1,
-    width: "100%" as const,
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  postImageQuadrant: {
-    width: (IMAGE_AREA_WIDTH - IMAGE_GAP) / 2,
-    height: (200 - IMAGE_GAP) / 2,
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-
-  // Tags
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  tagText: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  // Stats
-  statsRow: {
-    flexDirection: "row",
-    gap: 14,
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
-  statText: {
-    fontSize: 11,
-    lineHeight: 14,
-  },
-
-  // Actions
-  actionsRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
-    paddingTop: 10,
-    borderTopWidth: 1,
-  },
-  actionBtn: {
+  // Search bar
+  searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
+    borderRadius: 24, // More rounded search bar
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    height: 48, // Taller search bar
   },
-  actionText: {
-    fontSize: 12,
-    lineHeight: 16,
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInputWrap: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+  },
+  searchInput: {
+    fontSize: 15,
+    lineHeight: 20,
+    paddingVertical: 0,
+    height: 48,
+  },
+  searchPlaceholderOverlay: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
+  searchPlaceholderText: {
+    fontSize: 14,
+    lineHeight: 18,
   },
 
-  // Empty / Loading states
+  // Grid
+  gridContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 120,
+  },
+  gridRow: {
+    flexDirection: "row",
+    gap: GRID_GAP,
+  },
+  stackedCol: {
+    gap: GRID_GAP,
+  },
+  gridCell: {
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "rgba(0,0,0,0.05)",
+    position: "relative",
+  },
+  cellImage: {
+    width: "100%",
+    height: "100%",
+  },
+  cellGradient: {
+    width: "100%",
+    height: "100%",
+    padding: 8,
+    justifyContent: "flex-end",
+  },
+  cellTextPreview: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+
+  // Overlays on cells
+  multiImageBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 4,
+    padding: 3,
+  },
+  cellOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  cellStats: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  cellStatText: {
+    fontSize: 10,
+    lineHeight: 13,
+    marginLeft: 2,
+  },
+
+  // Footer / Loading
+  footer: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
+
+  // Empty / Loading state
   emptyContainer: {
+    paddingTop: 4,
+  },
+  skeletonGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: GRID_GAP,
+  },
+  skeletonCell: {
+    borderRadius: 0,
+  },
+  emptyStateContainer: {
     alignItems: "center",
     justifyContent: "center",
     paddingTop: 80,
     gap: 10,
   },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyTitle: {
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   emptyText: {
     fontSize: 13,
     lineHeight: 18,
     textAlign: "center",
-  },
-  footer: {
-    paddingVertical: 20,
-    alignItems: "center",
+    paddingHorizontal: 40,
   },
 });

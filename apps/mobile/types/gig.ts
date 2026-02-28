@@ -23,6 +23,7 @@ export type Gender = "male" | "female" | "non_binary" | "prefer_not_to_say" | "o
 export type NotificationType = "new_proposal" | "proposal_accepted" | "message" | "contract_completed";
 export type ServiceDurationUnit = "days" | "weeks";
 export type ServiceRequestStatus = "pending" | "accepted" | "declined" | "cancelled";
+export type FeedPostType = "hiring" | "milestone" | "showcase" | "insight" | "work_update";
 
 // ------------------------------------------
 // User/Profile Types
@@ -158,11 +159,11 @@ export interface Gig {
   published_at?: string;
   created_at: string;
   updated_at: string;
-  
+
   // Joined fields
   founder?: GigFounder;
   gig_tags?: GigTag[];
-  
+
   // Legacy / UI convenience (for backward compatibility)
   budget?: number;
   deadline?: string;
@@ -265,7 +266,7 @@ export interface Contract {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
-  
+
   // Joined fields (optional)
   gig?: Gig;
   proposal?: {
@@ -302,7 +303,7 @@ export interface ContractMessage {
   read_at: string | null;
   created_at: string;
   updated_at?: string;
-  
+
   // Joined fields
   sender?: UserProfile;
 }
@@ -384,7 +385,7 @@ export interface Proposal {
   status: ProposalStatus;
   created_at: string;
   updated_at: string;
-  
+
   // Joined fields (from .select("*, gigs(id, title, status)") on /proposals/me)
   gig?: Gig;
   gigs?: { id: string; title: string; status: GigStatus }; // Supabase join name

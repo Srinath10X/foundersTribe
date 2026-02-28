@@ -32,7 +32,8 @@ export default function FreelancerFlowLayout() {
     pathname.includes("/service-search") ||
     pathname.includes("/freelancer-profile") ||
     pathname.includes("/freelancer-profile-2") ||
-    pathname.includes("/my-gigs");
+    pathname.includes("/my-gigs") ||
+    pathname.includes("/post-detail");
 
   return (
     <View style={styles.container}>
