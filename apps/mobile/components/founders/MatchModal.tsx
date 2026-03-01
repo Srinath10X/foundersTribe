@@ -26,7 +26,7 @@ interface MatchModalProps {
     matchedUser: FounderCandidate | null;
     currentUserAvatar: string | null;
     matchId: string | null;
-    onChat: (matchId: string) => void;
+    onChat: (threadId: string, matchedUser: FounderCandidate | null) => void;
     onKeepSwiping: () => void;
 }
 
@@ -165,7 +165,7 @@ function MatchModalInner({
                                     }
                                     setMessage("");
                                     if (threadId) {
-                                        onChat(threadId); // Navigate to chat
+                                        onChat(threadId, matchedUser); // Navigate to chat
                                     } else {
                                         onKeepSwiping();
                                     }

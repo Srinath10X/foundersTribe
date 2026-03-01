@@ -342,7 +342,9 @@ export default function CommunityScreen() {
       </View>
 
       {/* ── Content ────────────────────────────────────────── */}
-      {renderContent()}
+      <View style={styles.contentArea}>
+        {renderContent()}
+      </View>
 
       {/* ── Sub-tabs just above bottom tab bar ─────────────── */}
       <Animated.View style={[styles.subTabContainer, subTabVisibilityStyle]}>
@@ -399,6 +401,12 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
+  },
+
+  /* Content area – flex:1, with bottom padding so tab bar never overlaps */
+  contentArea: {
+    flex: 1,
+    paddingBottom: TAB_BAR_HEIGHT + 8,
   },
   headerTopRow: {
     flexDirection: "row",
