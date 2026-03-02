@@ -120,19 +120,19 @@ export default function FindCofounderTab() {
       const current = candidates?.[currentIndex];
       if (!current || creatingChat) return;
 
-      swipeMutation.mutate(
-        { swipedUserId: current.id, direction },
-        {
-          onSuccess: (result) => {
-            if (direction === "right" && result.matched) {
-              setMatchInfo({
-                matchId: result.matchId ?? null,
-                matchedUser: current,
-              });
-            }
-          },
-        }
-      );
+      if (direction === "right") {
+        // Show MatchModal instantly so user can send a message
+        setMatchInfo({
+          matchId: null, // will be created when they send a message
+          matchedUser: current,
+        });
+
+        swipeMutation.mutate({ swipedUserId: current.id, direction });
+        advanceCard();
+        return;
+      }
+
+      swipeMutation.mutate({ swipedUserId: current.id, direction });
       advanceCard();
     },
     [candidates, currentIndex, swipeMutation, advanceCard, creatingChat]
