@@ -12,6 +12,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
@@ -22,6 +23,7 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type SocialLink = { platform: string; url: string; label: string };
 
@@ -33,6 +35,7 @@ export default function Onboarding() {
   const { user, session, refreshOnboardingStatus } = useAuth();
   const { switchRole } = useRole();
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const token = session?.access_token || "";
 
@@ -280,10 +283,16 @@ export default function Onboarding() {
   };
 
   const renderProfileStep = () => (
+    <KeyboardAvoidingView
+      style={styles.flex1}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 100 : 0}
+    >
     <ScrollView
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
     >
       <Animated.View entering={FadeInUp.delay(100).duration(500)} style={styles.titleSection}>
         <Text style={[styles.mainTitle, { color: theme.text.primary }]}>Your Profile</Text>
@@ -443,6 +452,7 @@ export default function Onboarding() {
         ))}
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 
   const renderRoleStep = () => (
@@ -580,7 +590,7 @@ export default function Onboarding() {
             />
           </View>
           <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
-            Both
+            Both (Founder + Freelancer)
           </Text>
           <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
             I'm building a startup and also open to freelance opportunities — the best of both worlds.
@@ -648,7 +658,7 @@ export default function Onboarding() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
         <View style={{ width: 24 }} />
         <Text style={[styles.headerTitle, { color: theme.text.primary }]}>
           {step === 1
@@ -691,7 +701,11 @@ export default function Onboarding() {
       <View
         style={[
           styles.footer,
-          { backgroundColor: theme.background, borderTopColor: theme.border },
+          {
+            backgroundColor: theme.background,
+            borderTopColor: theme.border,
+            paddingBottom: Math.max(insets.bottom, Spacing.md),
+          },
         ]}
       >
         {step === 1 ? (
@@ -789,8 +803,8 @@ export default function Onboarding() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  flex1: { flex: 1 },
   header: {
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingHorizontal: Spacing.lg,
     flexDirection: "row",
     alignItems: "center",
@@ -863,7 +877,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: Spacing.xl,
-    paddingBottom: Platform.OS === "ios" ? 40 : 24,
     borderTopWidth: 1,
   },
   footerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
