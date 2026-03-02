@@ -1000,6 +1000,24 @@ export default function FreelancerProfileScreen() {
         <T weight="bold" color={palette.text} style={styles.pageTitle}>
           Profile
         </T>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity
+            style={[styles.headerIconBtn, { backgroundColor: palette.card }]}
+            activeOpacity={0.82}
+            onPress={() => router.push("/(role-pager)/(freelancer-tabs)/messages")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="notifications-outline" size={18} color={palette.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerIconBtn, { backgroundColor: palette.card }]}
+            activeOpacity={0.82}
+            onPress={() => router.push("/(role-pager)/(freelancer-tabs)/profile")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="person" size={18} color={palette.accent} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.heroFixedWrap}>
@@ -1141,14 +1159,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   pageTitle: {
     fontFamily: "Poppins_600SemiBold",
     fontSize: 21,
     lineHeight: 27,
     letterSpacing: 0.2,
-    textAlign: "center",
-    alignSelf: "center",
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
   },
   heroFixedWrap: {
     paddingHorizontal: 16,

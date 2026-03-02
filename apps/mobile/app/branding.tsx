@@ -31,7 +31,7 @@ export default function BrandingPage() {
   }
 
   const handlePress = () => {
-    router.push(session ? "/home" : "/login");
+    router.push(session ? "/(role-pager)/(founder-tabs)/community" : "/login");
   };
 
   const handleSignIn = () => {

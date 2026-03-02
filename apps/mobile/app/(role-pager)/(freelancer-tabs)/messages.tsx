@@ -667,17 +667,55 @@ export default function FreelancerMessagesScreen() {
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
         <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
-          <T weight="medium" color={palette.text} style={styles.pageTitle}>
-            Messages
-          </T>
-          <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-            Your recent conversations
-          </T>
-          <View style={styles.liveRow}>
-            <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
-            <T weight="regular" color={palette.subText} style={styles.liveText}>
-              {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
-            </T>
+          <View style={styles.headerTop}>
+            <View>
+              <T weight="medium" color={palette.text} style={styles.pageTitle}>
+                Messages
+              </T>
+              <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
+                Your recent conversations
+              </T>
+              <View style={styles.liveRow}>
+                <View style={[styles.liveDot, { backgroundColor: isRealtimeConnected ? "#22C55E" : "#F59E0B" }]} />
+                <T weight="regular" color={palette.subText} style={styles.liveText}>
+                  {isRealtimeConnected ? "Live updates on" : "Reconnecting..."}
+                </T>
+              </View>
+            </View>
+            <View style={styles.headerIcons}>
+              <TouchableOpacity
+                style={[
+                  styles.iconBtn,
+                  {
+                    borderColor: palette.borderLight,
+                    backgroundColor: palette.surface,
+                  },
+                ]}
+                onPress={() => router.push("/(role-pager)/(freelancer-tabs)/messages" as any)}
+              >
+                <Ionicons
+                  name="notifications-outline"
+                  size={18}
+                  color={palette.subText}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.iconBtn,
+                  {
+                    borderColor: palette.borderLight,
+                    backgroundColor: palette.surface,
+                  },
+                ]}
+                onPress={() => router.push("/(role-pager)/(freelancer-tabs)/profile" as any)}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={18}
+                  color={palette.subText}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -952,6 +990,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 10,
     borderBottomWidth: 1,
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pageTitle: {
     fontSize: 20,

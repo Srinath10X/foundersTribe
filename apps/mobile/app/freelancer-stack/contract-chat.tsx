@@ -196,6 +196,9 @@ export default function ContractChatScreen() {
   const pushBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const serviceRequestsRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const liveDotColor = isRealtimeConnected ? "#22C55E" : "#F59E0B";
+  const liveStatusText = isRealtimeConnected ? "Live updates on" : "Reconnecting...";
+
   const showPushBanner = useCallback((nextBanner: PushBannerState) => {
     setPushBanner(nextBanner);
     if (pushBannerTimerRef.current) {

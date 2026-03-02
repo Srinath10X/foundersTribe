@@ -483,21 +483,39 @@ export default function TalentDashboardScreen() {
               Freelancer workspace
             </T>
           </View>
-          <TouchableOpacity
-            style={[
-              styles.iconBtn,
-              {
-                borderColor: palette.borderLight,
-                backgroundColor: palette.surface,
-              },
-            ]}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={18}
-              color={palette.subText}
-            />
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity
+              style={[
+                styles.iconBtn,
+                {
+                  borderColor: palette.borderLight,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={18}
+                color={palette.subText}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.iconBtn,
+                {
+                  borderColor: palette.borderLight,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+              onPress={() => router.push("/(role-pager)/(freelancer-tabs)/profile")}
+            >
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color={palette.subText}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -669,6 +687,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   content: {
     paddingHorizontal: 18,

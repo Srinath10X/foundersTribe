@@ -116,14 +116,7 @@ export default function FreelancerTabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={20}
-              color={color}
-            />
-          ),
+          href: null,
         }}
       />
     </Tabs>

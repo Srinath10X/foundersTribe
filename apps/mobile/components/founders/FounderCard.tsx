@@ -77,7 +77,7 @@ function FounderCardInner({
   onViewProfile,
   onConnect,
 }: FounderCardProps) {
-  const { isDark } = useTheme();
+  const { isDark, theme } = useTheme();
   const [bioExpanded, setBioExpanded] = useState(false);
   const [bioTruncated, setBioTruncated] = useState(false);
 
@@ -120,20 +120,28 @@ function FounderCardInner({
   const skills = (candidate.skills || []).slice(0, 6);
 
   // ── colours ──
-  const surfaceBg = isDark ? "#0E1015" : "#111318";
-  const bodyColor = "rgba(248,250,252,0.88)";
-  const mutedColor = "rgba(248,250,252,0.50)";
-  const dividerColor = "rgba(255,255,255,0.06)";
-  const chipBg = "rgba(255,255,255,0.08)";
-  const chipTextColor = "rgba(248,250,252,0.70)";
+  const surfaceBg = theme.surface;
+  const bodyColor = theme.text.primary;
+  const mutedColor = theme.text.tertiary;
+  const dividerColor = theme.border;
+  const chipBg = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)";
+  const chipTextColor = theme.text.secondary;
   const accentColor = "#818CF8";
-  const accentBtnBg = "rgba(129,140,248,0.14)";
+  const accentBtnBg = isDark
+    ? "rgba(129,140,248,0.14)"
+    : "rgba(129,140,248,0.10)";
+  const metaTextColor = theme.text.secondary;
 
   return (
     <View
       style={[
         styles.card,
-        { width: cardWidth, height: cardHeight, backgroundColor: surfaceBg },
+        {
+          width: cardWidth,
+          height: cardHeight,
+          backgroundColor: surfaceBg,
+          shadowOpacity: isDark ? 0.25 : 0.12,
+        },
       ]}
     >
       {/* ═══════════════════ TOP 40 % – IMAGE ═══════════════════ */}
@@ -148,20 +156,39 @@ function FounderCardInner({
           />
         ) : (
           <LinearGradient
-            colors={["#1E2333", "#171D29", "#12151E"]}
+            colors={
+              isDark
+                ? ["#1E2333", "#171D29", "#12151E"]
+                : ["#E8EBF0", "#D9DEE6", "#CDD3DD"]
+            }
             style={StyleSheet.absoluteFillObject}
             start={{ x: 0.1, y: 0 }}
             end={{ x: 0.9, y: 1 }}
           >
             <View style={styles.placeholderCenter}>
-              <Text style={styles.initialsLarge}>{initials}</Text>
+              <Text
+                style={[
+                  styles.initialsLarge,
+                  {
+                    color: isDark
+                      ? "rgba(255,255,255,0.06)"
+                      : "rgba(0,0,0,0.08)",
+                  },
+                ]}
+              >
+                {initials}
+              </Text>
             </View>
           </LinearGradient>
         )}
 
         {/* Dark gradient at bottom of image */}
         <LinearGradient
-          colors={["transparent", "rgba(0,0,0,0.25)", "rgba(14,16,21,0.92)"]}
+          colors={
+            isDark
+              ? ["transparent", "rgba(0,0,0,0.25)", "rgba(14,16,21,0.92)"]
+              : ["transparent", "rgba(0,0,0,0.10)", "rgba(0,0,0,0.55)"]
+          }
           locations={[0, 0.5, 1]}
           style={styles.imageGradient}
           pointerEvents="none"
@@ -228,7 +255,7 @@ function FounderCardInner({
             <View style={styles.metaRow}>
               <Ionicons name="briefcase-outline" size={13} color={mutedColor} />
               <Text
-                style={[styles.metaText, { color: "rgba(248,250,252,0.72)" }]}
+                style={[styles.metaText, { color: metaTextColor }]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
@@ -279,7 +306,7 @@ function FounderCardInner({
             onPress={() => onViewProfile?.(candidate)}
           >
             <Ionicons name="person-outline" size={15} color={mutedColor} />
-            <Text style={[styles.ctaBtnText, { color: "rgba(248,250,252,0.72)" }]}>
+            <Text style={[styles.ctaBtnText, { color: metaTextColor }]}>
               View Profile
             </Text>
           </TouchableOpacity>
@@ -326,7 +353,6 @@ const styles = StyleSheet.create({
   initialsLarge: {
     fontSize: 96,
     fontFamily: "Poppins_700Bold",
-    color: "rgba(255,255,255,0.06)",
   },
   imageGradient: {
     position: "absolute",

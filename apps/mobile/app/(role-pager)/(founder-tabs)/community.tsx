@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { Stack, useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, {
@@ -76,7 +77,7 @@ export default function CommunityScreen() {
   const { notificationCount } = useFounderConnections(true);
   const authToken = session?.access_token || "";
 
-  const [activeView, setActiveView] = useState<ActiveView>("tribes");
+  const [activeView, setActiveView] = useState<ActiveView>("find-cofounder");
   const [tribesMode, setTribesMode] = useState<"explore" | "my">("explore");
   const [showCreateTribe, setShowCreateTribe] = useState(false);
   const [isSubTabVisible, setIsSubTabVisible] = useState(true);
@@ -191,24 +192,36 @@ export default function CommunityScreen() {
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
-          <Text style={[styles.brandLogoText, { color: theme.text.primary }]}>
-            Communities
-          </Text>
-          <TouchableOpacity
-            style={[styles.notifyBtn, { backgroundColor: theme.surface }]}
-            activeOpacity={0.82}
-            onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="notifications-outline" size={18} color={theme.text.primary} />
-            {notificationCount > 0 ? (
-              <View style={[styles.notifyBadge, { backgroundColor: theme.brand.primary }]}>
-                <Text style={styles.notifyBadgeText}>
-                  {notificationCount > 99 ? "99+" : String(notificationCount)}
-                </Text>
-              </View>
-            ) : null}
-          </TouchableOpacity>
+          <Image
+            source={isDark ? require("@/assets/images/logo-dark.png") : require("@/assets/images/logo-light.png")}
+            style={styles.brandLogo}
+            contentFit="contain"
+          />
+          <View style={styles.headerIcons}>
+            <TouchableOpacity
+              style={[styles.notifyBtn, { backgroundColor: theme.surface }]}
+              activeOpacity={0.82}
+              onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="notifications-outline" size={18} color={theme.text.primary} />
+              {notificationCount > 0 ? (
+                <View style={[styles.notifyBadge, { backgroundColor: theme.brand.primary }]}>
+                  <Text style={styles.notifyBadgeText}>
+                    {notificationCount > 99 ? "99+" : String(notificationCount)}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.notifyBtn, { backgroundColor: theme.surface }]}
+              activeOpacity={0.82}
+              onPress={() => router.push("/(role-pager)/(founder-tabs)/profile")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="person-outline" size={18} color={theme.text.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {showTribeHeaderActions && (
@@ -414,10 +427,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: Spacing.sm,
   },
-  brandLogoText: {
-    fontSize: 26,
-    fontFamily: "Poppins_700Bold",
-    letterSpacing: -0.5,
+  brandLogo: {
+    height: 24,
+    width: 140,
     marginVertical: Spacing.xs,
     marginLeft: Spacing.xs,
   },
@@ -428,6 +440,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   notifyBadge: {
     position: "absolute",

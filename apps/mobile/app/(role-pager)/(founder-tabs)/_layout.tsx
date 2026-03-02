@@ -10,6 +10,7 @@ export default function FounderTabLayout() {
 
   return (
     <Tabs
+      initialRouteName="community"
       tabBar={(props) => <LiquidTabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -18,7 +19,7 @@ export default function FounderTabLayout() {
       }}
     >
       <Tabs.Screen
-        name="home"
+        name="community"
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
@@ -31,22 +32,35 @@ export default function FounderTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="search"
+        name="home"
         options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="community"
-        options={{
-          title: "Communities",
+          title: "Feed",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? "people" : "people-outline"}
+              name={focused ? "newspaper" : "newspaper-outline"}
               size={20}
               color={color}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="ai-search"
+        options={{
+          title: "AI",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "sparkles" : "sparkles-outline"}
+              size={20}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="search"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -91,14 +105,7 @@ export default function FounderTabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={20}
-              color={color}
-            />
-          ),
+          href: null,
         }}
       />
     </Tabs>

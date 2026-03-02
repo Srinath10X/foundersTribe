@@ -10,6 +10,7 @@ import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
+import { useFounderConnections } from "@/hooks/useFounderConnections";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -400,6 +401,7 @@ export default function FreelancerProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const router = useRouter();
   const { session } = useAuth();
+  const { notificationCount } = useFounderConnections(true);
 
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -942,6 +944,21 @@ export default function FreelancerProfileScreen() {
         <T weight="bold" color={palette.text} style={styles.pageTitle}>
           Profile
         </T>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity
+            style={[styles.headerIconBtn, { backgroundColor: palette.card }]}
+            activeOpacity={0.82}
+            onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="notifications-outline" size={18} color={palette.text} />
+            {notificationCount > 0 ? (
+              <View style={[styles.headerNotifBadge, { backgroundColor: palette.accent }]}>
+                <View style={styles.headerNotifDot} />
+              </View>
+            ) : null}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.heroFixedWrap}>
@@ -1093,14 +1110,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   pageTitle: {
     fontFamily: "Poppins_600SemiBold",
     fontSize: 21,
     lineHeight: 27,
     letterSpacing: 0.2,
-    textAlign: "center",
-    alignSelf: "center",
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  headerNotifBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerNotifDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#fff",
   },
   heroFixedWrap: {
     paddingHorizontal: 16,

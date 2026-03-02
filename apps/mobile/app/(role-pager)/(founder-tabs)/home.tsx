@@ -37,7 +37,7 @@ const SUB_TABS: {
 }[] = [
     {
       key: "feed",
-      label: "Feed",
+      label: "News",
       icon: "newspaper-outline",
       iconFocused: "newspaper",
     },
@@ -149,29 +149,49 @@ export default function HomeScreen() {
               style={styles.brandLogo}
               contentFit="contain"
             />
-            <TouchableOpacity
-              style={[
-                styles.iconButton,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.1)"
-                    : "rgba(0,0,0,0.06)",
-                },
-              ]}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={20}
-                color="#FFFFFF"
-              />
-              {notificationCount > 0 ? (
-                <View style={[styles.notificationBadge, { backgroundColor: theme.brand.primary }]}>
-                  <View style={styles.notificationDot} />
-                </View>
-              ) : null}
-            </TouchableOpacity>
+            <View style={styles.headerIcons}>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(0,0,0,0.06)",
+                  },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => router.push("/(role-pager)/(founder-tabs)/connections")}
+              >
+                <Ionicons
+                  name="notifications-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                {notificationCount > 0 ? (
+                  <View style={[styles.notificationBadge, { backgroundColor: theme.brand.primary }]}>
+                    <View style={styles.notificationDot} />
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(255,255,255,0.1)"
+                      : "rgba(0,0,0,0.06)",
+                  },
+                ]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => router.push("/(role-pager)/(founder-tabs)/profile")}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </LinearGradient>
       </View>
@@ -216,6 +236,11 @@ const styles = StyleSheet.create({
   brandLogo: {
     height: 24,
     width: 140,
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   iconButton: {
     width: 36,

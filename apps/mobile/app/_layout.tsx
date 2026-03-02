@@ -225,7 +225,7 @@ function RootLayoutNav() {
           const target =
             role === "freelancer"
               ? "/(role-pager)/(freelancer-tabs)/dashboard"
-              : "/(role-pager)/(founder-tabs)/home";
+              : "/(role-pager)/(founder-tabs)/community";
           setTimeout(() => router.replace(target), 0);
         }
       }

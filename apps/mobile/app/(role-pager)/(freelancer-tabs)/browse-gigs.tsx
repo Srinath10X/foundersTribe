@@ -123,6 +123,7 @@ function GigCard({ item, proposalSubmitted }: { item: Gig; proposalSubmitted: bo
 
 export default function BrowseGigsScreen() {
   const { palette } = useFlowPalette();
+  const router = useRouter();
   const tabBarHeight = useBottomTabBarHeight();
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | GigStatus>("all");
@@ -164,13 +165,51 @@ export default function BrowseGigsScreen() {
 
   return (
     <FlowScreen scroll={false}>
-      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}> 
-        <T weight="medium" color={palette.text} style={styles.pageTitle}>
-          Browse Gigs
-        </T>
-        <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
-          Discover projects that match your skills
-        </T>
+      <View style={[styles.header, { borderBottomColor: palette.borderLight, backgroundColor: palette.bg }]}>
+        <View style={styles.headerTop}>
+          <View>
+            <T weight="medium" color={palette.text} style={styles.pageTitle}>
+              Browse Gigs
+            </T>
+            <T weight="regular" color={palette.subText} style={styles.pageSubtitle}>
+              Discover projects that match your skills
+            </T>
+          </View>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity
+              style={[
+                styles.iconBtn,
+                {
+                  borderColor: palette.borderLight,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+              onPress={() => router.push("/(role-pager)/(freelancer-tabs)/messages" as any)}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={18}
+                color={palette.subText}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.iconBtn,
+                {
+                  borderColor: palette.borderLight,
+                  backgroundColor: palette.surface,
+                },
+              ]}
+              onPress={() => router.push("/(role-pager)/(freelancer-tabs)/profile" as any)}
+            >
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color={palette.subText}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -269,6 +308,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 10,
     borderBottomWidth: 1,
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pageTitle: {
     fontSize: 20,

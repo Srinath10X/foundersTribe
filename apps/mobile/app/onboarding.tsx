@@ -273,7 +273,7 @@ export default function Onboarding() {
       const target =
         userType === "freelancer"
           ? "/(role-pager)/(freelancer-tabs)/dashboard"
-          : "/(role-pager)/(founder-tabs)/home"; // "both" also goes to founder home
+          : "/(role-pager)/(founder-tabs)/community"; // "both" also goes to founder home
       setTimeout(() => router.replace(target), 300);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to complete onboarding");

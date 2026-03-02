@@ -36,7 +36,7 @@ export class UserProfileRepository {
   ) {
     let query = this.db
       .from("user_profiles")
-      .select("id, full_name, handle, avatar_url, bio, role, updated_at", { count: "exact" })
+      .select("id, full_name, handle, avatar_url, bio, role, updated_at, availability, experience_level, hourly_rate, country, timezone, linkedin_url, portfolio_url", { count: "exact" })
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit + 1);

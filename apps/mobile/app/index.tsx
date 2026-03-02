@@ -32,7 +32,7 @@ export default function Index() {
         const target =
           role === "freelancer"
             ? "/(role-pager)/(freelancer-tabs)/dashboard"
-            : "/(role-pager)/(founder-tabs)/home";
+            : "/(role-pager)/(founder-tabs)/community";
         router.replace(target);
       } else {
         // New/Guest user -> Show Branding/Landing
