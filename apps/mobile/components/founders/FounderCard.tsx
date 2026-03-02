@@ -14,7 +14,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -81,6 +81,12 @@ function FounderCardInner({
   const [bioExpanded, setBioExpanded] = useState(false);
   const [bioTruncated, setBioTruncated] = useState(false);
 
+  useEffect(() => {
+    // Card slots are reused across candidates; reset per-candidate local UI state.
+    setBioExpanded(false);
+    setBioTruncated(false);
+  }, [candidate.id]);
+
   const IMAGE_H = Math.round(cardHeight * 0.4);
 
   // ── derived data ──
@@ -134,9 +140,11 @@ function FounderCardInner({
       <View style={[styles.imageSection, { height: IMAGE_H }]}>
         {imageUri ? (
           <Image
+            key={imageUri || candidate.id}
             source={{ uri: imageUri }}
             style={StyleSheet.absoluteFillObject}
             resizeMode="cover"
+            fadeDuration={0}
           />
         ) : (
           <LinearGradient

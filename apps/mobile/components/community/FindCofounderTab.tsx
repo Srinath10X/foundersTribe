@@ -14,7 +14,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -30,11 +30,13 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Animated, {
+  Easing,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
   Extrapolation,
 } from "react-native-reanimated";
 
@@ -55,12 +57,13 @@ const PEEK_STRIP = 28;                              // px of each deeper card vi
 const FRONT_TOP = PEEK_STRIP * (VISIBLE_CARDS - 1); // front card pushed down so back cards peek
 const STACK_SCALE_STEP = 0.018;                     // subtle scale reduction per depth level
 const CARD_HEIGHT_RATIO = 0.82;                     // card fills 82 % of measured container
+const STACK_POSITIONS = [2, 1, 0] as const;
 
 /* ── swipe physics ───────────────────────────────────── */
 const SWIPE_THRESHOLD = SCREEN_W * 0.25;
 const VELOCITY_THRESHOLD = 650;
 const SNAP_SPRING = { damping: 18, stiffness: 200, mass: 0.7 };
-const FLYOUT_SPRING = { damping: 28, stiffness: 120, mass: 0.9 }; // smooth arc, not linear
+const FLYOUT_DURATION_MS = 180;
 
 /* ════════════════════════════════════════════════════════ */
 
@@ -92,50 +95,122 @@ export default function FindCofounderTab() {
   /* ── state ───────────────────────────────────────────── */
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
-  const [creatingChat, setCreatingChat] = useState(false);
+  const [frontTransformEnabled, setFrontTransformEnabled] = useState(true);
+  const stableCandidatesRef = useRef<FounderCandidate[] | null>(null);
+  const swipeCommitLockRef = useRef(false);
 
   const currentUserAvatar =
     (session?.user?.user_metadata?.photo_url as string) ||
     (session?.user?.user_metadata?.avatar_url as string) ||
     null;
 
-  // Slice the next VISIBLE_CARDS candidates from the current position
-  const visibleCandidates = useMemo(() => {
-    if (!candidates) return [];
-    return candidates.slice(currentIndex, currentIndex + VISIBLE_CARDS);
-  }, [candidates, currentIndex]);
+  const activeCandidates = useMemo(() => {
+    if (stableCandidatesRef.current) return stableCandidatesRef.current;
+    if (candidates) {
+      // Freeze ordering while swiping to prevent mid-session deck reshuffles.
+      stableCandidatesRef.current = candidates;
+      return candidates;
+    }
+    return [];
+  }, [candidates]);
+
+  // Keep a fixed 3-slot deck model so React doesn't reorder card nodes.
+  const slotCandidates = useMemo(() => {
+    return Array.from({ length: VISIBLE_CARDS }, (_, slot) => {
+      return activeCandidates[currentIndex + slot] ?? null;
+    });
+  }, [activeCandidates, currentIndex]);
 
   /* ── animated values ─────────────────────────────────── */
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
+  const isSwipeAnimating = useSharedValue(false);
 
   const advanceCard = useCallback(() => {
+    // Prevent the incoming front card from inheriting stale swipe transforms.
+    setFrontTransformEnabled(false);
     setCurrentIndex((i) => i + 1);
-    translateX.value = 0;
-    translateY.value = 0;
-  }, [translateX, translateY]);
+    requestAnimationFrame(() => {
+      // Reset after slot shift has rendered to avoid a one-frame snap-back.
+      translateX.value = 0;
+      translateY.value = 0;
+      isSwipeAnimating.value = false;
+      swipeCommitLockRef.current = false;
+      setFrontTransformEnabled(true);
+    });
+  }, [translateX, translateY, isSwipeAnimating]);
 
-  const handleSwipe = useCallback(
+  const completeSwipe = useCallback(
     (direction: "right" | "left") => {
-      const current = candidates?.[currentIndex];
-      if (!current || creatingChat) return;
+      if (swipeCommitLockRef.current) return;
+      swipeCommitLockRef.current = true;
 
-      if (direction === "right") {
-        // Show MatchModal instantly so user can send a message
-        setMatchInfo({
-          matchId: null, // will be created when they send a message
-          matchedUser: current,
-        });
-
-        swipeMutation.mutate({ swipedUserId: current.id, direction });
-        advanceCard();
+      const current = activeCandidates[currentIndex];
+      if (!current) {
+        translateX.value = 0;
+        translateY.value = 0;
+        isSwipeAnimating.value = false;
+        swipeCommitLockRef.current = false;
         return;
       }
 
-      swipeMutation.mutate({ swipedUserId: current.id, direction });
+      if (direction === "right") {
+        // Show dialog immediately after a successful right swipe.
+        setMatchInfo({
+          matchId: null,
+          matchedUser: current,
+        });
+      }
+
+      swipeMutation.mutate(
+        { swipedUserId: current.id, direction },
+        {
+          onSuccess: (res) => {
+            if (direction !== "right" || !res?.matched) return;
+            setMatchInfo({
+              matchId: res.matchId ?? null,
+              matchedUser: current,
+            });
+          },
+        }
+      );
       advanceCard();
     },
-    [candidates, currentIndex, swipeMutation, advanceCard, creatingChat]
+    [
+      activeCandidates,
+      currentIndex,
+      swipeMutation,
+      advanceCard,
+      translateX,
+      translateY,
+      isSwipeAnimating,
+      swipeCommitLockRef,
+    ]
+  );
+
+  const triggerProgrammaticSwipe = useCallback(
+    (direction: "right" | "left") => {
+      if (isSwipeAnimating.value) return;
+      isSwipeAnimating.value = true;
+
+      const targetX = direction === "right" ? SCREEN_W * 1.5 : -SCREEN_W * 1.5;
+      translateY.value = withTiming(0, { duration: FLYOUT_DURATION_MS });
+      translateX.value = withTiming(
+        targetX,
+        {
+          duration: FLYOUT_DURATION_MS,
+          easing: Easing.out(Easing.cubic),
+        },
+        (finished) => {
+          if (finished) {
+            runOnJS(completeSwipe)(direction);
+            return;
+          }
+          isSwipeAnimating.value = false;
+        }
+      );
+    },
+    [translateX, translateY, completeSwipe, isSwipeAnimating]
   );
 
   /* ── CTA handlers ────────────────────────────────────── */
@@ -151,14 +226,9 @@ export default function FindCofounderTab() {
   const handleConnect = useCallback(
     (_candidate: FounderCandidate) => {
       // Trigger a right-swipe programmatically via spring fly-out
-      translateX.value = withSpring(SCREEN_W * 1.5, {
-        ...FLYOUT_SPRING,
-        velocity: 800,
-      });
-      translateY.value = withSpring(0, FLYOUT_SPRING);
-      handleSwipe("right");
+      triggerProgrammaticSwipe("right");
     },
-    [translateX, translateY, handleSwipe]
+    [triggerProgrammaticSwipe]
   );
 
   /* ── pan gesture ─────────────────────────────────────── */
@@ -168,11 +238,14 @@ export default function FindCofounderTab() {
         .minDistance(5)
         .activeOffsetX([-10, 10])
         .onUpdate((e) => {
+          if (isSwipeAnimating.value) return;
           translateX.value = e.translationX;
           // gentle vertical drift that follows the drag direction
           translateY.value = e.translationY * 0.15;
         })
         .onEnd((e) => {
+          if (isSwipeAnimating.value) return;
+
           const flyRight =
             e.translationX > SWIPE_THRESHOLD ||
             e.velocityX > VELOCITY_THRESHOLD;
@@ -181,32 +254,58 @@ export default function FindCofounderTab() {
             e.velocityX < -VELOCITY_THRESHOLD;
 
           if (flyRight) {
-            // spring-based fly-out with velocity for natural arc
-            translateX.value = withSpring(SCREEN_W * 1.5, {
-              ...FLYOUT_SPRING,
-              velocity: e.velocityX,
+            isSwipeAnimating.value = true;
+            translateX.value = withTiming(
+              SCREEN_W * 1.5,
+              {
+                duration: FLYOUT_DURATION_MS,
+                easing: Easing.out(Easing.cubic),
+              },
+              (finished) => {
+                if (finished) {
+                  runOnJS(completeSwipe)("right");
+                  return;
+                }
+                isSwipeAnimating.value = false;
+              }
+            );
+            translateY.value = withTiming(e.translationY * 0.35, {
+              duration: FLYOUT_DURATION_MS,
+              easing: Easing.out(Easing.quad),
             });
-            translateY.value = withSpring(e.translationY * 0.4, {
-              ...FLYOUT_SPRING,
-              velocity: e.velocityY * 0.3,
-            });
-            runOnJS(handleSwipe)("right");
           } else if (flyLeft) {
-            translateX.value = withSpring(-SCREEN_W * 1.5, {
-              ...FLYOUT_SPRING,
-              velocity: e.velocityX,
+            isSwipeAnimating.value = true;
+            translateX.value = withTiming(
+              -SCREEN_W * 1.5,
+              {
+                duration: FLYOUT_DURATION_MS,
+                easing: Easing.out(Easing.cubic),
+              },
+              (finished) => {
+                if (finished) {
+                  runOnJS(completeSwipe)("left");
+                  return;
+                }
+                isSwipeAnimating.value = false;
+              }
+            );
+            translateY.value = withTiming(e.translationY * 0.35, {
+              duration: FLYOUT_DURATION_MS,
+              easing: Easing.out(Easing.quad),
             });
-            translateY.value = withSpring(e.translationY * 0.4, {
-              ...FLYOUT_SPRING,
-              velocity: e.velocityY * 0.3,
-            });
-            runOnJS(handleSwipe)("left");
           } else {
             translateX.value = withSpring(0, SNAP_SPRING);
             translateY.value = withSpring(0, SNAP_SPRING);
           }
         }),
-    [handleSwipe, translateX, translateY]
+    [completeSwipe, translateX, translateY, isSwipeAnimating]
+  );
+  const inertGesture0 = useMemo(() => Gesture.Pan().enabled(false), []);
+  const inertGesture1 = useMemo(() => Gesture.Pan().enabled(false), []);
+  const inertGesture2 = useMemo(() => Gesture.Pan().enabled(false), []);
+  const inertGestures = useMemo(
+    () => [inertGesture0, inertGesture1, inertGesture2],
+    [inertGesture0, inertGesture1, inertGesture2]
   );
 
   /* ── animated styles (front card only) ─────────────── */
@@ -263,7 +362,7 @@ export default function FindCofounderTab() {
 
   /* ── edge states ─────────────────────────────────────── */
   const noCandidates =
-    !isLoading && !isError && (!candidates || currentIndex >= candidates.length);
+    !isLoading && !isError && currentIndex >= activeCandidates.length;
 
   /* ── render ──────────────────────────────────────────── */
   return (
@@ -309,6 +408,7 @@ export default function FindCofounderTab() {
               style={[styles.retryBtn, { backgroundColor: theme.brand.primary }]}
               onPress={() => {
                 setCurrentIndex(0);
+                stableCandidatesRef.current = null;
                 refetch();
               }}
               activeOpacity={0.85}
@@ -326,29 +426,36 @@ export default function FindCofounderTab() {
               down by FRONT_TOP so that deeper cards peek from above it.
               Deeper cards sit at progressively smaller top values.
             */}
-            {[...visibleCandidates].reverse().map((candidate, reverseIdx) => {
+            {STACK_POSITIONS.map((stackPos) => {
+              const candidate = slotCandidates[stackPos];
+              if (!candidate) return null;
+
               // stackPos: 0 = front, 1 = second, 2 = third
-              const stackPos = visibleCandidates.length - 1 - reverseIdx;
               const isFront = stackPos === 0;
 
               // Front card: top = FRONT_TOP (pushed down to reveal back cards above)
               // Deeper cards: top = FRONT_TOP - stackPos * PEEK_STRIP (tucked above)
               const topOffset = FRONT_TOP - stackPos * PEEK_STRIP;
+              const canInteract = isFront && frontTransformEnabled;
+              const gesture = canInteract
+                ? panGesture
+                : (inertGestures[stackPos] ?? inertGesture0);
+              const cardAnimStyle = isFront
+                ? (frontTransformEnabled ? frontAnimStyle : undefined)
+                : animStyles[stackPos];
 
-              const cardView = (
-                <Animated.View
-                  key={candidate.id}
+              return (
+                <GestureDetector key={`slot-${stackPos}`} gesture={gesture}>
+                  <Animated.View
                   style={[
                     styles.cardAbsolute,
                     {
                       top: topOffset,
                       zIndex: VISIBLE_CARDS - stackPos,
                     },
-                    animStyles[stackPos],
+                    cardAnimStyle,
                   ]}
-                  pointerEvents={isFront ? "auto" : "none"}
-                  renderToHardwareTextureAndroid
-                  shouldRasterizeIOS
+                  pointerEvents={canInteract ? "auto" : "none"}
                 >
                   <FounderCard
                     candidate={candidate}
@@ -357,16 +464,11 @@ export default function FindCofounderTab() {
                     onViewProfile={isFront ? handleViewProfile : undefined}
                     onConnect={isFront ? handleConnect : undefined}
                   />
-                  {isFront && <SwipeOverlay translateX={translateX} />}
+                  {isFront && frontTransformEnabled && (
+                    <SwipeOverlay translateX={translateX} />
+                  )}
                 </Animated.View>
-              );
-
-              return isFront ? (
-                <GestureDetector key={candidate.id} gesture={panGesture}>
-                  {cardView}
                 </GestureDetector>
-              ) : (
-                cardView
               );
             })}
           </>
