@@ -108,6 +108,28 @@ services:
       timeout: 10s
       retries: 3
 
+  # ---- AI Service ----
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    container_name: founderstribe-ai-service
+    ports:
+      - "3006:3006"
+    env_file:
+      - ./services/ai-service/.env
+    environment:
+      - PORT=3006
+      - GIG_SERVICE_URL=http://gig-marketplace-service:3005
+    depends_on:
+      - gig-marketplace-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3006/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # ---- Gig Marketplace Service ----
   gig-marketplace-service:
     build:

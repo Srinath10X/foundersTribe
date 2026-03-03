@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   FlowScreen,
-  SurfaceCard,
   T,
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
@@ -39,7 +38,7 @@ const STORAGE_BUCKET = "tribe-media";
 
 async function resolveAvatar(
   candidate: unknown,
-  userId: string,
+  userId: string
 ): Promise<string | null> {
   if (typeof candidate === "string" && /^https?:\/\//i.test(candidate)) {
     return candidate;
@@ -68,11 +67,22 @@ async function resolveAvatar(
 // ── Suggestion chips ─────────────────────────────────────────
 
 const SUGGESTIONS = [
-  { icon: "videocam-outline" as const, text: "I need a video editor for Instagram reels" },
-  { icon: "code-slash-outline" as const, text: "Find me a React Native developer" },
-  { icon: "color-palette-outline" as const, text: "Looking for a logo designer under $500" },
-  { icon: "globe-outline" as const, text: "I need someone to build a landing page fast" },
-  { icon: "easel-outline" as const, text: "Who can help with pitch deck design?" },
+  {
+    icon: "videocam-outline" as const,
+    text: "I need a video editor for my reels",
+  },
+  {
+    icon: "code-slash-outline" as const,
+    text: "Find me a React Native developer",
+  },
+  {
+    icon: "color-palette-outline" as const,
+    text: "Looking for a logo designer under $500",
+  },
+  {
+    icon: "easel-outline" as const,
+    text: "Who can help with pitch deck design?",
+  },
 ];
 
 // ── Freelancer Card ──────────────────────────────────────────
@@ -426,11 +436,7 @@ function TypingIndicator({
         </LinearGradient>
       </View>
       <View style={styles.msgContent}>
-        <T
-          weight="semiBold"
-          color={palette.accent}
-          style={styles.msgSender}
-        >
+        <T weight="semiBold" color={palette.accent} style={styles.msgSender}>
           AI Assistant
         </T>
         <View
@@ -523,10 +529,10 @@ export default function AISearchScreen() {
     const hideEvent =
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSub = Keyboard.addListener(showEvent, () =>
-      setKeyboardVisible(true),
+      setKeyboardVisible(true)
     );
     const hideSub = Keyboard.addListener(hideEvent, () =>
-      setKeyboardVisible(false),
+      setKeyboardVisible(false)
     );
     return () => {
       showSub.remove();
@@ -559,10 +565,11 @@ export default function AISearchScreen() {
         const errorMsg: ChatMessage = {
           id: `err-${Date.now()}`,
           role: "assistant",
-          content:
-            error?.message?.includes("GROQ API key")
-              ? "AI search is not configured yet. Please add your GROQ API key to the .env file (EXPO_PUBLIC_GROQ_API_KEY)."
-              : `Something went wrong: ${error?.message || "Unknown error"}. Please try again.`,
+          content: error?.message?.includes("AI service URL")
+            ? "AI search is not configured yet. Please set EXPO_PUBLIC_AI_SERVICE_URL in your .env file."
+            : `Something went wrong: ${
+                error?.message || "Unknown error"
+              }. Please try again.`,
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, errorMsg]);
@@ -571,22 +578,24 @@ export default function AISearchScreen() {
         setIsLoading(false);
       }
     },
-    [input, isLoading, messages],
+    [input, isLoading, messages]
   );
 
   const handleFreelancerPress = useCallback(
     (f: FreelancerResult) => {
-      router.push(
-        `/freelancer-stack/freelancer-profile?id=${f.id}` as any,
-      );
+      router.push(`/freelancer-stack/freelancer-profile?id=${f.id}` as any);
     },
-    [router],
+    [router]
   );
 
   const handleClearChat = useCallback(() => {
     setMessages([]);
     clearFreelancerCache();
   }, []);
+
+  // Input bar total height when keyboard is hidden:
+  // paddingTop(10) + inputWrap minHeight(46) + paddingBottom(tabBarTotal + 8)
+  const inputBarHeight = 10 + 46 + tabBarTotal + 8;
 
   const showEmptyState = messages.length === 0;
 
@@ -603,6 +612,7 @@ export default function AISearchScreen() {
           style={[
             styles.header,
             {
+              paddingTop: insets.top + 8,
               borderBottomColor: palette.borderLight,
               backgroundColor: palette.bg,
             },
@@ -663,9 +673,7 @@ export default function AISearchScreen() {
                   },
                 ]}
                 onPress={() =>
-                  router.push(
-                    "/(role-pager)/(founder-tabs)/connections" as any,
-                  )
+                  router.push("/(role-pager)/(founder-tabs)/connections" as any)
                 }
               >
                 <Ionicons
@@ -677,9 +685,7 @@ export default function AISearchScreen() {
               <TouchableOpacity
                 style={styles.profileBtn}
                 onPress={() =>
-                  router.push(
-                    "/(role-pager)/(founder-tabs)/profile" as any,
-                  )
+                  router.push("/(role-pager)/(founder-tabs)/profile" as any)
                 }
               >
                 {userAvatar ? (
@@ -698,11 +704,7 @@ export default function AISearchScreen() {
                       },
                     ]}
                   >
-                    <Ionicons
-                      name="person"
-                      size={16}
-                      color={palette.subText}
-                    />
+                    <Ionicons name="person" size={16} color={palette.subText} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -717,7 +719,7 @@ export default function AISearchScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={[
             styles.chatContent,
-            { paddingBottom: tabBarTotal + 80 },
+            { paddingBottom: inputBarHeight + 16 },
             showEmptyState && styles.chatContentEmpty,
           ]}
           showsVerticalScrollIndicator={false}
@@ -748,14 +750,6 @@ export default function AISearchScreen() {
                 style={styles.emptyTitle}
               >
                 AI-Powered Search
-              </T>
-              <T
-                weight="regular"
-                color={palette.subText}
-                style={styles.emptySubtitle}
-              >
-                Describe what you need and I'll find the best freelancers for
-                you from our talent pool.
               </T>
 
               <View style={styles.suggestionsWrap}>
@@ -829,7 +823,11 @@ export default function AISearchScreen() {
             {
               backgroundColor: palette.bg,
               borderTopColor: palette.borderLight,
-              paddingBottom: keyboardVisible ? 8 : tabBarTotal,
+              paddingBottom: keyboardVisible
+                ? Platform.OS === "ios"
+                  ? 4
+                  : 8
+                : tabBarTotal + 8,
             },
           ]}
         >
@@ -848,7 +846,7 @@ export default function AISearchScreen() {
               name="search-outline"
               size={18}
               color={input.trim() ? palette.accent : palette.mutedText}
-              style={{ marginBottom: Platform.OS === "ios" ? 0 : 2 }}
+              style={{ alignSelf: "center" }}
             />
             <TextInput
               value={input}
@@ -878,9 +876,7 @@ export default function AISearchScreen() {
               <Ionicons
                 name="arrow-up"
                 size={18}
-                color={
-                  input.trim() && !isLoading ? "#fff" : palette.mutedText
-                }
+                color={input.trim() && !isLoading ? "#fff" : palette.mutedText}
               />
             </TouchableOpacity>
           </View>
@@ -895,7 +891,6 @@ export default function AISearchScreen() {
 const styles = StyleSheet.create({
   // Header
   header: {
-    paddingTop: 54,
     paddingHorizontal: 18,
     paddingBottom: 12,
     borderBottomWidth: 1,
