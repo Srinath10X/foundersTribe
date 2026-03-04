@@ -154,13 +154,23 @@ async function fetchFounderCandidates(currentUserId: string): Promise<FounderCan
 
     if (!data || data.length === 0) return [];
 
-    // Prefer founder-side candidates if user_type/role is present.
-    const founderOnly = (data as any[]).filter((p: any) => {
+    // Prefer founder-side candidates if user_type/role is present, and filter out default test users
+    const validCandidates = (data as any[]).filter((p: any) => {
+        // Filter out User <4 character hash>
+        const rawName = asString(p.display_name) || "";
+        if (/^User [a-zA-Z0-9]{4}$/i.test(rawName)) return false;
+
+        // Optionally, filter users with no bio and no skills
+        const hasBio = !!asString(p.bio);
+        const hasSkills = !!p.skills && p.skills.length > 0;
+        const hasLookingFor = !!asString(p.looking_for);
+        if (!hasBio && !hasSkills && !hasLookingFor) return false;
+
         const raw = asString(p.user_type)?.toLowerCase() || asString(p.role)?.toLowerCase();
         if (!raw) return true;
         return raw.includes("founder") || raw === "both";
     });
-    const sourceRows = founderOnly.length > 0 ? founderOnly : (data as any[]);
+    const sourceRows = validCandidates;
 
     // Resolve avatars in parallel
     const candidates: FounderCandidate[] = await Promise.all(

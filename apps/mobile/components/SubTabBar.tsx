@@ -67,17 +67,17 @@ export default function SubTabBar<T extends string>({
         colors={
           isDark
             ? [
-                "rgba(255,255,255,0.06)",
-                "rgba(255,255,255,0.01)",
-                "rgba(0,0,0,0.0)",
-                "rgba(0,0,0,0.06)",
-              ]
+              "rgba(255,255,255,0.06)",
+              "rgba(255,255,255,0.01)",
+              "rgba(0,0,0,0.0)",
+              "rgba(0,0,0,0.06)",
+            ]
             : [
-                "rgba(255,255,255,0.45)",
-                "rgba(255,255,255,0.10)",
-                "rgba(0,0,0,0.0)",
-                "rgba(0,0,0,0.05)",
-              ]
+              "rgba(255,255,255,0.45)",
+              "rgba(255,255,255,0.10)",
+              "rgba(0,0,0,0.0)",
+              "rgba(0,0,0,0.05)",
+            ]
         }
         locations={[0, 0.25, 0.55, 1]}
         start={{ x: 0.5, y: 0 }}
@@ -154,16 +154,16 @@ const styles = StyleSheet.create({
   },
   container: {
     width: "100%",
-    minHeight: 38,
+    minHeight: 28,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     flexDirection: "row",
     alignItems: "center",
   },
   tabButton: {
     flex: 1,
-    minHeight: 30,
+    minHeight: 24,
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",

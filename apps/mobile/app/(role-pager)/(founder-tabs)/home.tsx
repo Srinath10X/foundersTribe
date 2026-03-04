@@ -1,4 +1,3 @@
-import DiscoverTab from "@/components/home/DiscoverTab";
 import FeedTab from "@/components/home/FeedTab";
 import ForYouTab from "@/components/home/ForYouTab";
 import SubTabBar from "@/components/SubTabBar";
@@ -27,7 +26,7 @@ import Animated, {
 const { width: windowWidth } = Dimensions.get("window");
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
 
-type SubTab = "feed" | "discover" | "foryou";
+type SubTab = "feed" | "foryou";
 
 const SUB_TABS: {
   key: SubTab;
@@ -40,12 +39,6 @@ const SUB_TABS: {
       label: "News",
       icon: "newspaper-outline",
       iconFocused: "newspaper",
-    },
-    {
-      key: "discover",
-      label: "Discover",
-      icon: "compass-outline",
-      iconFocused: "compass",
     },
     {
       key: "foryou",
@@ -119,8 +112,6 @@ export default function HomeScreen() {
     switch (activeTab) {
       case "feed":
         return <FeedTab isSubTabVisible={isSubTabVisible} />;
-      case "discover":
-        return <DiscoverTab />;
       case "foryou":
         return <ForYouTab />;
     }

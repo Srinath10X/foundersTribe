@@ -51,7 +51,11 @@ import {
   Poppins_700Bold,
   useFonts as usePoppinsFonts,
 } from "@expo-google-fonts/poppins";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -129,7 +133,6 @@ function QueryCacheBridge({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { session, isLoading: authLoading, hasCompletedOnboarding } = useAuth();
@@ -180,10 +183,8 @@ function RootLayoutNav() {
     // 1. Analyze current state
     // Tab groups are now nested under (role-pager), so check both segment[0] patterns
     const inRolePager = segments[0] === "(role-pager)";
-    const inFounderTabs =
-      inRolePager && segments[1] === "(founder-tabs)";
-    const inFreelancerTabs =
-      inRolePager && segments[1] === "(freelancer-tabs)";
+    const inFounderTabs = inRolePager && segments[1] === "(founder-tabs)";
+    const inFreelancerTabs = inRolePager && segments[1] === "(freelancer-tabs)";
     const inOnboarding = segments[0] === "onboarding";
 
     if (session) {
@@ -235,7 +236,15 @@ function RootLayoutNav() {
         setTimeout(() => router.replace("/login"), 0);
       }
     }
-  }, [session, segments, authLoading, fontsLoaded, hasCompletedOnboarding, isRoleLoaded, role]);
+  }, [
+    session,
+    segments,
+    authLoading,
+    fontsLoaded,
+    hasCompletedOnboarding,
+    isRoleLoaded,
+    role,
+  ]);
 
   // Create dynamic Navigation Theme
   const navTheme = {
@@ -317,10 +326,7 @@ function RootLayoutNav() {
             animationDuration: 280,
           }}
         />
-        <Stack.Screen
-          name="modal"
-          options={{ presentation: "modal" }}
-        />
+        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
       {authLoading && <BrandingView />}
     </NavigationThemeProvider>
