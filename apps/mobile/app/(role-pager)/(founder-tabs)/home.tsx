@@ -138,15 +138,26 @@ export default function HomeScreen() {
         <LinearGradient
           colors={
             isDark
-              ? ["rgba(0,0,0,0.85)", "rgba(0,0,0,0.6)", "transparent"]
-              : ["transparent", "transparent", "transparent"]
+              ? ["rgba(0,0,0,0.92)", "rgba(0,0,0,0.65)", "transparent"]
+              : [
+                "rgba(250,250,249,0.97)",
+                "rgba(250,250,249,0.85)",
+                "rgba(250,250,249,0)",
+              ]
           }
           style={styles.headerGradient}
         >
           <View style={styles.headerInner}>
             <Image
-              source={require("@/assets/images/logo-dark.png")}
-              style={styles.brandLogo}
+              source={
+                isDark
+                  ? require("@/assets/images/logo-dark.png")
+                  : require("@/assets/images/logo-dark.png")
+              }
+              style={[
+                styles.brandLogo,
+                !isDark && { tintColor: theme.text.primary },
+              ]}
               contentFit="contain"
             />
             <View style={styles.headerIcons}>
@@ -165,7 +176,7 @@ export default function HomeScreen() {
                 <Ionicons
                   name="notifications-outline"
                   size={20}
-                  color="#FFFFFF"
+                  color={isDark ? "#FFFFFF" : theme.text.primary}
                 />
                 {notificationCount > 0 ? (
                   <View style={[styles.notificationBadge, { backgroundColor: theme.brand.primary }]}>
@@ -188,7 +199,7 @@ export default function HomeScreen() {
                 <Ionicons
                   name="person-outline"
                   size={20}
-                  color="#FFFFFF"
+                  color={isDark ? "#FFFFFF" : theme.text.primary}
                 />
               </TouchableOpacity>
             </View>
