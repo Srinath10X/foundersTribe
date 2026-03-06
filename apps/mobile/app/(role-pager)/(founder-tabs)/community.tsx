@@ -45,25 +45,25 @@ const SUB_TABS: {
   icon: string;
   iconFocused?: string;
 }[] = [
-  {
-    key: "tribes",
-    label: "Tribes",
-    icon: "shield-outline",
-    iconFocused: "shield",
-  },
-  {
-    key: "find-cofounder",
-    label: "founders",
-    icon: "people-outline",
-    iconFocused: "people",
-  },
-  {
-    key: "find-freelancer",
-    label: "Freelancers",
-    icon: "briefcase-outline",
-    iconFocused: "briefcase",
-  },
-];
+    {
+      key: "tribes",
+      label: "Tribes",
+      icon: "shield-outline",
+      iconFocused: "shield",
+    },
+    {
+      key: "find-cofounder",
+      label: "founders",
+      icon: "people-outline",
+      iconFocused: "people",
+    },
+    {
+      key: "find-freelancer",
+      label: "Freelancers",
+      icon: "briefcase-outline",
+      iconFocused: "briefcase",
+    },
+  ];
 
 /* ================================================================ */
 /*  Community Screen                                                 */
@@ -230,14 +230,14 @@ export default function CommunityScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.headerActions}
           >
-                        <TouchableOpacity
+            <TouchableOpacity
               style={[
                 styles.headerBtn,
                 activeView === "tribes" && tribesMode === "my"
                   ? { backgroundColor: theme.brand.primary }
                   : {
-                      backgroundColor: theme.surface,
-                    },
+                    backgroundColor: theme.surface,
+                  },
               ]}
               onPress={() => {
                 setTribesMode("my");
@@ -278,8 +278,8 @@ export default function CommunityScreen() {
                 activeView === "tribes" && tribesMode === "explore"
                   ? { backgroundColor: theme.brand.primary }
                   : {
-                      backgroundColor: theme.surface,
-                    },
+                    backgroundColor: theme.surface,
+                  },
               ]}
               onPress={() => {
                 setTribesMode("explore");
@@ -321,8 +321,8 @@ export default function CommunityScreen() {
                 activeView === "voice-channels"
                   ? { backgroundColor: theme.brand.primary }
                   : {
-                      backgroundColor: theme.surface,
-                    },
+                    backgroundColor: theme.surface,
+                  },
               ]}
               onPress={() => setActiveView("voice-channels")}
               activeOpacity={0.8}
@@ -494,7 +494,7 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 100,
     paddingBottom: Spacing.sm,
-    paddingHorizontal: Math.max((windowWidth - 420) / 2, 16),
+    paddingHorizontal: 0,
   },
   createFab: {
     position: "absolute",

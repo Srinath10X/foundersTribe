@@ -113,13 +113,13 @@ export default function SubTabBar<T extends string>({
               activeOpacity={0.88}
             >
               {tab.icon === "bs-stars" ? (
-                <BsStarsIcon size={15} color={tintColor} />
+                <BsStarsIcon size={13} color={tintColor} />
               ) : (
                 <Ionicons
                   name={
                     (isActive ? tab.iconFocused || tab.icon : tab.icon) as any
                   }
-                  size={15}
+                  size={13}
                   color={tintColor}
                 />
               )}
@@ -149,33 +149,33 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
-    marginHorizontal: "18%",
+    alignSelf: "center",
     marginBottom: 4,
   },
   container: {
-    width: "100%",
     minHeight: 28,
     borderRadius: 999,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     flexDirection: "row",
     alignItems: "center",
   },
   tabButton: {
-    flex: 1,
+    minWidth: 72,
     minHeight: 24,
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 0,
-    paddingVertical: 0,
+    gap: 2,
+    paddingVertical: 3,
+    paddingHorizontal: 12,
   },
   tabLabel: {
     flexShrink: 1,
     minWidth: 0,
     textAlign: "center",
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "600",
-    letterSpacing: 0,
+    letterSpacing: 0.1,
   },
 });

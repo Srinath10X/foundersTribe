@@ -14,7 +14,8 @@
       "infoPlist": {
         "UIBackgroundModes": ["audio", "audio"],
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "icon": "./assets/images/play_store_512.png"
     },
     "android": {
       "adaptiveIcon": {

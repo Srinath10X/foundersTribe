@@ -77,11 +77,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: Spacing.xxl,
+    paddingBottom: 80,
   },
   avatarStack: {
-    width: 128,
-    height: 44,
-    marginBottom: Spacing.md,
+    width: 148,
+    height: 48,
+    marginBottom: Spacing.lg,
     position: "relative",
   },
   avatar: {

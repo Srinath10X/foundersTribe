@@ -23,7 +23,6 @@ import Animated, {
 } from "react-native-reanimated";
 
 const { width: windowWidth } = Dimensions.get("window");
-const TAB_BAR_TOTAL = BAR_HEIGHT + BAR_BOTTOM;
 
 interface Article {
     id: number;
@@ -135,6 +134,11 @@ export function NewsArticleCard({
         "https://images.unsplash.com/photo-1541560052-5e137f229371";
     const timeAgo = "4d ago";
 
+    const TAB_BAR_TOTAL = BAR_HEIGHT + BAR_BOTTOM;
+    const usableHeight = height - TAB_BAR_TOTAL;
+    const imageHeight = usableHeight * 0.70;
+    const contentHeight = usableHeight * 0.30;
+
     return (
         <View
             style={[
@@ -142,11 +146,11 @@ export function NewsArticleCard({
                 { height, backgroundColor: theme.background },
             ]}
         >
-            {/* Hero Image — fills the top portion */}
+            {/* Hero Image — 75% of usable height */}
             <TouchableOpacity
                 activeOpacity={0.97}
                 onPress={handlePress}
-                style={styles.imageContainer}
+                style={[styles.imageContainer, { height: imageHeight }]}
             >
                 <Image
                     source={{ uri: imageUrl }}
@@ -158,35 +162,27 @@ export function NewsArticleCard({
 
             </TouchableOpacity>
 
-            {/* Content pushed up above tab bar */}
+            {/* Content — 25% of usable height, sits above tab bar */}
             <TouchableOpacity
                 activeOpacity={0.97}
                 onPress={handlePress}
                 style={[
                     styles.content,
                     {
-                        paddingBottom: TAB_BAR_TOTAL + 8,
+                        height: contentHeight,
+                        marginBottom: TAB_BAR_TOTAL + 16,
                         backgroundColor: theme.background,
                     },
                 ]}
             >
-                {/* Source Badge */}
+                {/* Category Label + Actions */}
                 <View style={styles.sourceRow}>
-                    <Image
-                        source={{
-                            uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                companyName
-                            )}&background=random&size=64&bold=true&format=png`,
-                        }}
-                        style={styles.sourceAvatar}
-                        contentFit="cover"
-                    />
-                    <Text
-                        style={[styles.sourceName, { color: theme.text.secondary }]}
-                        numberOfLines={1}
-                    >
-                        {companyName}
-                    </Text>
+                    <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryBadgeText}>
+                            {category}
+                        </Text>
+                    </View>
+                    <View style={{ flex: 1 }} />
 
                     {/* Horizontal actions in title/content section */}
                     <View style={styles.actionsRow}>
@@ -263,9 +259,8 @@ const styles = StyleSheet.create({
         overflow: "hidden",
     },
 
-    // Image — fills all space above content
+    // Image — 75% of usable height (explicit height set inline)
     imageContainer: {
-        flex: 1,
         backgroundColor: "#111",
         position: "relative",
     },
@@ -282,7 +277,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
 
-    // Content — fixed at bottom, no border radius, edge-to-edge
+    // Content — 25% of usable height (explicit height set inline)
     content: {
         paddingTop: 14,
         paddingHorizontal: 16,
@@ -298,8 +293,7 @@ const styles = StyleSheet.create({
     actionsRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 2,
-        marginLeft: 8,
+        gap: 14,
     },
     sourceAvatar: {
         width: 28,
@@ -311,6 +305,20 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         fontFamily: "Poppins_600SemiBold",
         flex: 1,
+    },
+    categoryBadge: {
+        backgroundColor: "rgba(255, 59, 48, 0.15)",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    categoryBadgeText: {
+        color: "#FF3B30",
+        fontSize: 12,
+        fontWeight: "700",
+        fontFamily: "Poppins_600SemiBold",
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
     },
 
     // Headline

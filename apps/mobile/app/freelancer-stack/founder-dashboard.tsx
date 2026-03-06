@@ -371,7 +371,7 @@ export default function FounderDashboardScreen() {
               <T weight="semiBold" color={palette.text} style={styles.sectionTitle}>
                 Active Gigs
               </T>
-              <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}> 
+              <TouchableOpacity onPress={() => nav.push("/freelancer-stack/my-gigs")}>
                 <T weight="medium" color={palette.accent} style={styles.linkText}>
                   See all
                 </T>
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
 
   /* ── Scroll / Content ───────────────────────────────────────── */
   scrollContent: {
-    paddingBottom: 110,
+    paddingBottom: 130,
   },
   content: {
     paddingHorizontal: SP._20,
@@ -570,10 +570,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 13,
   },
-  errorCard: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
   searchArrow: {
     width: 28,
     height: 28,
@@ -610,6 +606,15 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     lineHeight: 16,
+  },
+
+  /* ── KPI Icon ───────────────────────────────────────────────── */
+  kpiIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   /* ── Categories ─────────────────────────────────────────────── */
@@ -771,6 +776,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
   actionBtnText: {
     fontSize: 11,
