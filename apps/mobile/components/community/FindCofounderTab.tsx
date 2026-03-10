@@ -70,10 +70,11 @@ interface SwipeableCardProps {
   onSwipeComplete: (direction: "left" | "right", candidate: FounderCandidate) => void;
   onViewProfile: (candidate: FounderCandidate) => void;
   onConnect: (candidate: FounderCandidate) => void;
+  onPass: (candidate: FounderCandidate) => void;
   onMessage: (candidate: FounderCandidate) => void;
 }
 
-const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ candidate, cardH, isFront, indexOffset, onSwipeComplete, onViewProfile, onConnect, onMessage }, ref) => {
+const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ candidate, cardH, isFront, indexOffset, onSwipeComplete, onViewProfile, onConnect, onPass, onMessage }, ref) => {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const isAnimating = useSharedValue(false);
@@ -173,6 +174,7 @@ const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ ca
           cardWidth={CARD_W}
           onViewProfile={isFront ? () => onViewProfile(candidate) : undefined}
           onConnect={isFront ? () => onConnect(candidate) : undefined}
+          onPass={isFront ? () => onPass(candidate) : undefined}
           onMessage={isFront ? () => onMessage(candidate) : undefined}
         />
         {isFront && <SwipeOverlay translateX={translateX} />}
@@ -237,6 +239,10 @@ export default function FindCofounderTab() {
     frontCardRef.current?.flyOut("right");
   }, []);
 
+  const handlePass = useCallback((candidate: FounderCandidate) => {
+    frontCardRef.current?.flyOut("left");
+  }, []);
+
   const handleMessage = useCallback((candidate: FounderCandidate) => {
     setMatchInfo({ matchId: null, matchedUser: candidate });
   }, []);
@@ -257,6 +263,7 @@ export default function FindCofounderTab() {
             onSwipeComplete={handleSwipeComplete}
             onViewProfile={handleViewProfile}
             onConnect={handleConnect}
+            onPass={handlePass}
             onMessage={handleMessage}
           />
         );
@@ -310,6 +317,10 @@ export default function FindCofounderTab() {
           router.push(`/(role-pager)/(founder-tabs)/thread/${encodeURIComponent(threadId)}?threadKind=service&title=${title}&avatar=${avatar}`);
         }}
         onKeepSwiping={() => setMatchInfo(null)}
+        onUndo={() => {
+          setMatchInfo(null);
+          setCurrentIndex((prev) => Math.max(0, prev - 1));
+        }}
       />
     </GestureHandlerRootView>
   );

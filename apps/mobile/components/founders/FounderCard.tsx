@@ -1,16 +1,17 @@
 /**
- * FounderCard – Clean card matching the OnlyFounders reference.
- * - Photo sits inside the card with padding + rounded corners
- * - No action buttons inside the card (swipe handles connect/pass)
+ * FounderCard – Redesigned card matching the dark, edge-to-edge reference.
+ * - Photo/gradient area is edge-to-edge (no padding)
+ * - Full initials (e.g. "PK") shown on gradient placeholder
+ * - Role pill with link icon
+ * - Pass & Connect action buttons at the bottom
  */
 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
   Dimensions,
   Image,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -36,30 +37,13 @@ function toTitle(v: string | null | undefined): string | null {
     .join(" ");
 }
 
-function countryFlag(str: string | null | undefined): string {
-  if (!str) return "🌍";
-  const map: Record<string, string> = {
-    india: "🇮🇳", "united states": "🇺🇸", us: "🇺🇸", usa: "🇺🇸",
-    uk: "🇬🇧", "united kingdom": "🇬🇧", gb: "🇬🇧", england: "🇬🇧",
-    canada: "🇨🇦", australia: "🇦🇺", germany: "🇩🇪", france: "🇫🇷",
-    singapore: "🇸🇬", uae: "🇦🇪", nigeria: "🇳🇬", kenya: "🇰🇪",
-    brazil: "🇧🇷", pakistan: "🇵🇰",
-  };
-  return map[str.toLowerCase()] ?? "🌍";
-}
-
-function intentLabel(candidate: FounderCandidate): string | null {
-  const lf = candidate.looking_for?.toLowerCase() ?? "";
-  if (lf.includes("co-founder") || lf.includes("cofounder")) return "Looking for a Co-Founder";
-  if (lf.includes("team") || lf.includes("build")) return "Looking to Build a Team";
-  if (lf.includes("partner")) return "Looking for a Business Partner";
-  if (lf.includes("freelancer")) return "Looking for Freelancers";
-  if (lf.length > 0) return "Looking to Connect";
-  const ut = candidate.user_type;
-  if (ut === "founder") return "Open to Co-Founder";
-  if (ut === "freelancer") return "Available for Gigs";
-  if (ut === "both") return "Founder & Freelancer";
-  return null;
+/** Extract initials from a display name (e.g. "Priya Kumar" → "PK") */
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 export interface FounderCardProps {
@@ -76,118 +60,90 @@ function FounderCardInner({
   candidate,
   cardHeight,
   cardWidth = SCREEN_W - 24,
+  onConnect,
+  onPass,
 }: FounderCardProps) {
-  const { isDark, theme } = useTheme();
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useEffect(() => { setIsTruncated(false); }, [candidate.id]);
-
+  const { isDark } = useTheme();
 
   const imageUri = candidate.photo_url || candidate.avatar_url;
-  const initials = (candidate.display_name || "?").charAt(0).toUpperCase();
+  const initials = getInitials(candidate.display_name);
   const name = candidate.display_name || "Founder";
   const locationLine = fmt(candidate.location) || fmt(candidate.country);
-  const flag = countryFlag(candidate.country || candidate.location);
   const roleLabel = toTitle(candidate.role) || toTitle(candidate.user_type) || "Founder";
-  const intent = intentLabel(candidate);
   const bio = fmt(candidate.bio) || fmt(candidate.looking_for);
 
-  const IMAGE_H = Math.round(cardHeight * 0.46);
-  const surfaceBg = isDark ? "#1A1A1A" : "#FFFFFF";
-  const bodyColor = theme.text.primary;
-  const mutedColor = theme.text.secondary;
-  const borderCol = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)";
+  const IMAGE_H = Math.round(cardHeight * 0.55);
 
   return (
-    <View style={[styles.card, { width: cardWidth, backgroundColor: surfaceBg, borderColor: borderCol }]}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+    <View style={[styles.card, { width: cardWidth, height: cardHeight }]}>
+      {/* ── PHOTO / GRADIENT (edge-to-edge) ── */}
+      <View style={[styles.photoArea, { height: IMAGE_H }]}>
+        {imageUri ? (
+          <Image
+            source={{ uri: imageUri }}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+            fadeDuration={0}
+          />
+        ) : (
+          <LinearGradient
+            colors={["#0F3D1E", "#0A2914", "#071D0E"]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          >
+            <View style={styles.initialsCenter}>
+              <Text style={styles.initialsText}>{initials}</Text>
+            </View>
+          </LinearGradient>
+        )}
+      </View>
 
-        {/* ── PHOTO (padded, rounded corners) ── */}
-        <View style={styles.photoOuter}>
-          <View style={[styles.photoInner, { height: IMAGE_H }]}>
-            {imageUri ? (
-              <Image
-                source={{ uri: imageUri }}
-                style={StyleSheet.absoluteFillObject}
-                resizeMode="cover"
-                fadeDuration={0}
-              />
-            ) : (
-              <LinearGradient
-                colors={isDark ? ["#1E2333", "#12151E"] : ["#E8EBF0", "#CDD3DD"]}
-                style={StyleSheet.absoluteFillObject}
-              >
-                <View style={styles.placeholderCenter}>
-                  <Text style={[styles.initials, { color: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.10)" }]}>
-                    {initials}
-                  </Text>
-                </View>
-              </LinearGradient>
-            )}
-
-
-          </View>
+      {/* ── INFO SECTION ── */}
+      <View style={styles.info}>
+        {/* Role pill */}
+        <View style={styles.rolePill}>
+          <Ionicons name="link" size={12} color="#AAA" style={{ marginRight: 5 }} />
+          <Text style={styles.roleText}>{roleLabel}</Text>
         </View>
 
-        {/* ── INFO ── */}
-        <View style={styles.info}>
+        {/* Name */}
+        <Text style={styles.name} numberOfLines={1}>{name}</Text>
 
-          {/* Top row: role pill on left */}
-          <View style={styles.topRow}>
-            <View style={[styles.rolePill, { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#F0F0F0" }]}>
-              <MaterialCommunityIcons name="handshake-outline" size={13} color={isDark ? "#AAA" : "#666"} style={{ marginRight: 4 }} />
-              <Text style={[styles.roleText, { color: isDark ? "#BBB" : "#555" }]}>{roleLabel}</Text>
-            </View>
+        {/* Location */}
+        {locationLine && (
+          <View style={styles.locRow}>
+            <Ionicons name="location-sharp" size={14} color="#888" />
+            <Text style={styles.locText}>{locationLine}</Text>
           </View>
+        )}
 
-          {/* Name */}
-          <Text style={[styles.name, { color: bodyColor }]}>{name}</Text>
+        {/* Bio */}
+        {bio && (
+          <Text style={styles.bio} numberOfLines={2}>{bio}</Text>
+        )}
+      </View>
 
-          {/* Location */}
-          {locationLine && (
-            <View style={styles.locRow}>
-              <Ionicons name="location-outline" size={13} color={mutedColor} />
-              <Text style={[styles.locText, { color: mutedColor }]}>{locationLine}</Text>
-            </View>
-          )}
+      {/* ── ACTION BUTTONS ── */}
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={styles.passBtn}
+          onPress={() => onPass?.(candidate)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close" size={18} color="#FFF" />
+          <Text style={styles.passBtnText}>Pass</Text>
+        </TouchableOpacity>
 
-          {/* Divider */}
-          <View style={[styles.divider, { backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.06)" }]} />
-
-          {/* Intent tag */}
-          {intent && (
-            <View style={[styles.intentTag, {
-              backgroundColor: isDark ? "rgba(232,25,44,0.1)" : "rgba(232,25,44,0.07)",
-              borderColor: isDark ? "rgba(232,25,44,0.25)" : "rgba(232,25,44,0.18)",
-            }]}>
-              <Text style={[styles.intentText, { color: isDark ? "#FF6B7A" : "#C8102E" }]}>{intent}</Text>
-            </View>
-          )}
-
-          {/* Bio */}
-          {bio && (
-            <View style={styles.bioWrap}>
-              <Text
-                style={[styles.bio, { color: bodyColor }]}
-                numberOfLines={3}
-                onTextLayout={(e) => {
-                  const { lines } = e.nativeEvent;
-                  setIsTruncated(lines.length >= 3 && lines[lines.length - 1].text.endsWith('\u2026'));
-                }}
-              >
-                {bio}
-              </Text>
-              {isTruncated && (
-                <TouchableOpacity onPress={() => onViewProfile?.(candidate)} style={styles.seeMoreBtn}>
-                  <Text style={[styles.seeMoreText, { color: isDark ? "#FF6B7A" : "#C8102E" }]}>See More</Text>
-                  <Ionicons name="chevron-forward" size={12} color={isDark ? "#FF6B7A" : "#C8102E"} />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-        </View>
-      </ScrollView>
+        <TouchableOpacity
+          style={styles.connectBtn}
+          onPress={() => onConnect?.(candidate)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="checkmark" size={18} color="#FFF" />
+          <Text style={styles.connectBtnText}>Connect</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -198,64 +154,117 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 10,
+    backgroundColor: "#111111",
     flex: 1,
   },
 
-  /* Photo sits inside with padding */
-  photoOuter: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-  },
-  photoInner: {
-    borderRadius: 16,
-    overflow: "hidden",
+  /* Photo area: edge-to-edge, no padding */
+  photoArea: {
     width: "100%",
-    backgroundColor: "#111",
-    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#0A2914",
   },
-  placeholderCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
-  initials: { fontSize: 80, fontFamily: "Poppins_700Bold" },
-
-
+  initialsCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontSize: 90,
+    fontFamily: "Poppins_700Bold",
+    color: "rgba(255,255,255,0.06)",
+    letterSpacing: 4,
+  },
 
   /* Info section */
-  info: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 20 },
-
-  topRow: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
+  info: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+    flex: 1,
+  },
 
   rolePill: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-  },
-  roleText: { fontSize: 12, fontFamily: "Poppins_500Medium" },
-
-  name: {
-    fontSize: 24, fontFamily: "Poppins_700Bold",
-    letterSpacing: -0.4, marginBottom: 5,
-  },
-
-  locRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 14 },
-  locText: { fontSize: 12, fontFamily: "Poppins_400Regular" },
-
-  divider: { height: 1, marginBottom: 14 },
-
-  intentTag: {
+    flexDirection: "row",
+    alignItems: "center",
     alignSelf: "flex-start",
-    borderWidth: 1, borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 5,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
     marginBottom: 12,
   },
-  intentText: { fontSize: 12, fontFamily: "Poppins_600SemiBold" },
+  roleText: {
+    fontSize: 12,
+    fontFamily: "Poppins_500Medium",
+    color: "#CCC",
+  },
 
-  bioWrap: { gap: 6 },
-  bio: { fontSize: 14, lineHeight: 21, fontFamily: "Poppins_400Regular" },
+  name: {
+    fontSize: 24,
+    fontFamily: "Poppins_700Bold",
+    color: "#FFFFFF",
+    letterSpacing: -0.4,
+    marginBottom: 4,
+  },
 
-  seeMoreBtn: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-end" },
-  seeMoreText: { fontSize: 12, fontFamily: "Poppins_600SemiBold" },
+  locRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 8,
+  },
+  locText: {
+    fontSize: 13,
+    fontFamily: "Poppins_400Regular",
+    color: "#999",
+  },
+
+  bio: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: "Poppins_400Regular",
+    color: "#AAA",
+  },
+
+  /* Action buttons */
+  actions: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 8,
+    gap: 12,
+  },
+
+  passBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    paddingVertical: 14,
+    borderRadius: 30,
+  },
+  passBtnText: {
+    fontSize: 15,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#FFFFFF",
+  },
+
+  connectBtn: {
+    flex: 1.3,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#E8391C",
+    paddingVertical: 14,
+    borderRadius: 30,
+  },
+  connectBtnText: {
+    fontSize: 15,
+    fontFamily: "Poppins_600SemiBold",
+    color: "#FFFFFF",
+  },
 });

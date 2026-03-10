@@ -1,18 +1,12 @@
-import { ArticleReelCard } from "@/components/ArticleReelCard";
-import { ReelCardSkeleton } from "@/components/Skeleton";
-import { Layout } from "@/constants/DesignSystem";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -20,19 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
-const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
-const SUB_TAB_BAR_HEIGHT = 0;
-
-const REEL_WIDTH =
-  Platform.OS === "web"
-    ? Math.min(windowWidth, Layout.webMaxWidth)
-    : windowWidth;
-const REEL_HEIGHT =
-  Platform.OS === "web"
-    ? Math.min(windowHeight, Layout.webMaxHeight)
-    : windowHeight;
 
 interface Article {
   id: number;
@@ -46,6 +27,7 @@ interface Article {
 }
 
 const PAGE_SIZE = 20;
+const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 116 : 96;
 
 type ForYouTabProps = {
   isSubTabVisible?: boolean;
@@ -149,62 +131,130 @@ export default function ForYouTab({ isSubTabVisible = true }: ForYouTabProps) {
     setLoadingMore(false);
   }, []);
 
-  const onScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-      const distanceFromEnd =
-        contentSize.height - layoutMeasurement.height - contentOffset.y;
-      // When within 2 reel heights of the end, load more
-      if (distanceFromEnd < REEL_HEIGHT * 2) {
-        loadNextPage();
-      }
-    },
-    [loadNextPage]
+  const renderItem = ({ item }: { item: Article }) => (
+    <NewsArticleCard article={item} isForYou={true} />
   );
 
-  const renderItem = ({ item }: { item: Article; index: number }) => (
-    <View style={{ height: REEL_HEIGHT }}>
-      <ArticleReelCard
-        article={item}
-        height={REEL_HEIGHT}
-        bottomInset={isSubTabVisible ? 50 : 22}
-        isForYou={true}
-      />
+  // Skeleton for loading state — card-list style
+  const SkeletonCard = () => (
+    <View style={styles.skeletonCard}>
+      <View
+        style={[
+          styles.skeletonInner,
+          {
+            backgroundColor: isDark ? "#151517" : "#FFFFFF",
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.skeletonImage,
+            { backgroundColor: isDark ? "#1a1a1a" : "#e5e5e7" },
+          ]}
+        />
+        <View style={styles.skeletonContent}>
+          <View
+            style={[
+              styles.skeletonLine,
+              {
+                backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
+                width: 100,
+                height: 14,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.skeletonLine,
+              {
+                backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
+                width: "100%",
+                height: 18,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.skeletonLine,
+              {
+                backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
+                width: "75%",
+                height: 18,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.skeletonLine,
+              {
+                backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
+                width: "100%",
+                height: 13,
+              },
+            ]}
+          />
+          <View
+            style={[
+              styles.skeletonLine,
+              {
+                backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
+                width: 140,
+                height: 12,
+                marginTop: 6,
+              },
+            ]}
+          />
+        </View>
+      </View>
     </View>
   );
 
   const EndOfFeedFooter = () => {
     if (loadingMore) {
       return (
-        <View style={[styles.footerContainer, { backgroundColor: "#000" }]}>
-          <ActivityIndicator color="#FF3B30" size="large" />
+        <View style={styles.footerLoading}>
+          <ActivityIndicator color={theme.brand.primary} size="large" />
         </View>
       );
     }
 
     if (!hasMore && articles.length > 0) {
       return (
-        <View style={[styles.footerContainer, { backgroundColor: "#000" }]}>
-          <LinearGradient
-            colors={["#1a0000", "#000000", "#0a0a0a"]}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-          />
+        <View style={styles.footerContainer}>
           <View style={styles.footerContent}>
-            <View style={styles.footerIconCircle}>
-              <Ionicons name="checkmark-done" size={44} color="#FF3B30" />
+            <View
+              style={[
+                styles.footerIconCircle,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(255,59,48,0.1)"
+                    : "rgba(255,59,48,0.08)",
+                  borderColor: isDark
+                    ? "rgba(255,59,48,0.25)"
+                    : "rgba(255,59,48,0.15)",
+                },
+              ]}
+            >
+              <Ionicons
+                name="checkmark-done"
+                size={36}
+                color={theme.brand.primary}
+              />
             </View>
-            <View style={styles.footerCategoryPill}>
-              <Text style={styles.footerCategoryText}>ALL CAUGHT UP</Text>
-            </View>
-            <Text style={styles.footerTitle}>All Articles Complete</Text>
-            <Text style={styles.footerSubtitle}>
+            <Text style={[styles.footerTitle, { color: theme.text.primary }]}>
+              All caught up!
+            </Text>
+            <Text
+              style={[styles.footerSubtitle, { color: theme.text.tertiary }]}
+            >
               You&apos;ve seen every story in your feed.{"\n"}Pull down to
               refresh for new articles.
             </Text>
             <TouchableOpacity
-              style={styles.footerButton}
+              style={[
+                styles.footerButton,
+                { backgroundColor: theme.brand.primary },
+              ]}
               onPress={handleRefresh}
               activeOpacity={0.8}
             >
@@ -222,8 +272,10 @@ export default function ForYouTab({ isSubTabVisible = true }: ForYouTabProps) {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.skeletonContainer}>
-          <ReelCardSkeleton />
+        <View style={styles.skeletonList}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </View>
       </View>
     );
@@ -268,28 +320,22 @@ export default function ForYouTab({ isSubTabVisible = true }: ForYouTabProps) {
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
-        snapToInterval={REEL_HEIGHT}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        onMomentumScrollEnd={onScrollEnd}
+        contentContainerStyle={styles.listContent}
+        onEndReached={loadNextPage}
+        onEndReachedThreshold={0.5}
         ListFooterComponent={EndOfFeedFooter}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#FF3B30"
-            colors={["#FF3B30"]}
+            tintColor={theme.brand.primary}
+            colors={[theme.brand.primary]}
           />
         }
-        getItemLayout={(_, index) => ({
-          length: REEL_HEIGHT,
-          offset: REEL_HEIGHT * index,
-          index,
-        })}
         removeClippedSubviews={Platform.OS === "android"}
-        maxToRenderPerBatch={3}
-        windowSize={5}
-        initialNumToRender={2}
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        initialNumToRender={4}
       />
     </View>
   );
@@ -299,9 +345,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  skeletonContainer: {
-    width: REEL_WIDTH,
-    height: REEL_HEIGHT,
+  listContent: {
+    paddingTop: TOP_CONTENT_OFFSET,
+    paddingBottom: 100,
+  },
+
+  // Skeleton
+  skeletonList: {
+    paddingTop: TOP_CONTENT_OFFSET,
+    paddingBottom: 20,
+  },
+  skeletonCard: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+  },
+  skeletonInner: {
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  skeletonImage: {
+    width: "100%",
+    height: 180,
+  },
+  skeletonContent: {
+    padding: 16,
+    gap: 8,
+  },
+  skeletonLine: {
+    borderRadius: 4,
   },
 
   // Empty State
@@ -332,71 +403,49 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // End-of-Feed Footer (Reel-style)
-  footerContainer: {
-    height: REEL_HEIGHT,
-    width: REEL_WIDTH,
-    justifyContent: "center",
+  // Footer
+  footerLoading: {
+    paddingVertical: 32,
     alignItems: "center",
-    overflow: "hidden",
+  },
+  footerContainer: {
+    paddingVertical: 48,
+    alignItems: "center",
   },
   footerContent: {
     alignItems: "center",
     paddingHorizontal: 40,
   },
   footerIconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: "rgba(255,59,48,0.1)",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     borderWidth: 1.5,
-    borderColor: "rgba(255,59,48,0.25)",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
-  },
-  footerCategoryPill: {
-    backgroundColor: "#FF3B30",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginBottom: 16,
-  },
-  footerCategoryText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "700",
-    fontFamily: "Poppins_600SemiBold",
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    marginBottom: 20,
   },
   footerTitle: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "700",
     fontFamily: "Poppins_700Bold",
-    marginBottom: 10,
+    marginBottom: 8,
     textAlign: "center",
-    color: "#FFFFFF",
-    textShadowColor: "rgba(0,0,0,0.6)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   footerSubtitle: {
     fontSize: 14,
     lineHeight: 22,
     textAlign: "center",
-    marginBottom: 32,
-    color: "rgba(255,255,255,0.6)",
+    marginBottom: 24,
     fontFamily: "Poppins_400Regular",
   },
   footerButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#FF3B30",
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
   footerButtonText: {
     color: "#FFFFFF",

@@ -1,17 +1,12 @@
 import { NewsArticleCard } from "@/components/NewsArticleCard";
-import { Layout } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -19,17 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-const { width: windowWidth, height: windowHeight } = Dimensions.get("window");
-
-const REEL_WIDTH =
-  Platform.OS === "web"
-    ? Math.min(windowWidth, Layout.webMaxWidth)
-    : windowWidth;
-const REEL_HEIGHT =
-  Platform.OS === "web"
-    ? Math.min(windowHeight, Layout.webMaxHeight)
-    : windowHeight;
 
 interface Article {
   id: number;
@@ -43,6 +27,7 @@ interface Article {
 }
 
 const PAGE_SIZE = 20;
+const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 116 : 96;
 
 type FeedTabProps = {
   isSubTabVisible?: boolean;
@@ -146,39 +131,18 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
     setLoadingMore(false);
   }, []);
 
-  const onScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-
-      if (Platform.OS === "ios" && contentOffset.y < -80 && !refreshing) {
-        handleRefresh();
-        return;
-      }
-
-      const distanceFromEnd =
-        contentSize.height - layoutMeasurement.height - contentOffset.y;
-      if (distanceFromEnd < REEL_HEIGHT * 2) {
-        loadNextPage();
-      }
-    },
-    [loadNextPage, handleRefresh, refreshing]
-  );
-
   const renderItem = ({ item }: { item: Article }) => (
-    <View style={{ height: REEL_HEIGHT }}>
-      <NewsArticleCard article={item} height={REEL_HEIGHT} />
-    </View>
+    <NewsArticleCard article={item} />
   );
 
-  // Skeleton for loading state
+  // Skeleton for loading state — card-list style
   const SkeletonCard = () => (
-    <View style={[styles.skeletonReel, { backgroundColor: theme.background }]}>
+    <View style={styles.skeletonCard}>
       <View
         style={[
-          styles.skeletonCard,
+          styles.skeletonInner,
           {
-            backgroundColor: theme.surface,
-            borderColor: isDark ? theme.border : theme.borderLight,
+            backgroundColor: isDark ? "#151517" : "#FFFFFF",
           },
         ]}
       >
@@ -194,7 +158,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
               styles.skeletonLine,
               {
                 backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
-                width: 120,
+                width: 100,
                 height: 14,
               },
             ]}
@@ -234,16 +198,6 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
               styles.skeletonLine,
               {
                 backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
-                width: "90%",
-                height: 13,
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.skeletonLine,
-              {
-                backgroundColor: isDark ? "#1f1f23" : "#f0f0f0",
                 width: 140,
                 height: 12,
                 marginTop: 6,
@@ -258,9 +212,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
   const EndOfFeedFooter = () => {
     if (loadingMore) {
       return (
-        <View
-          style={[styles.footerContainer, { backgroundColor: theme.background }]}
-        >
+        <View style={styles.footerLoading}>
           <ActivityIndicator color={theme.brand.primary} size="large" />
         </View>
       );
@@ -268,9 +220,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
 
     if (!hasMore && articles.length > 0) {
       return (
-        <View
-          style={[styles.footerContainer, { backgroundColor: theme.background }]}
-        >
+        <View style={styles.footerContainer}>
           <View style={styles.footerContent}>
             <View
               style={[
@@ -287,7 +237,7 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
             >
               <Ionicons
                 name="checkmark-done"
-                size={44}
+                size={36}
                 color={theme.brand.primary}
               />
             </View>
@@ -322,7 +272,11 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <SkeletonCard />
+        <View style={styles.skeletonList}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </View>
       </View>
     );
   }
@@ -368,10 +322,9 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
-        snapToInterval={refreshing ? undefined : REEL_HEIGHT}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        onMomentumScrollEnd={onScrollEnd}
+        contentContainerStyle={styles.listContent}
+        onEndReached={loadNextPage}
+        onEndReachedThreshold={0.5}
         ListFooterComponent={EndOfFeedFooter}
         refreshControl={
           <RefreshControl
@@ -381,15 +334,10 @@ export default function FeedTab({ isSubTabVisible = true }: FeedTabProps) {
             colors={[theme.brand.primary]}
           />
         }
-        getItemLayout={(_, index) => ({
-          length: REEL_HEIGHT,
-          offset: REEL_HEIGHT * index,
-          index,
-        })}
         removeClippedSubviews={Platform.OS === "android"}
-        maxToRenderPerBatch={3}
-        windowSize={5}
-        initialNumToRender={2}
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        initialNumToRender={4}
       />
     </View>
   );
@@ -399,31 +347,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  listContent: {
+    paddingTop: TOP_CONTENT_OFFSET,
+    paddingBottom: 100,
+  },
 
   // Skeleton
-  skeletonReel: {
-    height: REEL_HEIGHT,
-    width: REEL_WIDTH,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+  skeletonList: {
+    paddingTop: TOP_CONTENT_OFFSET,
     paddingBottom: 20,
   },
   skeletonCard: {
-    flex: 1,
-    width: "100%",
-    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 14,
+  },
+  skeletonInner: {
+    borderRadius: 16,
     overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
   },
   skeletonImage: {
     width: "100%",
-    flex: 1,
-    minHeight: 180,
+    height: 180,
   },
   skeletonContent: {
-    padding: 18,
+    padding: 16,
     gap: 8,
   },
   skeletonLine: {
@@ -459,47 +406,48 @@ const styles = StyleSheet.create({
   },
 
   // Footer
-  footerContainer: {
-    height: REEL_HEIGHT,
-    width: REEL_WIDTH,
-    justifyContent: "center",
+  footerLoading: {
+    paddingVertical: 32,
     alignItems: "center",
-    overflow: "hidden",
+  },
+  footerContainer: {
+    paddingVertical: 48,
+    alignItems: "center",
   },
   footerContent: {
     alignItems: "center",
     paddingHorizontal: 40,
   },
   footerIconCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     borderWidth: 1.5,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 24,
+    marginBottom: 20,
   },
   footerTitle: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: "700",
     fontFamily: "Poppins_700Bold",
-    marginBottom: 10,
+    marginBottom: 8,
     textAlign: "center",
   },
   footerSubtitle: {
     fontSize: 14,
     lineHeight: 22,
     textAlign: "center",
-    marginBottom: 32,
+    marginBottom: 24,
     fontFamily: "Poppins_400Regular",
   },
   footerButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
   footerButtonText: {
     color: "#FFFFFF",
