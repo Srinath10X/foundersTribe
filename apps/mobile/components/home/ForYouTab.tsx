@@ -27,13 +27,15 @@ interface Article {
 }
 
 const PAGE_SIZE = 20;
-const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 116 : 96;
+const DEFAULT_TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 116 : 96;
 
 type ForYouTabProps = {
-  isSubTabVisible?: boolean;
+  topContentOffset?: number;
 };
 
-export default function ForYouTab({ isSubTabVisible = true }: ForYouTabProps) {
+export default function ForYouTab({
+  topContentOffset = DEFAULT_TOP_CONTENT_OFFSET,
+}: ForYouTabProps) {
   const { theme, isDark } = useTheme();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,7 +274,7 @@ export default function ForYouTab({ isSubTabVisible = true }: ForYouTabProps) {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.skeletonList}>
+        <View style={[styles.skeletonList, { paddingTop: topContentOffset }]}>
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
@@ -320,7 +322,7 @@ export default function ForYouTab({ isSubTabVisible = true }: ForYouTabProps) {
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingTop: topContentOffset }]}
         onEndReached={loadNextPage}
         onEndReachedThreshold={0.5}
         ListFooterComponent={EndOfFeedFooter}
@@ -346,13 +348,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingTop: TOP_CONTENT_OFFSET,
     paddingBottom: 100,
   },
 
   // Skeleton
   skeletonList: {
-    paddingTop: TOP_CONTENT_OFFSET,
     paddingBottom: 20,
   },
   skeletonCard: {

@@ -1,38 +1,30 @@
 import FeedTab from "@/components/home/FeedTab";
 import ForYouTab from "@/components/home/ForYouTab";
-import SubTabBar from "@/components/SubTabBar";
 import { useFounderConnections } from "@/hooks/useFounderConnections";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack, useFocusEffect, useNavigation, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Stack, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
-  Dimensions,
   Platform,
   StatusBar,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 
-const { width: windowWidth } = Dimensions.get("window");
-const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
+const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 156 : 132;
 
 type SubTab = "feed" | "foryou";
 
 const SUB_TABS: {
   key: SubTab;
   label: string;
-  icon: string;
-  iconFocused?: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  iconFocused: React.ComponentProps<typeof Ionicons>["name"];
 }[] = [
     {
       key: "feed",
@@ -42,84 +34,33 @@ const SUB_TABS: {
     },
     {
       key: "foryou",
-      label: "For you",
-      icon: "bs-stars",
-      iconFocused: "bs-stars",
+      label: "For You",
+      icon: "sparkles-outline",
+      iconFocused: "sparkles",
     },
   ];
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const router = useRouter();
-  const navigation = useNavigation();
   const { notificationCount } = useFounderConnections(true);
   const [activeTab, setActiveTab] = useState<SubTab>("feed");
-  const [isSubTabVisible, setIsSubTabVisible] = useState(true);
-  const subTabVisibility = useSharedValue(1);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearHideTimer = useCallback(() => {
-    if (hideTimer.current) {
-      clearTimeout(hideTimer.current);
-      hideTimer.current = null;
-    }
+  const handleTabPress = useCallback((tab: SubTab) => {
+    setActiveTab(tab);
   }, []);
-
-  const showSubTabsTemporarily = useCallback(() => {
-    clearHideTimer();
-    setIsSubTabVisible(true);
-    subTabVisibility.value = withTiming(1, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-    });
-    hideTimer.current = setTimeout(() => {
-      setIsSubTabVisible(false);
-      subTabVisibility.value = withTiming(0, {
-        duration: 320,
-        easing: Easing.inOut(Easing.quad),
-      });
-    }, 2000);
-  }, [clearHideTimer, subTabVisibility]);
-
-  useFocusEffect(
-    useCallback(() => {
-      showSubTabsTemporarily();
-      return () => clearHideTimer();
-    }, [clearHideTimer, showSubTabsTemporarily])
-  );
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("tabPress", () => {
-      showSubTabsTemporarily();
-    });
-    return unsubscribe;
-  }, [navigation, showSubTabsTemporarily]);
-
-  const handleTabPress = useCallback(
-    (tab: SubTab) => {
-      setActiveTab(tab);
-      showSubTabsTemporarily();
-    },
-    [showSubTabsTemporarily]
-  );
-
-  const subTabVisibilityStyle = useAnimatedStyle(() => ({
-    opacity: subTabVisibility.value,
-    transform: [{ translateY: (1 - subTabVisibility.value) * 56 }],
-  }));
 
   const renderContent = () => {
     switch (activeTab) {
       case "feed":
-        return <FeedTab isSubTabVisible={isSubTabVisible} />;
+        return <FeedTab topContentOffset={TOP_CONTENT_OFFSET} />;
       case "foryou":
-        return <ForYouTab />;
+        return <ForYouTab topContentOffset={TOP_CONTENT_OFFSET} />;
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
       {renderContent()}
@@ -127,15 +68,7 @@ export default function HomeScreen() {
       {/* Header Overlay — gradient fade top→bottom */}
       <View style={styles.headerContainer}>
         <LinearGradient
-          colors={
-            isDark
-              ? ["rgba(0,0,0,0.92)", "rgba(0,0,0,0.65)", "transparent"]
-              : [
-                "rgba(250,250,249,0.97)",
-                "rgba(250,250,249,0.85)",
-                "rgba(250,250,249,0)",
-              ]
-          }
+          colors={["#000000", "#000000", "#000000"]}
           style={styles.headerGradient}
         >
           <View style={styles.headerInner}>
@@ -195,18 +128,52 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          <View
+            style={[
+              styles.topTabsRow,
+              { borderBottomColor: theme.border, backgroundColor: "#000000" },
+            ]}
+          >
+            {SUB_TABS.map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <TouchableOpacity
+                  key={tab.key}
+                  style={styles.topTabBtn}
+                  onPress={() => handleTabPress(tab.key)}
+                  activeOpacity={0.84}
+                >
+                  <Ionicons
+                    name={isActive ? tab.iconFocused : tab.icon}
+                    size={16}
+                    color={isActive ? theme.text.primary : theme.text.secondary}
+                  />
+                  <Text
+                    style={[
+                      styles.topTabText,
+                      {
+                        color: isActive ? theme.text.primary : theme.text.secondary,
+                        fontFamily: isActive ? "Poppins_700Bold" : "Poppins_600SemiBold",
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                  {isActive && (
+                    <View
+                      style={[
+                        styles.topTabIndicator,
+                        { backgroundColor: theme.brand.primary },
+                      ]}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </LinearGradient>
       </View>
-
-      {/* Bottom Sub-Tabs */}
-      <Animated.View style={[styles.bottomTabContainer, subTabVisibilityStyle]}>
-        <SubTabBar
-          tabs={SUB_TABS}
-          activeKey={activeTab}
-          isDark={isDark}
-          onTabPress={handleTabPress}
-        />
-      </Animated.View>
     </View>
   );
 }
@@ -225,7 +192,8 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   headerGradient: {
-    paddingBottom: 40,
+    paddingBottom: 0,
+    backgroundColor: "#000000",
   },
   headerInner: {
     flexDirection: "row",
@@ -233,7 +201,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: Platform.OS === "ios" ? 58 : 36,
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   brandLogo: {
     height: 24,
@@ -269,14 +237,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
 
-  // Bottom Sub-Tabs
-  bottomTabContainer: {
+  topTabsRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  topTabBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingTop: 10,
+    paddingBottom: 12,
+    position: "relative",
+  },
+  topTabText: {
+    fontSize: 30 / 2,
+    lineHeight: 20,
+  },
+  topTabIndicator: {
     position: "absolute",
-    bottom: TAB_BAR_HEIGHT + 2,
     left: 0,
     right: 0,
-    zIndex: 100,
-    paddingHorizontal: Math.max((windowWidth - 420) / 2, 16),
-    paddingBottom: 8,
+    bottom: 0,
+    height: 2,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
   },
 });
