@@ -26,9 +26,40 @@ import Animated, { FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type SocialLink = { platform: string; url: string; label: string };
+type RoleOption = {
+  value: "founder" | "freelancer" | "both";
+  title: string;
+  description: string;
+  tag: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+};
 
 const EMPTY_IDEA = { idea: "" };
 const EMPTY_LINK: SocialLink = { platform: "", url: "", label: "" };
+const ROLE_OPTIONS: RoleOption[] = [
+  {
+    value: "founder",
+    title: "Founder",
+    description:
+      "I have an idea or startup and want collaborators, talent, and growth.",
+    tag: "Build",
+    icon: "rocket-outline",
+  },
+  {
+    value: "freelancer",
+    title: "Freelancer",
+    description: "I want exciting projects, paid work, and teams to build with.",
+    tag: "Work",
+    icon: "code-slash-outline",
+  },
+  {
+    value: "both",
+    title: "Founder & Freelancer",
+    description: "I am building my startup and open to freelance opportunities too.",
+    tag: "Hybrid",
+    icon: "people-outline",
+  },
+];
 
 export default function Onboarding() {
   const router = useRouter();
@@ -474,133 +505,77 @@ export default function Onboarding() {
       </Animated.View>
 
       <View style={styles.roleGrid}>
-        <TouchableOpacity
-          style={[
-            styles.roleLargeCard,
-            {
-              backgroundColor: theme.surface,
-              borderColor:
-                userType === "founder" ? theme.brand.primary : theme.border,
-            },
-          ]}
-          onPress={() => setUserType("founder")}
-          activeOpacity={0.8}
-        >
-          <View
-            style={[
-              styles.roleIconCircle,
-              {
-                backgroundColor:
-                  userType === "founder"
-                    ? theme.brand.primary
-                    : theme.surfaceElevated,
-              },
-            ]}
-          >
-            <Ionicons
-              name="rocket"
-              size={32}
-              color={userType === "founder" ? "#fff" : theme.text.secondary}
-            />
-          </View>
-          <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
-            Founder
-          </Text>
-          <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
-            I have an idea or a startup and want to find collaborators, talent,
-            or grow.
-          </Text>
-          {userType === "founder" && (
-            <View style={styles.roleCheckMark}>
-              <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
-            </View>
-          )}
-        </TouchableOpacity>
+        <Text style={[styles.roleHint, { color: theme.text.tertiary }]}>Scroll to explore roles</Text>
+        {ROLE_OPTIONS.map((option) => {
+          const active = userType === option.value;
 
-        <TouchableOpacity
-          style={[
-            styles.roleLargeCard,
-            {
-              backgroundColor: theme.surface,
-              borderColor:
-                userType === "freelancer" ? theme.brand.primary : theme.border,
-            },
-          ]}
-          onPress={() => setUserType("freelancer")}
-          activeOpacity={0.8}
-        >
-          <View
-            style={[
-              styles.roleIconCircle,
-              {
-                backgroundColor:
-                  userType === "freelancer"
-                    ? theme.brand.primary
-                    : theme.surfaceElevated,
-              },
-            ]}
-          >
-            <Ionicons
-              name="code-working"
-              size={32}
-              color={userType === "freelancer" ? "#fff" : theme.text.secondary}
-            />
-          </View>
-          <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
-            Freelancer
-          </Text>
-          <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
-            I have skills and want to find exciting projects to work on or join
-            founding teams.
-          </Text>
-          {userType === "freelancer" && (
-            <View style={styles.roleCheckMark}>
-              <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
-            </View>
-          )}
-        </TouchableOpacity>
+          return (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.roleCompactCard,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: active ? theme.brand.primary : theme.border,
+                },
+                active && styles.roleCardElevated,
+              ]}
+              onPress={() => setUserType(option.value)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.roleCardHeader}>
+                <View
+                  style={[
+                    styles.roleIconCircleCompact,
+                    {
+                      backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={option.icon}
+                    size={22}
+                    color={active ? "#fff" : theme.text.secondary}
+                  />
+                </View>
 
-        <TouchableOpacity
-          style={[
-            styles.roleLargeCard,
-            {
-              backgroundColor: theme.surface,
-              borderColor:
-                userType === "both" ? theme.brand.primary : theme.border,
-            },
-          ]}
-          onPress={() => setUserType("both")}
-          activeOpacity={0.8}
-        >
-          <View
-            style={[
-              styles.roleIconCircle,
-              {
-                backgroundColor:
-                  userType === "both"
-                    ? theme.brand.primary
-                    : theme.surfaceElevated,
-              },
-            ]}
-          >
-            <Ionicons
-              name="people"
-              size={32}
-              color={userType === "both" ? "#fff" : theme.text.secondary}
-            />
-          </View>
-          <Text style={[styles.roleTitle, { color: theme.text.primary }]}>
-            Both (Founder + Freelancer)
-          </Text>
-          <Text style={[styles.roleDesc, { color: theme.text.secondary }]}>
-            I'm building a startup and also open to freelance opportunities — the best of both worlds.
-          </Text>
-          {userType === "both" && (
-            <View style={styles.roleCheckMark}>
-              <Ionicons name="checkmark-circle" size={24} color={theme.brand.primary} />
-            </View>
-          )}
-        </TouchableOpacity>
+                <View style={styles.roleTextWrap}>
+                  <View style={styles.roleTitleRow}>
+                    <Text style={[styles.roleTitleCompact, { color: theme.text.primary }]}>
+                      {option.title}
+                    </Text>
+                    <View
+                      style={[
+                        styles.roleTag,
+                        {
+                          backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.roleTagText,
+                          { color: active ? "#fff" : theme.text.secondary },
+                        ]}
+                      >
+                        {option.tag}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.roleDescCompact, { color: theme.text.secondary }]}>
+                    {option.description}
+                  </Text>
+                </View>
+              </View>
+
+              {active && (
+                <View style={styles.roleCheckMark}>
+                  <Ionicons name="checkmark-circle" size={22} color={theme.brand.primary} />
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </ScrollView>
   );
@@ -907,38 +882,74 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   roleGrid: {
-    gap: 16,
+    gap: 10,
     marginTop: Spacing.sm,
   },
-  roleLargeCard: {
-    borderRadius: 20,
-    borderWidth: 2,
-    padding: 24,
-    position: "relative",
-    alignItems: "center",
+  roleHint: {
+    ...Type.label,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginBottom: 2,
   },
-  roleIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  roleCompactCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
+    position: "relative",
+  },
+  roleCardElevated: {
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  roleCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  roleIconCircleCompact: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
+    marginTop: 2,
   },
-  roleTitle: {
-    fontSize: 20,
+  roleTextWrap: {
+    flex: 1,
+    paddingRight: 20,
+  },
+  roleTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  roleTitleCompact: {
+    fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
   },
-  roleDesc: {
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
+  roleTag: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  roleTagText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+  roleDescCompact: {
+    fontSize: 13,
+    lineHeight: 19,
     opacity: 0.8,
   },
   roleCheckMark: {
     position: "absolute",
-    top: 12,
-    right: 12,
+    top: 10,
+    right: 10,
   },
 });

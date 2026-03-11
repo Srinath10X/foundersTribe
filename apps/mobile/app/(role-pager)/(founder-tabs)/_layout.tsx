@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import React from "react";
 
 import LiquidTabBar from "@/components/LiquidTabBar";
+import HomeTabIcon from "@/components/icons/HomeTabIcon";
 import { useTheme } from "@/context/ThemeContext";
 
 export default function FounderTabLayout() {
@@ -23,11 +24,7 @@ export default function FounderTabLayout() {
         options={{
           title: "Home",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={20}
-              color={color}
-            />
+            <HomeTabIcon color={color} size={20} focused={focused} />
           ),
         }}
       />

@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
-  Dimensions,
   Platform,
   ScrollView,
   StatusBar,
@@ -10,21 +9,14 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { Stack, useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 
 import TribesTab from "@/components/community/TribesTab";
 import FindCofounderTab from "@/components/community/FindCofounderTab";
 import FindFreelancerTab from "@/components/community/FindFreelancerTab";
 import VoiceChannelsTab from "@/components/community/VoiceChannelsTab";
 import CreateTribeModal from "@/components/CreateTribeModal";
-import SubTabBar from "@/components/SubTabBar";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useFounderConnections } from "@/hooks/useFounderConnections";
@@ -32,7 +24,6 @@ import * as tribeApi from "@/lib/tribeApi";
 import { Spacing, Layout } from "@/constants/DesignSystem";
 
 const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
-const { width: windowWidth } = Dimensions.get("window");
 
 /* ── Sub-tab config ─────────────────────────────────────────── */
 
@@ -53,7 +44,7 @@ const SUB_TABS: {
     },
     {
       key: "find-cofounder",
-      label: "founders",
+      label: "Founders",
       icon: "people-outline",
       iconFocused: "people",
     },
@@ -71,7 +62,6 @@ const SUB_TABS: {
 
 export default function CommunityScreen() {
   const { theme, isDark } = useTheme();
-  const navigation = useNavigation();
   const router = useRouter();
   const { session } = useAuth();
   const { notificationCount } = useFounderConnections(true);
@@ -80,57 +70,20 @@ export default function CommunityScreen() {
   const [activeView, setActiveView] = useState<ActiveView>("find-cofounder");
   const [tribesMode, setTribesMode] = useState<"explore" | "my">("explore");
   const [showCreateTribe, setShowCreateTribe] = useState(false);
-  const [isSubTabVisible, setIsSubTabVisible] = useState(true);
-  const subTabVisibility = useSharedValue(1);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showTribeHeaderActions =
     activeView === "tribes" || activeView === "voice-channels";
+  const activeTopTab: SubTab = activeView === "voice-channels" ? "tribes" : activeView;
 
-  const clearHideTimer = useCallback(() => {
-    if (hideTimer.current) {
-      clearTimeout(hideTimer.current);
-      hideTimer.current = null;
-    }
-  }, []);
-
-  const showSubTabsTemporarily = useCallback(() => {
-    clearHideTimer();
-    setIsSubTabVisible(true);
-    subTabVisibility.value = withTiming(1, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-    });
-    hideTimer.current = setTimeout(() => {
-      setIsSubTabVisible(false);
-      subTabVisibility.value = withTiming(0, {
-        duration: 320,
-        easing: Easing.inOut(Easing.quad),
-      });
-    }, 2000);
-  }, [clearHideTimer, subTabVisibility]);
-
-  useFocusEffect(
-    useCallback(() => {
-      showSubTabsTemporarily();
-      return () => clearHideTimer();
-    }, [clearHideTimer, showSubTabsTemporarily])
+  const handleTopTabPress = useCallback(
+    (tab: SubTab) => {
+      if (tab === "find-freelancer") {
+        router.push("/freelancer-stack");
+        return;
+      }
+      setActiveView(tab);
+    },
+    [router]
   );
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("tabPress", () => {
-      showSubTabsTemporarily();
-    });
-    return unsubscribe;
-  }, [navigation, showSubTabsTemporarily]);
-
-  const subTabVisibilityStyle = useAnimatedStyle(() => ({
-    opacity: subTabVisibility.value,
-    transform: [{ translateY: (1 - subTabVisibility.value) * 56 }],
-  }));
-
-  const floatingFabStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: (1 - subTabVisibility.value) * 56 }],
-  }));
 
   /* ── Header action handlers ──────────────────────────────── */
 
@@ -178,7 +131,7 @@ export default function CommunityScreen() {
       case "find-freelancer":
         return <FindFreelancerTab />;
       case "voice-channels":
-        return <VoiceChannelsTab subTabVisible={isSubTabVisible} />;
+        return <VoiceChannelsTab subTabVisible={false} />;
     }
   };
 
@@ -222,6 +175,49 @@ export default function CommunityScreen() {
               <Ionicons name="person-outline" size={18} color={theme.text.primary} />
             </TouchableOpacity>
           </View>
+        </View>
+
+        <View
+          style={[
+            styles.topSubTabs,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          {SUB_TABS.map((tab) => {
+            const isActive = activeTopTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.topSubTabBtn,
+                  isActive && { backgroundColor: theme.brand.primary },
+                ]}
+                onPress={() => handleTopTabPress(tab.key)}
+                activeOpacity={0.86}
+              >
+                <Ionicons
+                  name={(isActive ? tab.iconFocused || tab.icon : tab.icon) as any}
+                  size={15}
+                  color={isActive ? theme.text.inverse : theme.text.secondary}
+                />
+                <Text
+                  style={[
+                    styles.topSubTabLabel,
+                    {
+                      color: isActive ? theme.text.inverse : theme.text.secondary,
+                      fontFamily: isActive ? "Poppins_700Bold" : "Poppins_600SemiBold",
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {showTribeHeaderActions && (
@@ -359,25 +355,8 @@ export default function CommunityScreen() {
         {renderContent()}
       </View>
 
-      {/* ── Sub-tabs just above bottom tab bar ─────────────── */}
-      <Animated.View style={[styles.subTabContainer, subTabVisibilityStyle]}>
-        <SubTabBar
-          tabs={SUB_TABS}
-          activeKey={activeView as SubTab}
-          isDark={isDark}
-          onTabPress={(tab) => {
-            if (tab === "find-freelancer") {
-              router.push("/freelancer-stack");
-              return;
-            }
-            setActiveView(tab);
-            showSubTabsTemporarily();
-          }}
-        />
-      </Animated.View>
-
       {activeView === "tribes" && (
-        <Animated.View style={[styles.createFab, floatingFabStyle]}>
+        <View style={styles.createFab}>
           <TouchableOpacity
             style={[
               styles.createFabButton,
@@ -389,7 +368,7 @@ export default function CommunityScreen() {
           >
             <Ionicons name="add" size={24} color={theme.text.inverse} />
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       )}
 
       {/* ── Modals ─────────────────────────────────────────── */}
@@ -413,7 +392,7 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: Platform.OS === "ios" ? 60 : 40,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.md,
   },
 
   /* Content area – flex:1, with bottom padding so tab bar never overlaps */
@@ -486,20 +465,33 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
   },
 
-  /* Sub-tabs above bottom tab bar */
-  subTabContainer: {
-    position: "absolute",
-    bottom: TAB_BAR_HEIGHT + 2,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    paddingBottom: Spacing.sm,
-    paddingHorizontal: 0,
+  topSubTabs: {
+    marginTop: Spacing.sm,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  topSubTabBtn: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  topSubTabLabel: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   createFab: {
     position: "absolute",
     right: Spacing.lg,
-    bottom: TAB_BAR_HEIGHT + 96,
+    bottom: TAB_BAR_HEIGHT + 36,
     zIndex: 120,
   },
   createFabButton: {
