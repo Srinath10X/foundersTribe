@@ -192,8 +192,8 @@ const UniversalSearchBar = memo(function UniversalSearchBar({
               searchBarStyles.aiBadge,
               {
                 backgroundColor: isDark
-                  ? "rgba(255,59,48,0.12)"
-                  : "rgba(255,59,48,0.08)",
+                  ? "rgba(207,32,48,0.12)"
+                  : "rgba(207,32,48,0.08)",
               },
             ]}
           >
@@ -361,7 +361,7 @@ const ResultTabBar = memo(function ResultTabBar({
                       {
                         color: isActive ? theme.brand.primary : theme.text.muted,
                         backgroundColor: isActive
-                          ? isDark ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.08)"
+                          ? isDark ? "rgba(207,32,48,0.12)" : "rgba(207,32,48,0.08)"
                           : "transparent",
                       },
                     ]}
@@ -691,7 +691,7 @@ const CommunityResultCard = memo(function CommunityResultCard({
           style={[
             communityStyles.iconWrap,
             {
-              backgroundColor: isDark ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.08)",
+              backgroundColor: isDark ? "rgba(207,32,48,0.12)" : "rgba(207,32,48,0.08)",
             },
           ]}
         >

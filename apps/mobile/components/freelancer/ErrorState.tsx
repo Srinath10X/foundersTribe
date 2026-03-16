@@ -23,8 +23,8 @@ export function ErrorState({
 
     return (
         <View style={[styles.container, { backgroundColor: palette.card, borderColor: palette.borderLight }, style]}>
-            <View style={[styles.iconWrap, { backgroundColor: palette.accentSoft || 'rgba(255,59,48,0.1)' }]}>
-                <Ionicons name="alert-circle" size={32} color={palette.accent || '#FF3B30'} />
+            <View style={[styles.iconWrap, { backgroundColor: palette.accentSoft || 'rgba(207,32,48,0.1)' }]}>
+                <Ionicons name="alert-circle" size={32} color={palette.accent || '#CF2030'} />
             </View>
             <T weight="bold" color={palette.text} style={styles.title}>
                 {title}

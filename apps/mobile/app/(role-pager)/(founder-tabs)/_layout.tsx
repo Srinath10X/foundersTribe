@@ -68,6 +68,13 @@ export default function FounderTabLayout() {
         }}
       />
       <Tabs.Screen
+        name="founder-profile"
+        options={{
+          href: null,
+          tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
         name="thread/[threadId]"
         options={{
           href: null,

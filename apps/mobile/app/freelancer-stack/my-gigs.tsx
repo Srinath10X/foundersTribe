@@ -479,11 +479,11 @@ export default function MyGigsScreen() {
                   activeOpacity={0.75}
                 >
                   {isDeleting ? (
-                    <ActivityIndicator size="small" color="#FF3B30" />
+                    <ActivityIndicator size="small" color="#CF2030" />
                   ) : (
-                    <Ionicons name="trash-outline" size={14} color="#FF3B30" />
+                    <Ionicons name="trash-outline" size={14} color="#CF2030" />
                   )}
-                  <T weight="regular" color="#FF3B30" style={styles.actionText}>
+                  <T weight="regular" color="#CF2030" style={styles.actionText}>
                     Delete
                   </T>
                 </TouchableOpacity>

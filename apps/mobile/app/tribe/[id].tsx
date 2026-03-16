@@ -382,7 +382,7 @@ export default function TribeDetailScreen() {
 
   const openGroupActions = (group: any) => {
     if (!isAdmin) return;
-    const actions: Array<{ text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void }> = [
+    const actions: { text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void }[] = [
       {
         text: "Edit Channel",
         onPress: () => {

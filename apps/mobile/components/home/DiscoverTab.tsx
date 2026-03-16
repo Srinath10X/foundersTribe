@@ -247,11 +247,11 @@ const CategoryPillItem = memo(function CategoryPillItem({
   }));
 
   const activeBg = isDark
-    ? "rgba(255,59,48,0.15)"
-    : "rgba(255,59,48,0.1)";
+    ? "rgba(207,32,48,0.15)"
+    : "rgba(207,32,48,0.1)";
   const activeBorder = isDark
-    ? "rgba(255,59,48,0.3)"
-    : "rgba(255,59,48,0.2)";
+    ? "rgba(207,32,48,0.3)"
+    : "rgba(207,32,48,0.2)";
   const inactiveBg = isDark
     ? "rgba(255,255,255,0.04)"
     : "rgba(0,0,0,0.03)";

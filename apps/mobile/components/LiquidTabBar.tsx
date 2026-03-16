@@ -70,17 +70,17 @@ const GlassSurface = memo(function GlassSurface({
         colors={
           isDark
             ? [
-                "rgba(255,255,255,0.06)",
-                "rgba(255,255,255,0.01)",
-                "rgba(0,0,0,0.0)",
-                "rgba(0,0,0,0.06)",
-              ]
+              "rgba(255,255,255,0.06)",
+              "rgba(255,255,255,0.01)",
+              "rgba(0,0,0,0.0)",
+              "rgba(0,0,0,0.06)",
+            ]
             : [
-                "rgba(255,255,255,0.45)",
-                "rgba(255,255,255,0.10)",
-                "rgba(0,0,0,0.0)",
-                "rgba(0,0,0,0.05)",
-              ]
+              "rgba(255,255,255,0.45)",
+              "rgba(255,255,255,0.10)",
+              "rgba(0,0,0,0.0)",
+              "rgba(0,0,0,0.05)",
+            ]
         }
         locations={[0, 0.25, 0.55, 1]}
         start={{ x: 0.5, y: 0 }}
@@ -133,17 +133,17 @@ const ModeSwitchPill = memo(function ModeSwitchPill({
 
   const radiusStyle = isLeft
     ? {
-        borderTopLeftRadius: 0,
-        borderBottomLeftRadius: 0,
-        borderTopRightRadius: 32,
-        borderBottomRightRadius: 32,
-      }
+      borderTopLeftRadius: 0,
+      borderBottomLeftRadius: 0,
+      borderTopRightRadius: 32,
+      borderBottomRightRadius: 32,
+    }
     : {
-        borderTopLeftRadius: 32,
-        borderBottomLeftRadius: 32,
-        borderTopRightRadius: 0,
-        borderBottomRightRadius: 0,
-      };
+      borderTopLeftRadius: 32,
+      borderBottomLeftRadius: 32,
+      borderTopRightRadius: 0,
+      borderBottomRightRadius: 0,
+    };
 
   const glassBackground = isDark
     ? "rgba(18, 18, 22, 0.65)"
@@ -235,7 +235,7 @@ const switchStyles = StyleSheet.create({
   },
   pressable: {
     flex: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -552,7 +552,7 @@ export default function LiquidTabBar({
     return visibleRoutes.findIndex((r) => r.key === activeRoute.key);
   }, [state.index, state.routes, visibleRoutes]);
 
-  const accentColor = theme.brand.primary || "#FF3B30";
+  const accentColor = theme.brand.primary || "#CF2030";
   const inactiveColor = isDark ? "#9CA3AF" : "#6B7280";
 
   const glassBackground = isDark

@@ -323,7 +323,7 @@ export default function ArticleDetailScreen() {
                   <MaterialIcons
                     name={liked ? "favorite" : "favorite-border"}
                     size={24}
-                    color={liked ? "#FF3B30" : theme.text.secondary}
+                    color={liked ? "#CF2030" : theme.text.secondary}
                   />
                 </Animated.View>
               </TouchableOpacity>

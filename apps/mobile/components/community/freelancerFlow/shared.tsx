@@ -54,7 +54,7 @@ export function useFlowPalette(): { palette: FlowPalette; isDark: boolean } {
       subText: theme.text.secondary,
       mutedText: theme.text.tertiary,
       accent: theme.brand.primary,
-      accentSoft: isDark ? "rgba(255,59,48,0.22)" : "rgba(255,59,48,0.12)",
+      accentSoft: isDark ? "rgba(207,32,48,0.22)" : "rgba(207,32,48,0.12)",
       success: theme.success,
       warning: theme.warning,
       navBg: theme.surface,
@@ -357,15 +357,15 @@ export function PrimaryButton({
   );
 }
 
-export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "feed" | "create" | "chat" | "profile"; }) {
+export function BottomMiniNav({ activeLabel }: { activeLabel: "home" | "ai" | "create" | "chat" | "profile"; }) {
   const { palette, isDark } = useFlowPalette();
   const router = useRouter();
-  type NavKey = "home" | "feed" | "create" | "chat" | "profile";
+  type NavKey = "home" | "ai" | "create" | "chat" | "profile";
   type NavItem = { key: NavKey; icon: keyof typeof Ionicons.glyphMap; label: string; route: string; isCenter?: boolean };
 
   const navItems: NavItem[] = [
     { key: "home", icon: "home", label: "Home", route: "/freelancer-stack" },
-    { key: "feed", icon: "newspaper", label: "Feed", route: "/freelancer-stack/feed" },
+    { key: "ai", icon: "sparkles", label: "AI", route: "/freelancer-stack/ai-search" },
     { key: "create", icon: "add-circle", label: "Post", route: "/freelancer-stack/post-gig", isCenter: true },
     { key: "chat", icon: "chatbubble", label: "Chat", route: "/freelancer-stack/contract-chat" },
     { key: "profile", icon: "person-circle", label: "Profile", route: "/freelancer-stack/founder-profile" },

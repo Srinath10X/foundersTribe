@@ -22,11 +22,11 @@ import {
   useFlowPalette,
 } from "@/components/community/freelancerFlow/shared";
 import { BAR_HEIGHT, BAR_BOTTOM } from "@/components/LiquidTabBar";
+import FounderTopHeader from "@/components/navigation/FounderTopHeader";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import {
   chatWithAI,
-  clearFreelancerCache,
   type ChatMessage,
   type FreelancerResult,
 } from "@/lib/groqAI";
@@ -88,15 +88,7 @@ const SUGGESTIONS = [
   },
 ];
 
-const AI_LANDING_COLORS = {
-  bg: "#06080C",
-  surface: "#14181E",
-  border: "rgba(255,255,255,0.12)",
-  text: "#F4F5F7",
-  mutedText: "#818894",
-  accent: "#FF3B30",
-  accentSoft: "rgba(255,59,48,0.18)",
-};
+const AI_PROMPT_PLACEHOLDER = "Who do you need?";
 
 // ── Freelancer Card ──────────────────────────────────────────
 
@@ -229,11 +221,11 @@ function FreelancerCard({
             styles.matchReasonWrap,
             {
               backgroundColor: isDark
-                ? "rgba(255,59,48,0.08)"
-                : "rgba(255,59,48,0.05)",
+                ? "rgba(207,32,48,0.08)"
+                : "rgba(207,32,48,0.05)",
               borderColor: isDark
-                ? "rgba(255,59,48,0.15)"
-                : "rgba(255,59,48,0.1)",
+                ? "rgba(207,32,48,0.15)"
+                : "rgba(207,32,48,0.1)",
             },
           ]}
         >
@@ -598,157 +590,30 @@ export default function AISearchScreen() {
     [router]
   );
 
-  const handleClearChat = useCallback(() => {
-    setMessages([]);
-    clearFreelancerCache();
-  }, []);
-
   // Input bar total height when keyboard is hidden:
   // paddingTop(10) + inputWrap minHeight(46) + paddingBottom(tabBarTotal + 8)
   const inputBarHeight = 10 + 46 + tabBarTotal + 8;
 
   const showEmptyState = messages.length === 0;
+  const landing = {
+    bg: palette.bg,
+    surface: palette.surface,
+    border: palette.borderLight,
+    text: palette.text,
+    mutedText: palette.subText,
+    accent: palette.accent,
+    accentSoft: palette.accentSoft,
+  };
 
   return (
-    <FlowScreen
-      scroll={false}
-      style={showEmptyState ? { backgroundColor: AI_LANDING_COLORS.bg } : undefined}
-    >
+    <FlowScreen scroll={false}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         enabled
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: insets.top + 8,
-              borderBottomColor: showEmptyState
-                ? AI_LANDING_COLORS.border
-                : palette.borderLight,
-              backgroundColor: showEmptyState ? AI_LANDING_COLORS.bg : palette.bg,
-            },
-          ]}
-        >
-          <View style={styles.headerTop}>
-            <View style={styles.headerTitleRow}>
-              <LinearGradient
-                colors={
-                  showEmptyState
-                    ? ["rgba(255,59,48,0.28)", "rgba(255,59,48,0.08)"]
-                    : [palette.accentSoft, palette.surface]
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.aiIconWrap}
-              >
-                <Ionicons
-                  name="sparkles"
-                  size={18}
-                  color={showEmptyState ? AI_LANDING_COLORS.accent : palette.accent}
-                />
-              </LinearGradient>
-              <View>
-                <T
-                  weight="semiBold"
-                  color={showEmptyState ? AI_LANDING_COLORS.text : palette.text}
-                  style={styles.pageTitle}
-                >
-                  AI Search
-                </T>
-                <T
-                  weight="regular"
-                  color={showEmptyState ? AI_LANDING_COLORS.mutedText : palette.subText}
-                  style={styles.pageSubtitle}
-                >
-                  Find the perfect freelancer
-                </T>
-              </View>
-            </View>
-            <View style={styles.headerIcons}>
-              {messages.length > 0 ? (
-                <TouchableOpacity
-                  style={[
-                    styles.iconBtn,
-                    {
-                      borderColor: showEmptyState
-                        ? AI_LANDING_COLORS.border
-                        : palette.borderLight,
-                      backgroundColor: showEmptyState
-                        ? AI_LANDING_COLORS.surface
-                        : palette.surface,
-                    },
-                  ]}
-                  onPress={handleClearChat}
-                >
-                  <Ionicons
-                    name="refresh-outline"
-                    size={18}
-                    color={showEmptyState ? AI_LANDING_COLORS.mutedText : palette.subText}
-                  />
-                </TouchableOpacity>
-              ) : null}
-              <TouchableOpacity
-                style={[
-                  styles.iconBtn,
-                  {
-                    borderColor: showEmptyState
-                      ? AI_LANDING_COLORS.border
-                      : palette.borderLight,
-                    backgroundColor: showEmptyState
-                      ? AI_LANDING_COLORS.surface
-                      : palette.surface,
-                  },
-                ]}
-                onPress={() =>
-                  router.push("/(role-pager)/(founder-tabs)/connections" as any)
-                }
-              >
-                <Ionicons
-                  name="notifications-outline"
-                  size={18}
-                  color={showEmptyState ? AI_LANDING_COLORS.mutedText : palette.subText}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.profileBtn}
-                onPress={() =>
-                  router.push("/(role-pager)/(founder-tabs)/profile" as any)
-                }
-              >
-                {userAvatar ? (
-                  <Image
-                    source={{ uri: userAvatar }}
-                    style={styles.profileImg}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.profileFallback,
-                      {
-                        borderColor: showEmptyState
-                          ? AI_LANDING_COLORS.border
-                          : palette.borderLight,
-                        backgroundColor: showEmptyState
-                          ? AI_LANDING_COLORS.surface
-                          : palette.surface,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="person"
-                      size={16}
-                      color={showEmptyState ? AI_LANDING_COLORS.mutedText : palette.subText}
-                    />
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        <FounderTopHeader withBorder />
 
         {showEmptyState ? (
           <View
@@ -760,8 +625,8 @@ export default function AISearchScreen() {
               },
             ]}
           >
-            <LinearGradient
-              colors={[AI_LANDING_COLORS.accentSoft, "transparent"]}
+              <LinearGradient
+              colors={[landing.accentSoft, "transparent"]}
               style={styles.aiLandingGlow}
             />
             <View style={styles.aiIconArea}>
@@ -778,14 +643,14 @@ export default function AISearchScreen() {
 
             <T
               weight="semiBold"
-              color={AI_LANDING_COLORS.text}
+              color={landing.text}
               style={styles.aiLandingTitle}
             >
               AI-Powered Search
             </T>
             <T
               weight="regular"
-              color={AI_LANDING_COLORS.mutedText}
+              color={landing.mutedText}
               style={styles.aiLandingSubtitle}
             >
               Find the perfect match instantly
@@ -795,23 +660,24 @@ export default function AISearchScreen() {
               style={[
                 styles.aiPromptBar,
                 {
+                  backgroundColor: landing.surface,
                   borderColor: input.trim()
-                    ? AI_LANDING_COLORS.accent
-                    : AI_LANDING_COLORS.border,
+                    ? landing.accent
+                    : landing.border,
                 },
               ]}
             >
               <Ionicons
                 name="search-outline"
                 size={18}
-                color={AI_LANDING_COLORS.mutedText}
+                color={landing.mutedText}
               />
               <TextInput
                 value={input}
                 onChangeText={setInput}
-                placeholder="Describe who you're looking for..."
-                placeholderTextColor={AI_LANDING_COLORS.mutedText}
-                style={styles.aiPromptInput}
+                placeholder={AI_PROMPT_PLACEHOLDER}
+                placeholderTextColor={landing.mutedText}
+                style={[styles.aiPromptInput, { color: landing.text }]}
                 maxLength={500}
                 editable={!isLoading}
                 onSubmitEditing={() => handleSend()}
@@ -834,7 +700,7 @@ export default function AISearchScreen() {
             <View style={styles.aiTryAskingWrap}>
               <T
                 weight="semiBold"
-                color={AI_LANDING_COLORS.mutedText}
+                color={landing.mutedText}
                 style={styles.aiTryAskingLabel}
               >
                 TRY ASKING
@@ -844,18 +710,29 @@ export default function AISearchScreen() {
                   key={s.text}
                   activeOpacity={0.84}
                   onPress={() => handleSend(s.text)}
-                  style={styles.aiTryCard}
+                  style={[
+                    styles.aiTryCard,
+                    {
+                      borderColor: landing.border,
+                      backgroundColor: landing.surface,
+                    },
+                  ]}
                 >
-                  <View style={styles.aiTryCardIcon}>
+                  <View
+                    style={[
+                      styles.aiTryCardIcon,
+                      { backgroundColor: landing.accentSoft },
+                    ]}
+                  >
                     <Ionicons
                       name={s.icon}
                       size={15}
-                      color={AI_LANDING_COLORS.accent}
+                      color={landing.accent}
                     />
                   </View>
                   <T
                     weight="regular"
-                    color={AI_LANDING_COLORS.text}
+                    color={landing.text}
                     style={styles.aiTryCardText}
                   >
                     {s.text}
@@ -863,7 +740,7 @@ export default function AISearchScreen() {
                   <Ionicons
                     name="chevron-forward"
                     size={15}
-                    color={AI_LANDING_COLORS.mutedText}
+                    color={landing.mutedText}
                   />
                 </TouchableOpacity>
               ))}
@@ -935,14 +812,13 @@ export default function AISearchScreen() {
                 <TextInput
                   value={input}
                   onChangeText={setInput}
-                  placeholder="Describe who you're looking for..."
+                  placeholder={AI_PROMPT_PLACEHOLDER}
                   placeholderTextColor={palette.mutedText}
                   style={[styles.input, { color: palette.text }]}
-                  multiline
                   maxLength={500}
                   editable={!isLoading}
                   onSubmitEditing={() => handleSend()}
-                  blurOnSubmit
+                  returnKeyType="send"
                 />
                 <TouchableOpacity
                   onPress={() => handleSend()}
@@ -1077,29 +953,29 @@ const styles = StyleSheet.create({
     width: 106,
     height: 106,
     borderRadius: 32,
-    backgroundColor: "rgba(255,59,48,0.35)",
+    backgroundColor: "rgba(207,32,48,0.35)",
     top: 8,
     left: 8,
     right: 8,
     bottom: 0,
     zIndex: -1,
-    shadowColor: "#FF3B30",
+    shadowColor: "#CF2030",
     shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.55,
     shadowRadius: 24,
     elevation: 14,
   },
   aiLandingIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 27,
+    width: 72,
+    height: 72,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   aiLandingTitle: {
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 26,
     letterSpacing: -0.2,
     textAlign: "center",
   },
@@ -1107,27 +983,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
     textAlign: "center",
-    marginTop: 6,
-    marginBottom: 22,
+    marginTop: 4,
+    marginBottom: 16,
   },
   aiPromptBar: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderRadius: 22,
-    backgroundColor: AI_LANDING_COLORS.surface,
+    borderRadius: 18,
     paddingLeft: 16,
     paddingRight: 8,
-    minHeight: 58,
+    minHeight: 52,
     gap: 10,
   },
   aiPromptInput: {
     flex: 1,
-    color: AI_LANDING_COLORS.text,
+    minWidth: 0,
     fontFamily: "Poppins_400Regular",
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 19,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   aiPromptSend: {
     width: 42,
@@ -1135,11 +1010,11 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: AI_LANDING_COLORS.accent,
+    backgroundColor: "#CF2030",
   },
   aiTryAskingWrap: {
-    marginTop: 22,
-    gap: 12,
+    marginTop: 16,
+    gap: 10,
   },
   aiTryAskingLabel: {
     fontSize: 13,
@@ -1151,10 +1026,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: AI_LANDING_COLORS.border,
-    backgroundColor: AI_LANDING_COLORS.surface,
     paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingVertical: 11,
     gap: 12,
   },
   aiTryCardIcon: {
@@ -1163,7 +1036,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,59,48,0.12)",
+    backgroundColor: "rgba(207,32,48,0.12)",
   },
   aiTryCardText: {
     flex: 1,
@@ -1483,33 +1356,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingTop: 10,
-    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingHorizontal: 14,
     borderTopWidth: 1,
   },
   inputWrap: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    borderRadius: 22,
-    borderWidth: 1.5,
+    alignItems: "center",
+    borderRadius: 18,
+    borderWidth: 1,
     paddingLeft: 14,
-    paddingRight: 6,
-    paddingVertical: 6,
+    paddingRight: 8,
+    paddingVertical: 8,
     gap: 8,
-    minHeight: 46,
+    minHeight: 52,
   },
   input: {
     flex: 1,
+    minWidth: 0,
     fontFamily: "Poppins_400Regular",
     fontSize: 14,
     lineHeight: 19,
-    maxHeight: 80,
-    paddingVertical: 4,
+    paddingVertical: 0,
   },
   sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
   },

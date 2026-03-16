@@ -164,13 +164,13 @@ function JobCard({ item, onPress }: { item: JobItem; onPress: () => void }) {
   const { palette } = useFlowPalette();
   const priorityColor =
     item.priority === "high"
-      ? "#FF3B30"
+      ? "#CF2030"
       : item.priority === "medium"
         ? "#F59E0B"
         : palette.accent;
   const priorityBg =
     item.priority === "high"
-      ? "rgba(255,59,48,0.14)"
+      ? "rgba(207,32,48,0.14)"
       : item.priority === "medium"
         ? "rgba(245,158,11,0.14)"
         : palette.accentSoft;

@@ -945,7 +945,7 @@ export default function GroupChatScreen() {
     messages.forEach((m: any) => {
       if (m?.id) messageById.set(m.id, m);
     });
-    const items: Array<any> = [];
+    const items: any[] = [];
     let lastDate = "";
     for (const msg of messages) {
       const dateLabel = formatDatePillLabel(msg.created_at);

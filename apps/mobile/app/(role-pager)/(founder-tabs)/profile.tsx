@@ -986,10 +986,10 @@ export default function FreelancerProfileScreen() {
                 <TouchableOpacity
                   activeOpacity={0.84}
                   style={styles.heroInlineAction}
-                  onPress={() => router.push("/edit-profile")}
+                  onPress={() => router.push("/(role-pager)/(founder-tabs)/founder-profile?compact=1")}
                 >
                   <T weight="semiBold" color="#FFFFFF" style={styles.heroInlineActionText}>
-                    Edit Profile &gt;
+                    View Profile &gt;
                   </T>
                 </TouchableOpacity>
               </View>

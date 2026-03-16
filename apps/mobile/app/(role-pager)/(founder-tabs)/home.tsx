@@ -16,7 +16,7 @@ import {
   View,
 } from "react-native";
 
-const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 156 : 132;
+const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 134 : 112;
 
 type SubTab = "feed" | "foryou";
 
@@ -45,6 +45,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const { notificationCount } = useFounderConnections(true);
   const [activeTab, setActiveTab] = useState<SubTab>("feed");
+  const headerBg = theme.background;
+  const headerGradientColors: [string, string, string] = isDark
+    ? ["#0A0A0B", "#0A0A0B", "#0A0A0B"]
+    : ["#FAFAF9", "#FAFAF9", "#FAFAF9"];
   const handleTabPress = useCallback((tab: SubTab) => {
     setActiveTab(tab);
   }, []);
@@ -68,7 +72,7 @@ export default function HomeScreen() {
       {/* Header Overlay — gradient fade top→bottom */}
       <View style={styles.headerContainer}>
         <LinearGradient
-          colors={["#000000", "#000000", "#000000"]}
+          colors={headerGradientColors}
           style={styles.headerGradient}
         >
           <View style={styles.headerInner}>
@@ -76,12 +80,9 @@ export default function HomeScreen() {
               source={
                 isDark
                   ? require("@/assets/images/logo-dark.png")
-                  : require("@/assets/images/logo-dark.png")
+                  : require("@/assets/images/logo-light.png")
               }
-              style={[
-                styles.brandLogo,
-                !isDark && { tintColor: theme.text.primary },
-              ]}
+              style={styles.brandLogo}
               contentFit="contain"
             />
             <View style={styles.headerIcons}>
@@ -132,7 +133,7 @@ export default function HomeScreen() {
           <View
             style={[
               styles.topTabsRow,
-              { borderBottomColor: theme.border, backgroundColor: "#000000" },
+              { borderBottomColor: theme.border, backgroundColor: headerBg },
             ]}
           >
             {SUB_TABS.map((tab) => {
@@ -193,7 +194,6 @@ const styles = StyleSheet.create({
   },
   headerGradient: {
     paddingBottom: 0,
-    backgroundColor: "#000000",
   },
   headerInner: {
     flexDirection: "row",

@@ -166,6 +166,29 @@ function MatchModalInner({
   const matchedInitials = getInitials(matchedUser.display_name);
   const matchedShortName = shortenName(matchedUser.display_name);
 
+  const backdropColor = isDark ? "rgba(0,0,0,0.5)" : "rgba(26,26,27,0.32)";
+  const sheetBg = isDark ? "#1A1A1C" : theme.surface;
+  const handleColor = isDark ? "rgba(255,255,255,0.3)" : "rgba(26,26,27,0.22)";
+  const titleColor = theme.text.primary;
+  const subtitleColor = theme.text.secondary;
+  const subtleTextColor = theme.text.tertiary;
+  const avatarFallbackBg = isDark ? "#1A1A1C" : "#F2F3F5";
+  const avatarInitialsColor = isDark ? "#FFFFFF" : theme.text.primary;
+  const currentAvatarBorder = "#34C759";
+  const matchAvatarBorder = isDark ? "#2A6A5A" : "rgba(52,199,89,0.7)";
+  const inputBg = isDark ? "rgba(255,255,255,0.08)" : "#F3F4F6";
+  const inputBorder = isDark ? "rgba(255,255,255,0.12)" : theme.border;
+  const inputPlaceholder = isDark ? "#666" : "#9A9CA4";
+  const sendBtnActiveBg = isDark ? "#FFFFFF" : "#1A1A1B";
+  const sendBtnInactiveBg = isDark ? "rgba(255,255,255,0.12)" : "#E4E5E8";
+  const sendBtnActiveColor = isDark ? "#000000" : "#FFFFFF";
+  const sendBtnInactiveColor = isDark ? "#555" : "#9A9CA4";
+  const undoBg = isDark ? "rgba(255,255,255,0.08)" : "#F2F3F5";
+  const undoBorder = isDark ? "rgba(255,255,255,0.12)" : theme.border;
+  const undoFg = isDark ? "#FFFFFF" : theme.text.secondary;
+  const keepBtnBg = isDark ? "#FFFFFF" : "#1A1A1B";
+  const keepBtnFg = isDark ? "#000000" : "#FFFFFF";
+
   return (
     <Modal
       visible={visible}
@@ -179,27 +202,37 @@ function MatchModalInner({
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           {/* Tappable backdrop to dismiss */}
-          <Animated.View style={[styles.backdrop, backdropAnimStyle]}>
+          <Animated.View style={[styles.backdrop, backdropAnimStyle, { backgroundColor: backdropColor }]}>
             <Pressable style={styles.fill} onPress={dismiss} />
           </Animated.View>
 
           {/* Draggable sheet */}
           <GestureDetector gesture={panGesture}>
-            <Animated.View style={[styles.sheet, sheetAnimStyle]}>
+            <Animated.View
+              style={[
+                styles.sheet,
+                sheetAnimStyle,
+                {
+                  backgroundColor: sheetBg,
+                  borderColor: isDark ? "transparent" : theme.border,
+                  borderTopWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+                },
+              ]}
+            >
               {/* Drag handle */}
               <View style={styles.handleRow}>
-                <View style={styles.handle} />
+                <View style={[styles.handle, { backgroundColor: handleColor }]} />
               </View>
 
               {/* Header row: green checkmark + title & subtitle */}
               <View style={styles.headerRow}>
-                <View style={styles.checkCircle}>
+                <View style={[styles.checkCircle, { backgroundColor: theme.success }]}>
                   <Ionicons name="checkmark" size={24} color="#FFF" />
                 </View>
                 <View style={styles.headerText}>
-                  <Text style={styles.title}>Connection Established</Text>
-                  <Text style={styles.subtitle}>
-                    You &amp; <Text style={styles.subtitleBold}>{matchedShortName}</Text> are now connected
+                  <Text style={[styles.title, { color: titleColor }]}>Connection Established</Text>
+                  <Text style={[styles.subtitle, { color: subtitleColor }]}>
+                    You &amp; <Text style={[styles.subtitleBold, { color: titleColor }]}>{matchedShortName}</Text> are now connected
                   </Text>
                 </View>
               </View>
@@ -209,42 +242,62 @@ function MatchModalInner({
                 {currentUserAvatar ? (
                   <Image
                     source={{ uri: currentUserAvatar }}
-                    style={[styles.avatar, styles.avatarCurrentBorder]}
+                    style={[styles.avatar, { borderColor: currentAvatarBorder }]}
                   />
                 ) : (
-                  <View style={[styles.avatar, styles.avatarFallback, styles.avatarCurrentBorder]}>
-                    <Text style={styles.avatarInitials}>U</Text>
+                  <View
+                    style={[
+                      styles.avatar,
+                      styles.avatarFallback,
+                      {
+                        borderColor: currentAvatarBorder,
+                        backgroundColor: avatarFallbackBg,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.avatarInitials, { color: avatarInitialsColor }]}>U</Text>
                   </View>
                 )}
 
                 <View style={styles.handshakeIcon}>
-                  <Ionicons name="swap-horizontal" size={18} color="#888" />
+                  <Ionicons name="swap-horizontal" size={18} color={subtleTextColor} />
                 </View>
 
                 {matchAvatar ? (
                   <Image
                     source={{ uri: matchAvatar }}
-                    style={[styles.avatar, styles.avatarMatchBorder]}
+                    style={[styles.avatar, { borderColor: matchAvatarBorder }]}
                   />
                 ) : (
-                  <View style={[styles.avatar, styles.avatarFallback, styles.avatarMatchBorder]}>
-                    <Text style={styles.avatarInitials}>{matchedInitials}</Text>
+                  <View
+                    style={[
+                      styles.avatar,
+                      styles.avatarFallback,
+                      {
+                        borderColor: matchAvatarBorder,
+                        backgroundColor: avatarFallbackBg,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.avatarInitials, { color: avatarInitialsColor }]}>{matchedInitials}</Text>
                   </View>
                 )}
               </View>
 
               {/* SAY HELLO label */}
               <View style={styles.sayHelloRow}>
-                <Ionicons name="chatbubble-ellipses-outline" size={14} color="#999" />
-                <Text style={styles.sayHelloText}>SAY HELLO</Text>
+                <Ionicons name="chatbubble-ellipses-outline" size={14} color={subtleTextColor} />
+                <Text style={[styles.sayHelloText, { color: subtleTextColor }]}>SAY HELLO</Text>
               </View>
 
               {/* Message input */}
-              <View style={styles.inputContainer}>
+              <View
+                style={[styles.inputContainer, { backgroundColor: inputBg, borderColor: inputBorder }]}
+              >
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: theme.text.primary }]}
                   placeholder="Type your first message..."
-                  placeholderTextColor="#666"
+                  placeholderTextColor={inputPlaceholder}
                   value={message}
                   onChangeText={setMessage}
                   maxLength={500}
@@ -252,7 +305,9 @@ function MatchModalInner({
                 <TouchableOpacity
                   style={[
                     styles.sendBtn,
-                    { backgroundColor: message.trim() ? "#FFF" : "rgba(255,255,255,0.12)" },
+                    {
+                      backgroundColor: message.trim() ? sendBtnActiveBg : sendBtnInactiveBg,
+                    },
                   ]}
                   disabled={!message.trim() || sending}
                   onPress={async () => {
@@ -286,12 +341,12 @@ function MatchModalInner({
                   }}
                 >
                   {sending ? (
-                    <ActivityIndicator size="small" color="#000" />
+                    <ActivityIndicator size="small" color={sendBtnActiveColor} />
                   ) : (
                     <Ionicons
                       name="arrow-forward"
                       size={18}
-                      color={message.trim() ? "#000" : "#555"}
+                      color={message.trim() ? sendBtnActiveColor : sendBtnInactiveColor}
                     />
                   )}
                 </TouchableOpacity>
@@ -300,20 +355,20 @@ function MatchModalInner({
               {/* Bottom buttons */}
               <View style={styles.bottomRow}>
                 <TouchableOpacity
-                  style={styles.undoBtn}
+                  style={[styles.undoBtn, { backgroundColor: undoBg, borderColor: undoBorder }]}
                   activeOpacity={0.7}
                   onPress={handleUndo}
                 >
-                  <Ionicons name="arrow-undo" size={16} color="#FFF" />
-                  <Text style={styles.undoBtnText}>Undo</Text>
+                  <Ionicons name="arrow-undo" size={16} color={undoFg} />
+                  <Text style={[styles.undoBtnText, { color: undoFg }]}>Undo</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.keepExploringBtn}
+                  style={[styles.keepExploringBtn, { backgroundColor: keepBtnBg }]}
                   activeOpacity={0.85}
                   onPress={dismiss}
                 >
-                  <Text style={styles.keepExploringText}>Keep Exploring</Text>
+                  <Text style={[styles.keepExploringText, { color: keepBtnFg }]}>Keep Exploring</Text>
                 </TouchableOpacity>
               </View>
             </Animated.View>

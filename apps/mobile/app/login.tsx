@@ -7,7 +7,6 @@ import { Colors, Layout, Spacing } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -40,7 +39,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const performOAuth = async () => {
+  const performOAuth = async (provider: "google" | "apple") => {
     setLoading(true);
     setErrorMsg("");
     const redirectUrl = Linking.createURL("/");
@@ -48,7 +47,7 @@ export default function Login() {
     try {
       if (Platform.OS === "web") {
         const { error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
+          provider,
           options: {
             redirectTo: redirectUrl,
           },
@@ -56,7 +55,7 @@ export default function Login() {
         if (error) throw error;
       } else {
         const { data, error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
+          provider,
           options: {
             redirectTo: redirectUrl,
             skipBrowserRedirect: true,
@@ -73,7 +72,6 @@ export default function Login() {
           if (result.type === "success" && result.url) {
             const url = new URL(result.url);
 
-            // Handle implicit flow (tokens in hash)
             if (url.hash) {
               const params = new URLSearchParams(url.hash.replace("#", ""));
               const access_token = params.get("access_token");
@@ -85,23 +83,21 @@ export default function Login() {
                   refresh_token,
                 });
                 if (error) throw error;
-                // Give AuthContext time to update, then navigate
                 setTimeout(() => {
                   router.replace("/(role-pager)/(founder-tabs)/community");
                 }, 100);
                 console.log("Session set via implicit flow");
-                return; // Success
+                return;
               }
             }
 
-            // Handle PKCE flow (code in query)
             const code = url.searchParams.get("code");
             if (code) {
               const { error } =
                 await supabase.auth.exchangeCodeForSession(code);
               if (error) throw error;
               console.log("Session set via PKCE flow");
-              return; // Success
+              return;
             }
           }
         }
@@ -174,24 +170,6 @@ export default function Login() {
             {/* Logo/Branding Section */}
             <Animated.View
               entering={FadeInUp.delay(100).duration(800)}
-              style={styles.brandSection}
-            >
-              <Image
-                source={
-                  isDark
-                    ? require("@/assets/images/logo-dark.png")
-                    : require("@/assets/images/logo-light.png")
-                }
-                style={styles.logo}
-                contentFit="contain"
-              />
-              <Text style={[styles.tagline, { color: theme.text.tertiary }]}>
-                Your premium news experience
-              </Text>
-            </Animated.View>
-
-            <Animated.View
-              entering={FadeInUp.delay(200).duration(800)}
               style={styles.header}
             >
               <Text style={[styles.title, { color: theme.text.primary }]}>
@@ -226,7 +204,7 @@ export default function Login() {
                       borderColor: theme.border,
                     },
                   ]}
-                  onPress={performOAuth}
+                  onPress={() => performOAuth("google")}
                   disabled={loading}
                 >
                   <Ionicons
@@ -238,6 +216,29 @@ export default function Login() {
                     style={[styles.socialText, { color: theme.text.primary }]}
                   >
                     Continue with Google
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.socialBtn,
+                    {
+                      backgroundColor: theme.surface,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                  onPress={() => performOAuth("apple")}
+                  disabled={loading}
+                >
+                  <Ionicons
+                    name="logo-apple"
+                    size={24}
+                    color={theme.text.primary}
+                  />
+                  <Text
+                    style={[styles.socialText, { color: theme.text.primary }]}
+                  >
+                    Continue with Apple
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -407,19 +408,6 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  brandSection: {
-    alignItems: "center",
-    marginBottom: Spacing.xxl,
-  },
-  logo: {
-    width: 220,
-    height: 48,
-    marginBottom: Spacing.xs,
-  },
-  tagline: {
-    fontSize: 14,
-    letterSpacing: 0.5,
-  },
   header: {
     marginBottom: Spacing.xl,
     alignItems: "center",
@@ -438,6 +426,7 @@ const styles = StyleSheet.create({
   },
   socialRow: {
     marginBottom: Spacing.sm,
+    gap: Spacing.md,
   },
   socialBtn: {
     height: 56,

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, usePathname, useRouter } from "expo-router";
 import React from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { BottomMiniNav, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 
@@ -10,19 +10,18 @@ export default function FreelancerFlowLayout() {
   const router = useRouter();
   const { palette } = useFlowPalette();
 
-  const activeLabel: "home" | "feed" | "create" | "chat" | "profile" =
+  const activeLabel: "home" | "ai" | "create" | "chat" | "profile" =
     pathname.includes("/contract-chat")
       ? "chat"
       : pathname.includes("/post-gig")
         ? "create"
+        : pathname.includes("/ai-search") || pathname.includes("/feed")
+        ? "ai"
         : pathname.includes("/freelancer-profile") || pathname.includes("/founder-profile")
           ? "profile"
-          : pathname.includes("/feed")
-            ? "feed"
-            : "home";
+          : "home";
 
   const hideTabBar =
-    pathname.includes("/post-gig") ||
     pathname.includes("/gig-details") ||
     pathname.includes("/gig-proposals") ||
     pathname.includes("/contract-details") ||
@@ -45,6 +44,7 @@ export default function FreelancerFlowLayout() {
           activeOpacity={0.9}
         >
           <Ionicons name="exit-outline" size={24} color="#fff" />
+          <Text style={styles.exitFabText}>Exit</Text>
         </TouchableOpacity>
       )}
       {!hideTabBar && <BottomMiniNav activeLabel={activeLabel} />}
@@ -58,11 +58,20 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 20,
     bottom: 108,
-    width: 48,
+    minWidth: 82,
     height: 48,
     borderRadius: 24,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    gap: 6,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 250,
+  },
+  exitFabText: {
+    color: "#fff",
+    fontSize: 13,
+    fontFamily: "Poppins_600SemiBold",
+    lineHeight: 16,
   },
 });

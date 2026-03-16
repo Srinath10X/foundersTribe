@@ -28,6 +28,7 @@ type SocialLink = { platform: string; url: string; label: string };
 type BusinessIdeaItem = { idea: string; pitch_url?: string };
 const STORAGE_BUCKET = "tribe-media";
 const PITCH_LINK_PLATFORM = "pitch_video";
+const AVATAR_PICKER_QUALITY = 1;
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -386,7 +387,7 @@ export default function EditProfileScreen() {
       mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.7,
+      quality: AVATAR_PICKER_QUALITY,
     };
 
     const result =

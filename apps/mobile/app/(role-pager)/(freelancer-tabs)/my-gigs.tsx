@@ -36,7 +36,7 @@ function statusMeta(status?: ContractStatus) {
     case "completed":
       return { label: "Completed", tone: "#0A84FF", bg: "rgba(10,132,255,0.12)" };
     case "cancelled":
-      return { label: "Cancelled", tone: "#FF3B30", bg: "rgba(255,59,48,0.12)" };
+      return { label: "Cancelled", tone: "#CF2030", bg: "rgba(207,32,48,0.12)" };
     case "disputed":
       return { label: "Disputed", tone: "#F59E0B", bg: "rgba(245,158,11,0.12)" };
     default:

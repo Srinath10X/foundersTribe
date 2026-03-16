@@ -18,6 +18,8 @@ const STORAGE_BUCKET = "tribe-media";
 
 // ─── Avatar resolver (same pattern as useInfiniteUsers) ─────
 async function resolveAvatarUrl(raw: string | null, userId: string): Promise<string | null> {
+    const withBust = (url: string) => `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+
     if (!raw) {
         // Check profiles/{userId}/ folder directly
         try {
@@ -32,7 +34,7 @@ async function resolveAvatarUrl(raw: string | null, userId: string): Promise<str
                     const { data } = await supabase.storage
                         .from(STORAGE_BUCKET)
                         .createSignedUrl(`${folder}/${preferred.name}`, 60 * 60 * 24 * 7);
-                    if (data?.signedUrl) return data.signedUrl;
+                    if (data?.signedUrl) return withBust(data.signedUrl);
                 }
             }
         } catch { /* fall through */ }
@@ -47,7 +49,26 @@ async function resolveAvatarUrl(raw: string | null, userId: string): Promise<str
         const { data } = await supabase.storage
             .from(STORAGE_BUCKET)
             .createSignedUrl(raw.trim(), 60 * 60 * 24 * 7);
-        if (data?.signedUrl) return data.signedUrl;
+        if (data?.signedUrl) return withBust(data.signedUrl);
+    } catch { /* fall through */ }
+
+    // If raw is a storage path under a different folder, check canonical profile avatar too.
+    // This helps avoid stale/low-res paths that may be persisted in `photo_url`.
+    try {
+        const folder = `profiles/${userId}`;
+        const { data: files } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .list(folder, { limit: 5 });
+
+        if (Array.isArray(files) && files.length > 0) {
+            const preferred = files.find((f) => /^avatar\./i.test(f.name)) || files[0];
+            if (preferred?.name) {
+                const { data } = await supabase.storage
+                    .from(STORAGE_BUCKET)
+                    .createSignedUrl(`${folder}/${preferred.name}`, 60 * 60 * 24 * 7);
+                if (data?.signedUrl) return withBust(data.signedUrl);
+            }
+        }
     } catch { /* fall through */ }
 
     return null;

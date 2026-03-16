@@ -6,7 +6,7 @@
  * - Pass & Connect action buttons at the bottom
  */
 
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
@@ -18,8 +18,8 @@ import {
   View,
 } from "react-native";
 
-import { useTheme } from "@/context/ThemeContext";
 import type { FounderCandidate } from "@/types/founders";
+import { useTheme } from "@/context/ThemeContext";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -35,6 +35,35 @@ function toTitle(v: string | null | undefined): string | null {
   return s.split(/[_\s-]+/).filter(Boolean)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
     .join(" ");
+}
+
+function normalizeAvatarUri(uri: string | null | undefined): string | null {
+  const raw = fmt(uri);
+  if (!raw) return null;
+
+  // Request larger variants from common avatar CDNs when available.
+  if (/images\.unsplash\.com/i.test(raw)) {
+    const withW = /([?&])w=\d+/i.test(raw)
+      ? raw.replace(/([?&])w=\d+/i, "$1w=1400")
+      : `${raw}${raw.includes("?") ? "&" : "?"}w=1400`;
+    return /([?&])q=\d+/i.test(withW)
+      ? withW.replace(/([?&])q=\d+/i, "$1q=100")
+      : `${withW}&q=100`;
+  }
+
+  if (/images\.pexels\.com/i.test(raw)) {
+    return /([?&])w=\d+/i.test(raw)
+      ? raw.replace(/([?&])w=\d+/i, "$1w=1400")
+      : `${raw}${raw.includes("?") ? "&" : "?"}w=1400`;
+  }
+
+  if (/googleusercontent\.com|ggpht\.com/i.test(raw)) {
+    return raw
+      .replace(/=s\d+-c/i, "=s1400-c")
+      .replace(/=s\d+$/i, "=s1400");
+  }
+
+  return raw;
 }
 
 /** Extract initials from a display name (e.g. "Priya Kumar" → "PK") */
@@ -60,12 +89,12 @@ function FounderCardInner({
   candidate,
   cardHeight,
   cardWidth = SCREEN_W - 24,
+  onViewProfile,
   onConnect,
   onPass,
 }: FounderCardProps) {
-  const { isDark } = useTheme();
-
-  const imageUri = candidate.photo_url || candidate.avatar_url;
+  const { theme, isDark } = useTheme();
+  const imageUri = normalizeAvatarUri(candidate.photo_url || candidate.avatar_url);
   const initials = getInitials(candidate.display_name);
   const name = candidate.display_name || "Founder";
   const locationLine = fmt(candidate.location) || fmt(candidate.country);
@@ -75,68 +104,131 @@ function FounderCardInner({
   const IMAGE_H = Math.round(cardHeight * 0.55);
 
   return (
-    <View style={[styles.card, { width: cardWidth, height: cardHeight }]}>
-      {/* ── PHOTO / GRADIENT (edge-to-edge) ── */}
-      <View style={[styles.photoArea, { height: IMAGE_H }]}>
-        {imageUri ? (
-          <Image
-            source={{ uri: imageUri }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-            fadeDuration={0}
-          />
-        ) : (
-          <LinearGradient
-            colors={["#0F3D1E", "#0A2914", "#071D0E"]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          >
-            <View style={styles.initialsCenter}>
-              <Text style={styles.initialsText}>{initials}</Text>
-            </View>
-          </LinearGradient>
-        )}
-      </View>
-
-      {/* ── INFO SECTION ── */}
-      <View style={styles.info}>
-        {/* Role pill */}
-        <View style={styles.rolePill}>
-          <Ionicons name="link" size={12} color="#AAA" style={{ marginRight: 5 }} />
-          <Text style={styles.roleText}>{roleLabel}</Text>
+    <View
+      style={[
+        styles.card,
+        {
+          width: cardWidth,
+          height: cardHeight,
+          backgroundColor: theme.surface,
+          borderColor: theme.border,
+        },
+      ]}
+    >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onViewProfile ? () => onViewProfile(candidate) : undefined}
+        disabled={!onViewProfile}
+        style={styles.profileTapArea}
+      >
+        {/* ── PHOTO / GRADIENT (edge-to-edge) ── */}
+        <View
+          style={[
+            styles.photoArea,
+            { height: IMAGE_H, backgroundColor: isDark ? "#0A2914" : "#DDE3EA" },
+          ]}
+        >
+          {imageUri ? (
+            <Image
+              source={{ uri: imageUri }}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode="cover"
+              fadeDuration={0}
+            />
+          ) : (
+            <LinearGradient
+              colors={
+                isDark
+                  ? ["#0F3D1E", "#0A2914", "#071D0E"]
+                  : ["#E9EDF2", "#DDE3EA", "#CDD6E0"]
+              }
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            >
+              <View style={styles.initialsCenter}>
+                <Text
+                  style={[
+                    styles.initialsText,
+                    { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.12)" },
+                  ]}
+                >
+                  {initials}
+                </Text>
+              </View>
+            </LinearGradient>
+          )}
         </View>
 
-        {/* Name */}
-        <Text style={styles.name} numberOfLines={1}>{name}</Text>
-
-        {/* Location */}
-        {locationLine && (
-          <View style={styles.locRow}>
-            <Ionicons name="location-sharp" size={14} color="#888" />
-            <Text style={styles.locText}>{locationLine}</Text>
+        {/* ── INFO SECTION ── */}
+        <View style={[styles.info, { backgroundColor: theme.surface }]}> 
+          {/* Role pill */}
+          <View
+            style={[
+              styles.rolePill,
+              {
+                backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.06)",
+              },
+            ]}
+          >
+            <Ionicons
+              name="link"
+              size={12}
+              color={isDark ? "#AAA" : theme.text.tertiary}
+              style={{ marginRight: 5 }}
+            />
+            <Text style={[styles.roleText, { color: isDark ? "#CCC" : theme.text.secondary }]}>
+              {roleLabel}
+            </Text>
           </View>
-        )}
 
-        {/* Bio */}
-        {bio && (
-          <Text style={styles.bio} numberOfLines={2}>{bio}</Text>
-        )}
-      </View>
+          {/* Name */}
+          <Text style={[styles.name, { color: theme.text.primary }]} numberOfLines={1}>
+            {name}
+          </Text>
+
+          {/* Location */}
+          {locationLine && (
+            <View style={styles.locRow}>
+              <Ionicons
+                name="location-sharp"
+                size={14}
+                color={isDark ? "#888" : theme.text.tertiary}
+              />
+              <Text style={[styles.locText, { color: isDark ? "#999" : theme.text.tertiary }]}>
+                {locationLine}
+              </Text>
+            </View>
+          )}
+
+          {/* Bio */}
+          {bio && (
+            <Text style={[styles.bio, { color: isDark ? "#AAA" : theme.text.secondary }]} numberOfLines={2}>
+              {bio}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
 
       {/* ── ACTION BUTTONS ── */}
       <View style={styles.actions}>
         <TouchableOpacity
-          style={styles.passBtn}
+          style={[
+            styles.passBtn,
+            {
+              backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "#ECECEF",
+              borderColor: isDark ? "rgba(255,255,255,0.12)" : "#E1E1E6",
+            },
+          ]}
           onPress={() => onPass?.(candidate)}
           activeOpacity={0.7}
         >
-          <Ionicons name="close" size={18} color="#FFF" />
-          <Text style={styles.passBtnText}>Pass</Text>
+          <Ionicons name="close" size={18} color={isDark ? "#FFF" : theme.text.secondary} />
+          <Text style={[styles.passBtnText, { color: isDark ? "#FFFFFF" : theme.text.secondary }]}>Pass</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.connectBtn}
+          style={[styles.connectBtn, { backgroundColor: theme.brand.primary }]}
           onPress={() => onConnect?.(candidate)}
           activeOpacity={0.7}
         >
@@ -154,7 +246,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: "#111111",
+    borderWidth: StyleSheet.hairlineWidth,
+    flex: 1,
+  },
+  profileTapArea: {
     flex: 1,
   },
 
@@ -162,7 +257,6 @@ const styles = StyleSheet.create({
   photoArea: {
     width: "100%",
     overflow: "hidden",
-    backgroundColor: "#0A2914",
   },
   initialsCenter: {
     flex: 1,
@@ -172,7 +266,6 @@ const styles = StyleSheet.create({
   initialsText: {
     fontSize: 90,
     fontFamily: "Poppins_700Bold",
-    color: "rgba(255,255,255,0.06)",
     letterSpacing: 4,
   },
 
@@ -180,7 +273,7 @@ const styles = StyleSheet.create({
   info: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 20,
     flex: 1,
   },
 
@@ -197,13 +290,11 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 12,
     fontFamily: "Poppins_500Medium",
-    color: "#CCC",
   },
 
   name: {
     fontSize: 24,
     fontFamily: "Poppins_700Bold",
-    color: "#FFFFFF",
     letterSpacing: -0.4,
     marginBottom: 4,
   },
@@ -217,14 +308,13 @@ const styles = StyleSheet.create({
   locText: {
     fontSize: 13,
     fontFamily: "Poppins_400Regular",
-    color: "#999",
   },
 
   bio: {
     fontSize: 14,
     lineHeight: 21,
     fontFamily: "Poppins_400Regular",
-    color: "#AAA",
+    marginBottom: 10,
   },
 
   /* Action buttons */
@@ -232,7 +322,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingHorizontal: 16,
     paddingBottom: 16,
-    paddingTop: 8,
+    paddingTop: 14,
     gap: 12,
   },
 
@@ -242,7 +332,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 14,
     borderRadius: 30,
   },

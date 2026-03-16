@@ -59,7 +59,7 @@ function PeopleCardBase({ profile }: { profile: PeopleUser }) {
           <View
             style={[
               styles.avatar,
-              { backgroundColor: isDark ? "rgba(255,59,48,0.12)" : "rgba(255,59,48,0.08)" },
+              { backgroundColor: isDark ? "rgba(207,32,48,0.12)" : "rgba(207,32,48,0.08)" },
             ]}
           >
             {showImage ? (

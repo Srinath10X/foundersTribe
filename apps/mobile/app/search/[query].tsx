@@ -16,7 +16,7 @@ import React, {
   useEffect,
   useMemo,
   useState,
-} from "react";
+ memo } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -30,7 +30,6 @@ import {
   View,
 } from "react-native";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
-import { memo } from "react";
 import { SearchHeader, SearchTabs, SearchTab } from "../../components/search/SearchTabs";
 
 const { width: windowWidth } = Dimensions.get("window");
@@ -224,8 +223,8 @@ const CommunityCard = memo(function CommunityCard({
             styles.communityAvatar,
             {
               backgroundColor: isDark
-                ? "rgba(255,59,48,0.15)"
-                : "rgba(255,59,48,0.1)",
+                ? "rgba(207,32,48,0.15)"
+                : "rgba(207,32,48,0.1)",
             },
           ]}
         >

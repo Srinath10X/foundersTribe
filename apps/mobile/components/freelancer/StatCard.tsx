@@ -31,15 +31,15 @@ export function StatCard({ label, value, trend, trendLabel, accentColor, style }
                 {(trend !== undefined || trendLabel) && (
                     <View style={styles.trendRow}>
                         {trend !== undefined && (
-                            <View style={[styles.trendPill, { backgroundColor: trend >= 0 ? 'rgba(95,168,118,0.15)' : 'rgba(255,59,48,0.12)' }]}>
+                            <View style={[styles.trendPill, { backgroundColor: trend >= 0 ? 'rgba(95,168,118,0.15)' : 'rgba(207,32,48,0.12)' }]}>
                                 <Ionicons
                                     name={trend >= 0 ? 'trending-up' : 'trending-down'}
                                     size={12}
-                                    color={trend >= 0 ? palette.success : '#FF3B30'}
+                                    color={trend >= 0 ? palette.success : '#CF2030'}
                                 />
                                 <T
                                     weight="bold"
-                                    color={trend >= 0 ? palette.success : '#FF3B30'}
+                                    color={trend >= 0 ? palette.success : '#CF2030'}
                                     style={styles.trendText}
                                 >
                                     {trend >= 0 ? '+' : ''}{trend}%

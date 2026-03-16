@@ -140,7 +140,7 @@ function statusColors(status: ProposalStatus, palette: ReturnType<typeof useFlow
     return { text: "#34C759", bg: "rgba(52,199,89,0.12)" };
   }
   if (status === "rejected") {
-    return { text: "#FF3B30", bg: "rgba(255,59,48,0.12)" };
+    return { text: "#CF2030", bg: "rgba(207,32,48,0.12)" };
   }
   if (status === "shortlisted") {
     return { text: "#2A63F6", bg: "rgba(42,99,246,0.12)" };
@@ -779,15 +779,15 @@ export default function GigProposalsScreen() {
 
                       {canDecision ? (
                         <TouchableOpacity
-                          style={[styles.warnBtn, { backgroundColor: "rgba(255,59,48,0.12)" }]}
+                          style={[styles.warnBtn, { backgroundColor: "rgba(207,32,48,0.12)" }]}
                           onPress={() => handleReject(proposal)}
                           disabled={isActing || rejectMutation.isPending || acceptMutation.isPending}
                           activeOpacity={0.84}
                         >
                           {isActing && rejectMutation.isPending ? (
-                            <ActivityIndicator size="small" color="#FF3B30" />
+                            <ActivityIndicator size="small" color="#CF2030" />
                           ) : (
-                            <T weight="medium" color="#FF3B30" style={styles.btnText}>
+                            <T weight="medium" color="#CF2030" style={styles.btnText}>
                               Reject
                             </T>
                           )}

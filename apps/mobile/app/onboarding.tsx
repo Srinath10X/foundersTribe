@@ -411,7 +411,7 @@ export default function Onboarding() {
               <View style={styles.rowBetween}>
                 <Text style={[styles.itemIndex, { color: theme.text.muted }]}>#{index + 1}</Text>
                 <TouchableOpacity onPress={() => removeBusinessIdea(index)}>
-                  <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                  <Ionicons name="trash-outline" size={18} color="#CF2030" />
                 </TouchableOpacity>
               </View>
               <TextInput
@@ -453,7 +453,7 @@ export default function Onboarding() {
             <View style={styles.rowBetween}>
               <Text style={[styles.itemIndex, { color: theme.text.muted }]}>#{index + 1}</Text>
               <TouchableOpacity onPress={() => removeSocialLink(index)}>
-                <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                <Ionicons name="trash-outline" size={18} color="#CF2030" />
               </TouchableOpacity>
             </View>
             <TextInput
@@ -505,77 +505,93 @@ export default function Onboarding() {
       </Animated.View>
 
       <View style={styles.roleGrid}>
-        <Text style={[styles.roleHint, { color: theme.text.tertiary }]}>Scroll to explore roles</Text>
-        {ROLE_OPTIONS.map((option) => {
-          const active = userType === option.value;
+        <Text style={[styles.roleHint, { color: theme.text.tertiary }]}>Choose one option to continue</Text>
+        <View
+          style={[
+            styles.roleSingleCard,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
+          {ROLE_OPTIONS.map((option, index) => {
+            const active = userType === option.value;
 
-          return (
-            <TouchableOpacity
-              key={option.value}
-              style={[
-                styles.roleCompactCard,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: active ? theme.brand.primary : theme.border,
-                },
-                active && styles.roleCardElevated,
-              ]}
-              onPress={() => setUserType(option.value)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.roleCardHeader}>
-                <View
+            return (
+              <View key={option.value}>
+                <TouchableOpacity
                   style={[
-                    styles.roleIconCircleCompact,
-                    {
-                      backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
-                    },
+                    styles.roleOptionRow,
+                    active && { backgroundColor: theme.surfaceElevated },
                   ]}
+                  onPress={() => setUserType(option.value)}
+                  activeOpacity={0.85}
                 >
-                  <Ionicons
-                    name={option.icon}
-                    size={22}
-                    color={active ? "#fff" : theme.text.secondary}
-                  />
-                </View>
+                  <View
+                    style={[
+                      styles.roleIconCircleCompact,
+                      {
+                        backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={option.icon}
+                      size={20}
+                      color={active ? "#fff" : theme.text.secondary}
+                    />
+                  </View>
 
-                <View style={styles.roleTextWrap}>
-                  <View style={styles.roleTitleRow}>
-                    <Text style={[styles.roleTitleCompact, { color: theme.text.primary }]}>
-                      {option.title}
-                    </Text>
-                    <View
-                      style={[
-                        styles.roleTag,
-                        {
-                          backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
-                        },
-                      ]}
-                    >
-                      <Text
+                  <View style={styles.roleOptionText}>
+                    <View style={styles.roleTitleRow}>
+                      <Text style={[styles.roleTitleCompact, { color: theme.text.primary }]}>
+                        {option.title}
+                      </Text>
+                      <View
                         style={[
-                          styles.roleTagText,
-                          { color: active ? "#fff" : theme.text.secondary },
+                          styles.roleTag,
+                          {
+                            backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
+                          },
                         ]}
                       >
-                        {option.tag}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.roleTagText,
+                            { color: active ? "#fff" : theme.text.secondary },
+                          ]}
+                        >
+                          {option.tag}
+                        </Text>
+                      </View>
                     </View>
+                    <Text style={[styles.roleDescCompact, { color: theme.text.secondary }]}>
+                      {option.description}
+                    </Text>
                   </View>
-                  <Text style={[styles.roleDescCompact, { color: theme.text.secondary }]}>
-                    {option.description}
-                  </Text>
-                </View>
-              </View>
 
-              {active && (
-                <View style={styles.roleCheckMark}>
-                  <Ionicons name="checkmark-circle" size={22} color={theme.brand.primary} />
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
+                  <View
+                    style={[
+                      styles.roleRadio,
+                      { borderColor: active ? theme.brand.primary : theme.border },
+                    ]}
+                  >
+                    {active && (
+                      <View
+                        style={[
+                          styles.roleRadioDot,
+                          { backgroundColor: theme.brand.primary },
+                        ]}
+                      />
+                    )}
+                  </View>
+                </TouchableOpacity>
+
+                {index < ROLE_OPTIONS.length - 1 && (
+                  <View style={[styles.roleDivider, { backgroundColor: theme.border }]} />
+                )}
+              </View>
+            );
+          })}
+        </View>
       </View>
     </ScrollView>
   );
@@ -891,23 +907,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     marginBottom: 2,
   },
-  roleCompactCard: {
+  roleSingleCard: {
     borderRadius: 16,
     borderWidth: 1.5,
-    padding: 14,
-    position: "relative",
+    overflow: "hidden",
   },
-  roleCardElevated: {
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  roleCardHeader: {
+  roleOptionRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   roleIconCircleCompact: {
     width: 44,
@@ -917,9 +927,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 2,
   },
-  roleTextWrap: {
+  roleOptionText: {
     flex: 1,
-    paddingRight: 20,
+    paddingRight: 10,
   },
   roleTitleRow: {
     flexDirection: "row",
@@ -947,9 +957,22 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     opacity: 0.8,
   },
-  roleCheckMark: {
-    position: "absolute",
-    top: 10,
-    right: 10,
+  roleRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  roleRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  roleDivider: {
+    height: 1,
+    marginLeft: 70,
   },
 });

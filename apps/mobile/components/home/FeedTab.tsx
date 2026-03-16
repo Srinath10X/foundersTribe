@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Platform,
   RefreshControl,
@@ -14,6 +15,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const TAB_BAR_TOTAL = Platform.OS === "ios" ? 80 : 72;
 
 interface Article {
   id: number;
@@ -25,6 +29,19 @@ interface Article {
   Category: string | null;
   Summary: string | null;
 }
+
+const getArticleIdentity = (article: Article) =>
+  (article["Article Link"] || "").trim() || `${article.id}-${article.Title}`;
+
+const dedupeArticles = (items: Article[]) => {
+  const seen = new Set<string>();
+  return items.filter((article) => {
+    const key = getArticleIdentity(article);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 const PAGE_SIZE = 20;
 const DEFAULT_TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 116 : 96;
@@ -47,6 +64,8 @@ export default function FeedTab({
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
 
+  const CARD_HEIGHT = SCREEN_HEIGHT - topContentOffset - TAB_BAR_TOTAL;
+
   const updateHasMore = (value: boolean) => {
     hasMoreRef.current = value;
     setHasMore(value);
@@ -61,9 +80,10 @@ export default function FeedTab({
     pageRef.current = 0;
     updateHasMore(true);
     const data = await fetchArticles(0);
-    setArticles(data);
-    if (data.length < PAGE_SIZE) updateHasMore(false);
-    if (data.length > 0) pageRef.current = 1;
+    const uniqueData = dedupeArticles(data);
+    setArticles(uniqueData);
+    if (uniqueData.length < PAGE_SIZE) updateHasMore(false);
+    if (uniqueData.length > 0) pageRef.current = 1;
     setLoading(false);
   };
 
@@ -110,9 +130,10 @@ export default function FeedTab({
     pageRef.current = 0;
     updateHasMore(true);
     const data = await fetchArticles(0);
-    setArticles(data);
-    updateHasMore(data.length >= PAGE_SIZE);
-    if (data.length > 0) pageRef.current = 1;
+    const uniqueData = dedupeArticles(data);
+    setArticles(uniqueData);
+    updateHasMore(uniqueData.length >= PAGE_SIZE);
+    if (uniqueData.length > 0) pageRef.current = 1;
     setRefreshing(false);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
@@ -123,7 +144,7 @@ export default function FeedTab({
     setLoadingMore(true);
     const data = await fetchArticles(pageRef.current);
     if (data.length > 0) {
-      setArticles((prev) => [...prev, ...data]);
+      setArticles((prev) => dedupeArticles([...prev, ...data]));
       pageRef.current += 1;
     }
     if (data.length < PAGE_SIZE) {
@@ -134,7 +155,9 @@ export default function FeedTab({
   }, []);
 
   const renderItem = ({ item }: { item: Article }) => (
-    <NewsArticleCard article={item} />
+    <View style={{ height: CARD_HEIGHT }}>
+      <NewsArticleCard article={item} cardHeight={CARD_HEIGHT} />
+    </View>
   );
 
   // Skeleton for loading state — card-list style
@@ -214,55 +237,59 @@ export default function FeedTab({
   const EndOfFeedFooter = () => {
     if (loadingMore) {
       return (
-        <View style={styles.footerLoading}>
-          <ActivityIndicator color={theme.brand.primary} size="large" />
+        <View style={[styles.footerPage, { height: CARD_HEIGHT }]}>
+          <View style={styles.footerLoading}>
+            <ActivityIndicator color={theme.brand.primary} size="large" />
+          </View>
         </View>
       );
     }
 
     if (!hasMore && articles.length > 0) {
       return (
-        <View style={styles.footerContainer}>
-          <View style={styles.footerContent}>
-            <View
-              style={[
-                styles.footerIconCircle,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(255,59,48,0.1)"
-                    : "rgba(255,59,48,0.08)",
-                  borderColor: isDark
-                    ? "rgba(255,59,48,0.25)"
-                    : "rgba(255,59,48,0.15)",
-                },
-              ]}
-            >
-              <Ionicons
-                name="checkmark-done"
-                size={36}
-                color={theme.brand.primary}
-              />
+        <View style={[styles.footerPage, { height: CARD_HEIGHT }]}>
+          <View style={styles.footerContainer}>
+            <View style={styles.footerContent}>
+              <View
+                style={[
+                  styles.footerIconCircle,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(207,32,48,0.1)"
+                      : "rgba(207,32,48,0.08)",
+                    borderColor: isDark
+                      ? "rgba(207,32,48,0.25)"
+                      : "rgba(207,32,48,0.15)",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="checkmark-done"
+                  size={36}
+                  color={theme.brand.primary}
+                />
+              </View>
+              <Text style={[styles.footerTitle, { color: theme.text.primary }]}>
+                All caught up!
+              </Text>
+              <Text
+                style={[styles.footerSubtitle, { color: theme.text.tertiary }]}
+              >
+                You&apos;ve seen every story in your feed.{"\n"}Pull down to
+                refresh for new articles.
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.footerButton,
+                  { backgroundColor: theme.brand.primary },
+                ]}
+                onPress={handleRefresh}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="refresh" size={18} color="#FFFFFF" />
+                <Text style={styles.footerButtonText}>Refresh Feed</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.footerTitle, { color: theme.text.primary }]}>
-              All caught up!
-            </Text>
-            <Text
-              style={[styles.footerSubtitle, { color: theme.text.tertiary }]}
-            >
-              You&apos;ve seen every story in your feed.{"\n"}Pull down to
-              refresh for new articles.
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.footerButton,
-                { backgroundColor: theme.brand.primary },
-              ]}
-              onPress={handleRefresh}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="refresh" size={18} color="#FFFFFF" />
-              <Text style={styles.footerButtonText}>Refresh Feed</Text>
-            </TouchableOpacity>
           </View>
         </View>
       );
@@ -317,17 +344,21 @@ export default function FeedTab({
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.background, marginBottom: TAB_BAR_TOTAL }]}>
       <FlatList<Article>
         ref={flatListRef}
         data={articles}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item, index) => `${getArticleIdentity(item)}-${index}`}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.listContent, { paddingTop: topContentOffset }]}
         onEndReached={loadNextPage}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.25}
         ListFooterComponent={EndOfFeedFooter}
+        snapToInterval={CARD_HEIGHT}
+        snapToAlignment="start"
+        disableIntervalMomentum
+        decelerationRate="fast"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -350,7 +381,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingBottom: 100,
+    paddingBottom: 0,
   },
 
   // Skeleton
@@ -358,16 +389,14 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   skeletonCard: {
-    marginHorizontal: 16,
     marginBottom: 14,
   },
   skeletonInner: {
-    borderRadius: 16,
     overflow: "hidden",
   },
   skeletonImage: {
     width: "100%",
-    height: 180,
+    height: 210,
   },
   skeletonContent: {
     padding: 16,
@@ -406,6 +435,9 @@ const styles = StyleSheet.create({
   },
 
   // Footer
+  footerPage: {
+    justifyContent: "center",
+  },
   footerLoading: {
     paddingVertical: 32,
     alignItems: "center",

@@ -170,7 +170,7 @@ const switchStyles = StyleSheet.create({
   },
   pressable: {
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -251,6 +251,13 @@ const TabItem = ({
     >
       <Animated.View style={[barStyles.tabItemContents, animatedStyle]}>
         <View style={barStyles.iconWrap}>
+          <Animated.View
+            style={[
+              barStyles.iconGlow,
+              { backgroundColor: tintColor },
+              animatedGlowStyle,
+            ]}
+          />
           {options.tabBarIcon?.({
             focused: isFocused,
             color: tintColor,

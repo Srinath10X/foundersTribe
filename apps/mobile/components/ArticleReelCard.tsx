@@ -191,7 +191,7 @@ export function ArticleReelCard({
 
       {imageLoading && (
         <View style={[styles.loadingSkeleton, { backgroundColor: "#000" }]}>
-          <ActivityIndicator size="large" color="#FF3B30" />
+          <ActivityIndicator size="large" color="#CF2030" />
         </View>
       )}
 
@@ -231,7 +231,7 @@ export function ArticleReelCard({
                   <MaterialIcons
                     name={liked ? "favorite" : "favorite-outline"}
                     size={30}
-                    color={liked ? "#FF3B30" : "#FFFFFF"}
+                    color={liked ? "#CF2030" : "#FFFFFF"}
                   />
                 </Animated.View>
               </TouchableOpacity>
@@ -244,7 +244,7 @@ export function ArticleReelCard({
                   <MaterialIcons
                     name={bookmarked ? "bookmark" : "bookmark-outline"}
                     size={30}
-                    color={bookmarked ? "#FF3B30" : "#FFFFFF"}
+                    color={bookmarked ? "#CF2030" : "#FFFFFF"}
                   />
                 </Animated.View>
               </TouchableOpacity>
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   categoryPill: {
-    backgroundColor: "#FF3B30",
+    backgroundColor: "#CF2030",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 4,
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   moreText: {
-    color: "#FF3B30",
+    color: "#CF2030",
     fontWeight: "bold",
   },
 

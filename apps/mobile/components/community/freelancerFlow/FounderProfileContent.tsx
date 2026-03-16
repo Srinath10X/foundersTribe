@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Linking, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Linking, RefreshControl, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
 import ProfileOverviewSheet from "@/components/ProfileOverviewSheet";
@@ -97,6 +97,20 @@ function socialLabel(item: SocialLink): string {
     return item.label || host || fallback;
   } catch {
     return fallback;
+  }
+}
+
+function socialMeta(item: SocialLink): string {
+  const platform = String(item.platform || "").trim();
+  if (platform) return platform;
+  const raw = String(item.url || "").trim();
+  if (!raw) return "Profile";
+  try {
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const host = new URL(normalized).hostname.replace(/^www\./i, "");
+    return host || "Profile";
+  } catch {
+    return "Profile";
   }
 }
 
@@ -229,8 +243,9 @@ export default function FounderProfileScreen({
   const compactParam = asSingleParam(params.compact).toLowerCase();
   const isCompactProfile = compactParam === "1" || compactParam === "true";
   const profileUserId = requestedProfileId || currentUserId;
+  const hasRequestedProfile = Boolean(requestedProfileId);
   const isViewingOtherProfile = Boolean(profileUserId && currentUserId && profileUserId !== currentUserId);
-  const isReadOnlyProfileView = isViewingOtherProfile || isCompactProfile || showBackButton;
+  const isReadOnlyProfileView = hasRequestedProfile || isViewingOtherProfile || isCompactProfile || showBackButton;
 
   const [refreshing, setRefreshing] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -351,6 +366,46 @@ export default function FounderProfileScreen({
   const appearanceLabel = themeMode === "system" ? "System" : isDark ? "Dark" : "Light";
   const isFounderProfile = String(profile?.user_type || "").toLowerCase() === "founder";
   const availabilityLabel = isFounderProfile ? "Open to Hire" : "Open to Work";
+  const roleBadgeLabel = String(profile?.user_type || profile?.role || "Founder")
+    .toLowerCase()
+    .includes("freelancer")
+    ? "Freelancer"
+    : "Founder";
+  const heroName = profile?.display_name || profile?.username || "User";
+  const heroHeadline = String(profile?.bio || "").trim() || "Building the future with purpose.";
+  const personalRoleValue = String(profile?.role || roleBadgeLabel || "Founder").trim() || "Founder";
+  const personalLocationValue = String(profile?.location || profile?.address || "Location unavailable").trim();
+  const personalPhoneValue = String(profile?.contact || "Not provided").trim() || "Not provided";
+  const linkedInValue = profile?.linkedin_url
+    ? socialMeta({ url: profile.linkedin_url, platform: "LinkedIn", label: "LinkedIn" })
+    : "No LinkedIn";
+  const connectTargetUrl = String(profile?.linkedin_url || links[0]?.url || "").trim();
+  const canConnect = Boolean(connectTargetUrl);
+  const connectItems = (() => {
+    // LinkedIn is already shown in Personal Details, so exclude it from Connect & Profiles
+    const linkedInUrl = String(profile?.linkedin_url || "").trim().toLowerCase();
+    return links
+      .filter((item) => {
+        const url = String(item?.url || "").trim().toLowerCase();
+        return url && (!linkedInUrl || url !== linkedInUrl);
+      })
+      .slice(0, 3);
+  })();
+
+  const onMessagePress = useCallback(() => {
+    const cleanPhone = String(profile?.contact || "").replace(/[^\d+]/g, "");
+    if (cleanPhone) {
+      Linking.openURL(`tel:${cleanPhone}`).catch(() => {});
+      return;
+    }
+
+    if (connectTargetUrl) openUrl(connectTargetUrl);
+  }, [connectTargetUrl, profile?.contact]);
+
+  const onConnectPress = useCallback(() => {
+    if (connectTargetUrl) openUrl(connectTargetUrl);
+  }, [connectTargetUrl]);
+
   const selectAppearance = () => {
     setShowAppearanceModal(true);
   };
@@ -363,10 +418,10 @@ export default function FounderProfileScreen({
           ? "Business Ideas"
           : "Connect & Profiles";
 
-  const renderOverviewContent = () => {
+  const renderPersonalContent = (mode: "sheet" | "inline" = "sheet") => {
     if (!profile) return null;
 
-    if (activeOverviewSection === "personal") {
+    if (mode === "sheet") {
       return (
         <View>
           <DetailRow icon="call-outline" label="Phone" value={profile.contact} />
@@ -384,67 +439,96 @@ export default function FounderProfileScreen({
       );
     }
 
-    if (activeOverviewSection === "experience") {
-      return (
-        <View>
-          {works.length === 0 ? (
-            <T weight="regular" color={palette.subText} style={styles.emptyText}>
-              No experience items added yet.
-            </T>
-          ) : (
-            works.map((work, index) => {
-              const duration = work.duration || "Duration";
-              const description = String(work.description || "").trim();
-              const isCurrent = /present|current/i.test(duration);
-              return (
-                <View key={`${work.company || "work"}-sheet-${index}`} style={styles.workCard}>
-                  <View style={[styles.workIconWrap, { backgroundColor: "rgba(59, 130, 246, 0.1)" }]}>
-                    <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <T weight="semiBold" color={palette.text} style={styles.workRole} numberOfLines={1}>
-                      {work.role || "Role"}
-                    </T>
-                    <T weight="regular" color={palette.subText} style={styles.workCompany} numberOfLines={1}>
-                      {work.company || "Company"}
-                    </T>
-                    {!!description && (
-                      <T weight="regular" color={palette.subText} style={styles.workDescription} numberOfLines={3}>
-                        {description}
-                      </T>
-                    )}
-                    <View style={styles.workMetaRow}>
-                      {isCurrent ? (
-                        <View style={styles.currentTag}>
-                          <T weight="medium" color="#2F9254" style={styles.currentTagText}>
-                            Current
-                          </T>
-                        </View>
-                      ) : null}
-                      <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
-                        {duration}
-                      </T>
-                    </View>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
-      );
-    }
+    const roleValue = String(profile.role || "Not set");
+    const locationValue = [profile.location, profile.address]
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+      .join(" • ") || "Not set";
+    const phoneValue = String(profile.contact || "Not set");
+    const linkedInValue = profile.linkedin_url ? socialMeta({ url: profile.linkedin_url }) : "Not set";
+    const canOpenLinkedIn = Boolean(profile.linkedin_url);
 
-    if (activeOverviewSection === "ideas") {
+    return (
+      <View
+        style={[
+          styles.readOnlyPersonalSummary,
+          { borderColor: palette.borderLight, backgroundColor: palette.surface },
+        ]}
+      >
+        <View style={styles.readOnlyPersonalRow}>
+          <View
+            style={[
+              styles.readOnlyPersonalItem,
+              { borderColor: palette.borderLight, backgroundColor: palette.card },
+            ]}
+          >
+            <Ionicons name="briefcase-outline" size={13} color="#B45309" />
+            <T weight="medium" color={palette.text} style={styles.readOnlyPersonalItemText} numberOfLines={1}>
+              Role: {roleValue}
+            </T>
+          </View>
+          <View
+            style={[
+              styles.readOnlyPersonalItem,
+              { borderColor: palette.borderLight, backgroundColor: palette.card },
+            ]}
+          >
+            <Ionicons name="location-outline" size={13} color="#0F766E" />
+            <T weight="medium" color={palette.text} style={styles.readOnlyPersonalItemText} numberOfLines={1}>
+              Location: {locationValue}
+            </T>
+          </View>
+        </View>
+
+        <View style={styles.readOnlyPersonalRow}>
+          <View
+            style={[
+              styles.readOnlyPersonalItem,
+              { borderColor: palette.borderLight, backgroundColor: palette.card },
+            ]}
+          >
+            <Ionicons name="call-outline" size={13} color="#1D4ED8" />
+            <T weight="medium" color={palette.text} style={styles.readOnlyPersonalItemText} numberOfLines={1}>
+              Phone: {phoneValue}
+            </T>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.84}
+            disabled={!canOpenLinkedIn}
+            style={[
+              styles.readOnlyPersonalItem,
+              canOpenLinkedIn
+                ? { borderColor: "rgba(37, 99, 235, 0.28)", backgroundColor: "rgba(37, 99, 235, 0.08)" }
+                : { borderColor: palette.borderLight, backgroundColor: palette.card },
+            ]}
+            onPress={canOpenLinkedIn ? () => openUrl(profile.linkedin_url as string) : undefined}
+          >
+            <Ionicons name="link-outline" size={13} color={canOpenLinkedIn ? "#2563EB" : "#64748B"} />
+            <T weight="medium" color={palette.text} style={styles.readOnlyPersonalItemText} numberOfLines={1}>
+              LinkedIn: {linkedInValue}
+            </T>
+            {canOpenLinkedIn ? <Ionicons name="chevron-forward" size={13} color="#94A3B8" /> : null}
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderIdeasContent = (mode: "sheet" | "inline" = "sheet") => {
+    const isInlineMode = mode === "inline";
+    const visibleIdeas = isInlineMode ? businessIdeaItems.slice(0, 2) : businessIdeaItems;
+
+    if (!isInlineMode) {
       return (
         <View style={styles.sectionStack}>
-          {businessIdeaItems.length === 0 ? (
+          {visibleIdeas.length === 0 ? (
             <T weight="regular" color={palette.subText} style={styles.emptyText}>
               No business ideas added.
             </T>
           ) : (
-            businessIdeaItems.map((item, index) => (
+            visibleIdeas.map((item, index) => (
               <View
-                key={`idea-sheet-${index}`}
+                key={`idea-${mode}-${index}`}
                 style={[
                   styles.businessIdeaCard,
                   {
@@ -488,23 +572,500 @@ export default function FounderProfileScreen({
     }
 
     return (
-      <View>
-        {links.length === 0 ? (
-          <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
+      <View style={styles.readOnlyIdeaList}>
+        {visibleIdeas.length === 0 ? (
+          <T weight="regular" color={palette.subText} style={styles.readOnlyEmptyText}>
+            No business ideas added.
+          </T>
         ) : (
-          links.map((item, index) => (
-            <MoreRow
-              key={`${item.platform || "link"}-sheet-${index}`}
-              icon="globe-outline"
-              title={socialLabel(item)}
-              subtitle={item.url || undefined}
-              onPress={() => openUrl(String(item.url || ""))}
-            />
+          visibleIdeas.map((item, index) => (
+            <View
+              key={`idea-${mode}-${index}`}
+              style={[
+                styles.readOnlyIdeaCard,
+                { borderColor: palette.borderLight, backgroundColor: palette.surface },
+              ]}
+            >
+              <View style={styles.readOnlyIdeaHead}>
+                <T weight="bold" color="#D97706" style={styles.readOnlyIdeaIndex}>
+                  Idea {index + 1}
+                </T>
+                {!!item.pitchUrl ? <Ionicons name="link-outline" size={14} color="#D97706" /> : null}
+              </View>
+              <T weight="regular" color={palette.text} style={styles.readOnlyIdeaText} numberOfLines={4}>
+                {item.idea}
+              </T>
+              {!!item.pitchUrl && (
+                <TouchableOpacity
+                  activeOpacity={0.82}
+                  style={styles.readOnlyIdeaLink}
+                  onPress={() => openUrl(item.pitchUrl as string)}
+                >
+                  <T weight="semiBold" color="#D97706" style={styles.readOnlyIdeaLinkText}>
+                    Open pitch
+                  </T>
+                </TouchableOpacity>
+              )}
+            </View>
           ))
         )}
+        {businessIdeaItems.length > visibleIdeas.length ? (
+          <T weight="medium" color={palette.subText} style={styles.readOnlyHintText}>
+            +{businessIdeaItems.length - visibleIdeas.length} more ideas
+          </T>
+        ) : null}
       </View>
     );
   };
+
+  const renderExperienceContent = (mode: "sheet" | "inline" = "sheet") => {
+    const isInlineMode = mode === "inline";
+    const visibleWorks = isInlineMode ? works.slice(0, 3) : works;
+
+    return (
+      <View style={isInlineMode ? styles.readOnlyExperienceList : undefined}>
+        {visibleWorks.length === 0 ? (
+          <T
+            weight="regular"
+            color={palette.subText}
+            style={isInlineMode ? styles.readOnlyEmptyText : styles.emptyText}
+          >
+            No experience items added yet.
+          </T>
+        ) : (
+          visibleWorks.map((work, index) => {
+            const duration = work.duration || "Duration";
+            const description = String(work.description || "").trim();
+            const isCurrent = /present|current/i.test(duration);
+            return (
+              <View
+                key={`${work.company || "work"}-${mode}-${index}`}
+                style={[
+                  styles.workCard,
+                  isInlineMode
+                    ? [
+                        styles.inlineWorkCard,
+                        { borderColor: palette.borderLight, backgroundColor: palette.surface },
+                      ]
+                    : null,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.workIconWrap,
+                    isInlineMode ? styles.inlineWorkIconWrap : null,
+                    {
+                      backgroundColor: isInlineMode
+                        ? "rgba(14, 165, 233, 0.12)"
+                        : "rgba(59, 130, 246, 0.1)",
+                    },
+                  ]}
+                >
+                  <Ionicons name="code-slash-outline" size={18} color="#3B82F6" />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <T
+                    weight="semiBold"
+                    color={palette.text}
+                    style={[styles.workRole, isInlineMode ? styles.inlineWorkRole : null]}
+                    numberOfLines={1}
+                  >
+                    {work.role || "Role"}
+                  </T>
+                  <T
+                    weight="regular"
+                    color={palette.subText}
+                    style={[styles.workCompany, isInlineMode ? styles.inlineWorkCompany : null]}
+                    numberOfLines={1}
+                  >
+                    {work.company || "Company"}
+                  </T>
+                  {!!description && (
+                    <T
+                      weight="regular"
+                      color={palette.subText}
+                      style={[styles.workDescription, isInlineMode ? styles.inlineWorkDescription : null]}
+                      numberOfLines={isInlineMode ? 2 : 3}
+                    >
+                      {description}
+                    </T>
+                  )}
+                  <View style={[styles.workMetaRow, isInlineMode ? styles.inlineWorkMetaRow : null]}>
+                    {isCurrent ? (
+                      <View style={styles.currentTag}>
+                        <T weight="medium" color="#2F9254" style={styles.currentTagText}>
+                          Current
+                        </T>
+                      </View>
+                    ) : null}
+                    <T weight="regular" color="#9CA3AF" style={styles.workDuration} numberOfLines={1}>
+                      {duration}
+                    </T>
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
+        {works.length > visibleWorks.length ? (
+          <T weight="medium" color={palette.subText} style={styles.readOnlyHintText}>
+            +{works.length - visibleWorks.length} more experience entries
+          </T>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderSocialContent = (mode: "sheet" | "inline" = "sheet") => {
+    const isInlineMode = mode === "inline";
+    const visibleLinks = isInlineMode ? links.slice(0, 4) : links;
+
+    if (!isInlineMode) {
+      return (
+        <View>
+          {visibleLinks.length === 0 ? (
+            <MoreRow icon="globe-outline" title="No social links added" subtitle="Add links to your profile" />
+          ) : (
+            visibleLinks.map((item, index) => (
+              <MoreRow
+                key={`${item.platform || "link"}-${mode}-${index}`}
+                icon="globe-outline"
+                title={socialLabel(item)}
+                subtitle={item.url || undefined}
+                onPress={() => openUrl(String(item.url || ""))}
+              />
+            ))
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.readOnlySocialList}>
+        {visibleLinks.length === 0 ? (
+          <T weight="regular" color={palette.subText} style={styles.readOnlyEmptyText}>
+            No social links added.
+          </T>
+        ) : (
+          visibleLinks.map((item, index) => (
+            <TouchableOpacity
+              key={`${item.platform || "link"}-${mode}-${index}`}
+              activeOpacity={0.82}
+              style={[
+                styles.readOnlySocialRow,
+                { borderColor: palette.borderLight, backgroundColor: palette.surface },
+              ]}
+              onPress={() => openUrl(String(item.url || ""))}
+            >
+              <View style={styles.readOnlySocialIconWrap}>
+                <Ionicons name="globe-outline" size={15} color="#2563EB" />
+              </View>
+              <View style={styles.readOnlySocialText}>
+                <T weight="semiBold" color={palette.text} style={styles.readOnlySocialTitle} numberOfLines={1}>
+                  {socialLabel(item)}
+                </T>
+                <T weight="regular" color={palette.subText} style={styles.readOnlySocialUrl} numberOfLines={1}>
+                  {socialMeta(item)}
+                </T>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          ))
+        )}
+        {links.length > visibleLinks.length ? (
+          <T weight="medium" color={palette.subText} style={styles.readOnlyHintText}>
+            +{links.length - visibleLinks.length} more links
+          </T>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderOverviewContent = () => {
+    if (!profile) return null;
+
+    if (activeOverviewSection === "personal") return renderPersonalContent("sheet");
+
+    if (activeOverviewSection === "experience") return renderExperienceContent("sheet");
+
+    if (activeOverviewSection === "ideas") return renderIdeasContent("sheet");
+
+    return renderSocialContent("sheet");
+  };
+
+  if (isReadOnlyProfileView) {
+    return (
+      <View style={[styles.previewScreen, { backgroundColor: palette.bg }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <View style={[styles.previewHeader, { borderBottomColor: palette.borderLight, backgroundColor: palette.surface }]}>
+          <TouchableOpacity activeOpacity={0.82} style={styles.previewHeaderButton} onPress={nav.back}>
+            <Ionicons name="arrow-back" size={18} color={palette.text} />
+          </TouchableOpacity>
+          <T weight="bold" color={palette.text} style={styles.previewHeaderTitle} numberOfLines={1}>
+            {title.toUpperCase()}
+          </T>
+          <View style={styles.previewHeaderButton}>
+            <Ionicons name="ellipsis-vertical" size={16} color={palette.subText} />
+          </View>
+        </View>
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} />}
+        >
+          <View style={styles.previewContent}>
+            {loading && !profile ? (
+              <View style={styles.previewCardWrap}>
+                <LoadingState rows={4} />
+              </View>
+            ) : null}
+
+            {!loading && !profile ? (
+              <View style={styles.previewCardWrap}>
+                <ErrorState
+                  title="Failed to load profile"
+                  message={loadError || "Profile not available"}
+                  onRetry={loadProfile}
+                />
+              </View>
+            ) : null}
+
+            {!loading && profile ? (
+              <>
+                <View style={styles.previewHeroCard}>
+                  <View style={styles.previewAvatarRing}>
+                    <Avatar source={profile.photo_url || profile.avatar_url} size={104} />
+                    <View style={[styles.previewStatusDot, { borderColor: palette.bg }]} />
+                  </View>
+
+                  <T weight="semiBold" color={palette.text} style={styles.previewName} numberOfLines={2}>
+                    {heroName}
+                  </T>
+                  <T weight="regular" color={palette.subText} style={styles.previewHeadline} numberOfLines={2}>
+                    {heroHeadline}
+                  </T>
+
+                  <View style={styles.previewBadgeRow}>
+                    <View style={[styles.previewFounderBadge, { borderColor: "rgba(251, 113, 133, 0.38)", backgroundColor: "rgba(251, 113, 133, 0.12)" }]}>
+                      <T weight="bold" color="#FB7185" style={styles.previewBadgeText}>
+                        {roleBadgeLabel}
+                      </T>
+                    </View>
+                    <View style={[styles.previewAvailabilityBadge, { borderColor: "rgba(52, 211, 153, 0.34)", backgroundColor: "rgba(52, 211, 153, 0.12)" }]}>
+                      <T weight="bold" color="#34D399" style={styles.previewBadgeText}>
+                        {availabilityLabel}
+                      </T>
+                    </View>
+                  </View>
+
+                  <View style={styles.previewActionRow}>
+                    <TouchableOpacity 
+                      activeOpacity={0.86} 
+                      style={[styles.previewPrimaryAction, { backgroundColor: palette.accent, borderWidth: 1, borderColor: palette.accent }]} 
+                      onPress={onMessagePress}
+                    >
+                      <Ionicons name="chatbubble-ellipses-outline" size={16} color="#FFFFFF" />
+                      <T weight="semiBold" color="#FFFFFF" style={styles.previewActionText}>
+                        Message
+                      </T>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      activeOpacity={0.86}
+                      style={[styles.previewSecondaryAction, !canConnect ? styles.previewSecondaryActionDisabled : { borderColor: palette.accent, backgroundColor: palette.surface }]}
+                      disabled={!canConnect}
+                      onPress={onConnectPress}
+                    >
+                      <Ionicons name="person-add-outline" size={16} color={canConnect ? palette.accent : palette.subText} />
+                      <T weight="semiBold" color={canConnect ? palette.accent : palette.subText} style={styles.previewActionText}>
+                        Connect
+                      </T>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.previewSectionWrap}>
+                  <View style={styles.previewSectionHeader}>
+                    <View style={[styles.previewSectionAccent, { backgroundColor: "#F97316" }]} />
+                    <T weight="bold" color={palette.subText} style={styles.previewSectionTitle}>
+                      PERSONAL DETAILS
+                    </T>
+                  </View>
+
+                  <View style={[styles.previewCardWrap, { backgroundColor: palette.card, borderColor: palette.borderLight }]}>
+                    <View style={styles.previewDetailRow}>
+                      <View style={[styles.previewDetailChip, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+                        <Ionicons name="briefcase-outline" size={14} color="#F59E0B" />
+                        <T weight="medium" color={palette.text} style={styles.previewDetailText} numberOfLines={1}>
+                          {personalRoleValue}
+                        </T>
+                      </View>
+
+                      <View style={[styles.previewDetailChip, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+                        <Ionicons name="location-outline" size={14} color="#34D399" />
+                        <T weight="medium" color={palette.text} style={styles.previewDetailText} numberOfLines={1}>
+                          {personalLocationValue}
+                        </T>
+                      </View>
+                    </View>
+
+                    <View style={styles.previewDetailRow}>
+                      <View style={[styles.previewDetailChip, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}>
+                        <Ionicons name="call-outline" size={14} color="#60A5FA" />
+                        <T weight="medium" color={palette.text} style={styles.previewDetailText} numberOfLines={1}>
+                          {personalPhoneValue}
+                        </T>
+                      </View>
+
+                      <TouchableOpacity
+                        activeOpacity={0.84}
+                        disabled={!profile.linkedin_url}
+                        style={[styles.previewDetailChip, { backgroundColor: palette.surface, borderColor: palette.borderLight }, !profile.linkedin_url ? { opacity: 0.5 } : null]}
+                        onPress={profile.linkedin_url ? () => openUrl(profile.linkedin_url as string) : undefined}
+                      >
+                        <Ionicons
+                          name="link-outline"
+                          size={14}
+                          color={palette.subText}
+                        />
+                        <T
+                          weight="medium"
+                          color={palette.subText}
+                          style={styles.previewDetailText}
+                          numberOfLines={1}
+                        >
+                          {linkedInValue}
+                        </T>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.previewSectionWrap}>
+                  <View style={styles.previewSectionHeader}>
+                    <View style={[styles.previewSectionAccent, { backgroundColor: "#F59E0B" }]} />
+                    <T weight="bold" color={palette.subText} style={styles.previewSectionTitle}>
+                      PROFESSIONAL OVERVIEW
+                    </T>
+                  </View>
+
+                  <View style={[styles.previewCardWrap, { backgroundColor: palette.card, borderColor: palette.borderLight }]}>
+                    <View style={styles.previewPanelHeader}>
+                      <View style={[styles.previewPanelIcon, { backgroundColor: "rgba(245,158,11,0.16)" }]}>
+                        <Ionicons name="bulb-outline" size={14} color="#F59E0B" />
+                      </View>
+                      <T weight="semiBold" color={palette.text} style={styles.previewPanelTitle}>
+                        Business Ideas
+                      </T>
+                    </View>
+
+                    {businessIdeaItems.length === 0 ? (
+                      <T weight="regular" color={palette.subText} style={styles.previewPanelEmpty}>
+                        No business ideas added.
+                      </T>
+                    ) : (
+                      businessIdeaItems.slice(0, 2).map((item, index) => (
+                        <T
+                          key={`preview-idea-${index}`}
+                          weight="regular"
+                          color={palette.subText}
+                          style={styles.previewPanelLine}
+                          numberOfLines={3}
+                        >
+                          • {item.idea}
+                        </T>
+                      ))
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.previewSectionWrap}>
+                  <View style={styles.previewSectionHeader}>
+                    <View style={[styles.previewSectionAccent, { backgroundColor: "#38BDF8" }]} />
+                    <T weight="bold" color={palette.subText} style={styles.previewSectionTitle}>
+                      CAREER HIGHLIGHTS
+                    </T>
+                  </View>
+
+                  <View style={[styles.previewCardWrap, { backgroundColor: palette.card, borderColor: palette.borderLight }]}>
+                    <View style={styles.previewPanelHeader}>
+                      <View style={[styles.previewPanelIcon, { backgroundColor: "rgba(56,189,248,0.16)" }]}>
+                        <Ionicons name="briefcase-outline" size={14} color="#38BDF8" />
+                      </View>
+                      <T weight="semiBold" color={palette.text} style={styles.previewPanelTitle}>
+                        Experience
+                      </T>
+                    </View>
+
+                    {works.length === 0 ? (
+                      <T weight="regular" color={palette.subText} style={styles.previewPanelEmpty}>
+                        No experience items added yet.
+                      </T>
+                    ) : (
+                      <View>
+                        <T weight="semiBold" color={palette.text} style={styles.previewPanelLine} numberOfLines={1}>
+                          {works[0].role || "Role"}
+                          {works[0].company ? ` • ${works[0].company}` : ""}
+                        </T>
+                        <T weight="regular" color={palette.subText} style={styles.previewPanelMeta} numberOfLines={1}>
+                          {works[0].duration || "Duration unavailable"}
+                        </T>
+                        {String(works[0].description || "").trim() ? (
+                          <T weight="regular" color={palette.subText} style={styles.previewPanelLine} numberOfLines={2}>
+                            {String(works[0].description || "").trim()}
+                          </T>
+                        ) : null}
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={[styles.previewCardWrap, { backgroundColor: palette.card, borderColor: palette.borderLight }]}>
+                    <View style={styles.previewPanelHeader}>
+                      <View style={[styles.previewPanelIcon, { backgroundColor: "rgba(59,130,246,0.16)" }]}>
+                        <Ionicons name="globe-outline" size={14} color="#60A5FA" />
+                      </View>
+                      <T weight="semiBold" color={palette.text} style={styles.previewPanelTitle}>
+                        Connect &amp; Profiles
+                      </T>
+                    </View>
+
+                    {connectItems.length === 0 ? (
+                      <T weight="regular" color={palette.subText} style={styles.previewPanelEmpty}>
+                        No social links added.
+                      </T>
+                    ) : (
+                      connectItems.map((item, index) => (
+                        <TouchableOpacity
+                          key={`preview-social-${index}`}
+                          activeOpacity={0.84}
+                          style={[styles.previewSocialRow, { backgroundColor: palette.surface, borderColor: palette.borderLight }]}
+                          onPress={() => openUrl(String(item.url || ""))}
+                        >
+                          <View style={[styles.previewSocialIconWrap, { backgroundColor: "rgba(59,130,246,0.18)" }]}>
+                            <Ionicons name="link-outline" size={13} color="#60A5FA" />
+                          </View>
+                          <View style={styles.previewSocialText}>
+                            <T weight="semiBold" color={palette.text} style={styles.previewSocialTitle} numberOfLines={1}>
+                              {socialLabel(item)}
+                            </T>
+                            <T weight="regular" color={palette.subText} style={styles.previewSocialMeta} numberOfLines={1}>
+                              {socialMeta(item)}
+                            </T>
+                          </View>
+                          <Ionicons name="chevron-forward" size={15} color={palette.subText} />
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </View>
+                </View>
+              </>
+            ) : null}
+
+            <View style={styles.previewBottomSpacer} />
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <FlowScreen scroll={false}>
@@ -623,19 +1184,93 @@ export default function FounderProfileScreen({
             </View>
           ) : null}
 
+          {isReadOnlyProfileView ? (
+            <View style={styles.blockWrap}>
+              <SurfaceCard style={[styles.sectionCard, styles.readOnlySectionCard]}>
+                <SectionTitle color="#F59E0B" title="Personal Details" />
+                {renderPersonalContent("inline")}
+              </SurfaceCard>
+            </View>
+          ) : null}
+
           <View style={styles.blockWrap}>
-            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+            <SurfaceCard style={[styles.sectionCard, isReadOnlyProfileView ? styles.readOnlySectionCard : styles.listCard]}>
               <SectionTitle color="#F59E0B" title="Professional Overview" />
-              <MoreRow icon="person-outline" title="Personal Details" onPress={() => setActiveOverviewSection("personal")} />
-              <MoreRow icon="bulb-outline" title="Business Ideas" onPress={() => setActiveOverviewSection("ideas")} />
+              {isReadOnlyProfileView ? (
+                <View style={styles.readOnlyCareerStack}>
+                  <View
+                    style={[
+                      styles.readOnlyCareerPanel,
+                      { backgroundColor: palette.card, borderColor: palette.borderLight },
+                    ]}
+                  >
+                    <View style={styles.readOnlyCareerPanelHead}>
+                      <View
+                        style={[styles.readOnlyCareerPanelIconAlt, { backgroundColor: "rgba(245, 158, 11, 0.12)" }]}
+                      >
+                        <Ionicons name="bulb-outline" size={14} color="#D97706" />
+                      </View>
+                      <T weight="semiBold" color={palette.text} style={styles.readOnlyCareerPanelTitle}>
+                        Business Ideas
+                      </T>
+                    </View>
+                    {renderIdeasContent("inline")}
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <MoreRow icon="person-outline" title="Personal Details" onPress={() => setActiveOverviewSection("personal")} />
+                  <MoreRow icon="bulb-outline" title="Business Ideas" onPress={() => setActiveOverviewSection("ideas")} />
+                </>
+              )}
             </SurfaceCard>
           </View>
 
           <View style={styles.blockWrap}>
-            <SurfaceCard style={[styles.sectionCard, styles.listCard]}>
+            <SurfaceCard style={[styles.sectionCard, isReadOnlyProfileView ? styles.readOnlySectionCard : styles.listCard]}>
               <SectionTitle color="#0EA5E9" title="Career Highlights" />
-              <MoreRow icon="briefcase-outline" title="Experience" onPress={() => setActiveOverviewSection("experience")} />
-              <MoreRow icon="globe-outline" title="Connect & Profiles" onPress={() => setActiveOverviewSection("social")} />
+              {isReadOnlyProfileView ? (
+                <View style={styles.readOnlyCareerStack}>
+                  <View
+                    style={[
+                      styles.readOnlyCareerPanel,
+                      { backgroundColor: palette.card, borderColor: palette.borderLight },
+                    ]}
+                  >
+                    <View style={styles.readOnlyCareerPanelHead}>
+                      <View style={styles.readOnlyCareerPanelIcon}>
+                        <Ionicons name="briefcase-outline" size={14} color="#0284C7" />
+                      </View>
+                      <T weight="semiBold" color={palette.text} style={styles.readOnlyCareerPanelTitle}>
+                        Experience
+                      </T>
+                    </View>
+                    {renderExperienceContent("inline")}
+                  </View>
+
+                  <View
+                    style={[
+                      styles.readOnlyCareerPanel,
+                      { backgroundColor: palette.card, borderColor: palette.borderLight },
+                    ]}
+                  >
+                    <View style={styles.readOnlyCareerPanelHead}>
+                      <View style={styles.readOnlyCareerPanelIconAlt}>
+                        <Ionicons name="globe-outline" size={14} color="#2563EB" />
+                      </View>
+                      <T weight="semiBold" color={palette.text} style={styles.readOnlyCareerPanelTitle}>
+                        Connect &amp; Profiles
+                      </T>
+                    </View>
+                    {renderSocialContent("inline")}
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <MoreRow icon="briefcase-outline" title="Experience" onPress={() => setActiveOverviewSection("experience")} />
+                  <MoreRow icon="globe-outline" title="Connect & Profiles" onPress={() => setActiveOverviewSection("social")} />
+                </>
+              )}
             </SurfaceCard>
           </View>
 
@@ -924,9 +1559,91 @@ const styles = StyleSheet.create({
     paddingBottom: 5,
     gap: 0,
   },
+  readOnlySectionCard: {
+    paddingTop: 6,
+    paddingBottom: 10,
+    gap: 0,
+  },
   sectionStack: {
     marginTop: 0,
     gap: 6,
+  },
+  readOnlyCareerStack: {
+    marginTop: 4,
+    gap: 10,
+  },
+  readOnlyCareerPanel: {
+    padding: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    gap: 8,
+  },
+  readOnlyCareerPanelHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  readOnlyCareerPanelIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(14, 165, 233, 0.14)",
+  },
+  readOnlyCareerPanelIconAlt: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(37, 99, 235, 0.12)",
+  },
+  readOnlyCareerPanelTitle: {
+    fontSize: 12.5,
+    lineHeight: 16,
+    letterSpacing: 0.2,
+  },
+  readOnlyExperienceList: {
+    gap: 8,
+  },
+  readOnlyEmptyText: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  readOnlyPersonalSummary: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  readOnlyPersonalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  readOnlyPersonalItem: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderRadius: 10,
+    minHeight: 32,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  readOnlyPersonalItemText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10.8,
+    lineHeight: 14,
+  },
+  readOnlyHintText: {
+    marginTop: 2,
+    fontSize: 10.5,
+    lineHeight: 14,
   },
   detailRow: {
     minHeight: 38,
@@ -967,6 +1684,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "rgba(0,0,0,0.05)",
   },
+  inlineWorkCard: {
+    borderBottomWidth: 0,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
   workIconWrap: {
     width: 42,
     height: 42,
@@ -976,8 +1700,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(59, 130, 246, 0.2)",
   },
+  inlineWorkIconWrap: {
+    width: 38,
+    height: 38,
+  },
   workRole: {
     fontSize: 12,
+    lineHeight: 16,
+  },
+  inlineWorkRole: {
+    fontSize: 12.5,
     lineHeight: 16,
   },
   workCompany: {
@@ -985,16 +1717,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
   },
+  inlineWorkCompany: {
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
   workDescription: {
     marginTop: 4,
     fontSize: 11,
     lineHeight: 15,
+  },
+  inlineWorkDescription: {
+    marginTop: 3,
+    lineHeight: 14,
   },
   workMetaRow: {
     marginTop: 5,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  inlineWorkMetaRow: {
+    marginTop: 6,
   },
   currentTag: {
     borderRadius: 999,
@@ -1017,6 +1760,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     marginBottom: 8,
+  },
+  readOnlyIdeaList: {
+    gap: 8,
+  },
+  readOnlyIdeaCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  readOnlyIdeaHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  readOnlyIdeaIndex: {
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.35,
+    textTransform: "uppercase",
+  },
+  readOnlyIdeaText: {
+    fontSize: 11.5,
+    lineHeight: 16,
+  },
+  readOnlyIdeaLink: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(217, 119, 6, 0.32)",
+    backgroundColor: "rgba(217, 119, 6, 0.08)",
+    paddingHorizontal: 10,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  readOnlyIdeaLinkText: {
+    fontSize: 10.5,
+    lineHeight: 13,
   },
   ideaHead: {
     flexDirection: "row",
@@ -1076,6 +1859,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
   },
+  readOnlySocialList: {
+    gap: 8,
+  },
+  readOnlySocialRow: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  readOnlySocialIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(37, 99, 235, 0.12)",
+  },
+  readOnlySocialText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  readOnlySocialTitle: {
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  readOnlySocialUrl: {
+    marginTop: 1,
+    fontSize: 10.5,
+    lineHeight: 14,
+  },
   moreRow: {
     minHeight: 38,
     flexDirection: "row",
@@ -1128,5 +1945,254 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(226, 55, 68, 0.06)",
     borderWidth: 1,
     borderColor: "rgba(226, 55, 68, 0.2)",
+  },
+  previewScreen: {
+    flex: 1,
+  },
+  previewHeader: {
+    paddingTop: 54,
+    paddingBottom: 14,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+  },
+  previewHeaderButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewHeaderTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  previewContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 16,
+  },
+  previewHeroCard: {
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  previewAvatarRing: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    borderWidth: 3,
+    borderColor: "#DC2626",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(148, 163, 184, 0.1)",
+  },
+  previewStatusDot: {
+    position: "absolute",
+    right: 3,
+    bottom: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#22C55E",
+    borderWidth: 2,
+  },
+  previewName: {
+    marginTop: 16,
+    fontSize: 36,
+    lineHeight: 42,
+    letterSpacing: -0.6,
+    textAlign: "center",
+  },
+  previewHeadline: {
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  previewBadgeRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  previewFounderBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewAvailabilityBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  previewActionRow: {
+    marginTop: 20,
+    width: "100%",
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 4,
+  },
+  previewPrimaryAction: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 26,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 24,
+  },
+  previewSecondaryAction: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 24,
+  },
+  previewSecondaryActionDisabled: {
+    borderColor: "rgba(100, 116, 139, 0.24)",
+    backgroundColor: "rgba(15, 23, 42, 0.2)",
+    opacity: 0.4,
+  },
+  previewActionText: {
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 0.3,
+  },
+  previewSectionWrap: {
+    gap: 8,
+  },
+  previewSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  previewSectionAccent: {
+    width: 4,
+    height: 16,
+    borderRadius: 8,
+  },
+  previewSectionTitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  previewCardWrap: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 10,
+  },
+  previewDetailRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  previewDetailChip: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  previewDetailText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  previewPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  previewPanelIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewPanelTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  previewPanelEmpty: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  previewPanelLine: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  previewPanelMeta: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  previewSocialRow: {
+    marginTop: 8,
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  previewSocialIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(59, 130, 246, 0.18)",
+  },
+  previewSocialText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  previewSocialTitle: {
+    fontSize: 11.5,
+    lineHeight: 14,
+  },
+  previewSocialMeta: {
+    marginTop: 1,
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  previewBottomSpacer: {
+    height: 22,
   },
 });

@@ -480,7 +480,7 @@ export default function FreelancerSendProposalScreen() {
               style={[styles.input, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
             />
             {submitAttempted && formErrors.price ? (
-              <T weight="regular" color="#FF3B30" style={styles.errorText}>
+              <T weight="regular" color="#CF2030" style={styles.errorText}>
                 {formErrors.price}
               </T>
             ) : null}
@@ -534,7 +534,7 @@ export default function FreelancerSendProposalScreen() {
               style={[styles.input, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
             />
             {submitAttempted && formErrors.timeline ? (
-              <T weight="regular" color="#FF3B30" style={styles.errorText}>
+              <T weight="regular" color="#CF2030" style={styles.errorText}>
                 {formErrors.timeline}
               </T>
             ) : null}
@@ -573,7 +573,7 @@ export default function FreelancerSendProposalScreen() {
               style={[styles.input, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
             />
             {submitAttempted && formErrors.availability ? (
-              <T weight="regular" color="#FF3B30" style={styles.errorText}>
+              <T weight="regular" color="#CF2030" style={styles.errorText}>
                 {formErrors.availability}
               </T>
             ) : null}
@@ -621,7 +621,7 @@ export default function FreelancerSendProposalScreen() {
               </T>
             </View>
             {submitAttempted && formErrors.coverNote ? (
-              <T weight="regular" color="#FF3B30" style={styles.errorText}>
+              <T weight="regular" color="#CF2030" style={styles.errorText}>
                 {formErrors.coverNote}
               </T>
             ) : null}
@@ -644,7 +644,7 @@ export default function FreelancerSendProposalScreen() {
               style={[styles.input, { borderColor: palette.borderLight, color: palette.text, backgroundColor: palette.surface }]}
             />
             {submitAttempted && formErrors.portfolioLink ? (
-              <T weight="regular" color="#FF3B30" style={styles.errorText}>
+              <T weight="regular" color="#CF2030" style={styles.errorText}>
                 {formErrors.portfolioLink}
               </T>
             ) : null}
@@ -694,7 +694,7 @@ export default function FreelancerSendProposalScreen() {
                 </View>
               ))}
               {submitAttempted && formErrors.screening ? (
-                <T weight="regular" color="#FF3B30" style={styles.errorText}>
+                <T weight="regular" color="#CF2030" style={styles.errorText}>
                   {formErrors.screening}
                 </T>
               ) : null}

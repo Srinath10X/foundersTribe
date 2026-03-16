@@ -60,7 +60,7 @@ export default function TalentGigDetailsScreen() {
     if (error || !gig) {
       return (
         <View style={styles.centerContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#FF3B30" />
+          <Ionicons name="alert-circle-outline" size={48} color="#CF2030" />
           <T weight="bold" color={palette.text} style={{ marginTop: 16, fontSize: 18 }}>Error Loading Gig</T>
           <T color={palette.subText} style={{ marginTop: 8, textAlign: "center", paddingHorizontal: 32 }}>{error || "Gig not found"}</T>
           <PrimaryButton label="Go Back" onPress={nav.back} style={{ marginTop: 24, paddingHorizontal: 32 }} />

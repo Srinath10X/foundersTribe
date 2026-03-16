@@ -47,7 +47,7 @@ const VISIBLE_CARDS = 3;
 const PEEK_STRIP = 0;
 const FRONT_TOP = 0;
 const STACK_SCALE_STEP = 0;
-const CARD_HEIGHT_RATIO = 0.86;
+const CARD_HEIGHT_RATIO = 0.9;
 
 /* ── swipe physics ───────────────────────────────────── */
 const SWIPE_THRESHOLD = SCREEN_W * 0.25;
@@ -183,6 +183,8 @@ const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ ca
   );
 });
 
+SwipeableCardItem.displayName = "SwipeableCardItem";
+
 export default function FindCofounderTab() {
   const { theme } = useTheme();
   const router = useRouter();
@@ -232,7 +234,10 @@ export default function FindCofounderTab() {
   }, [swipeMutation]);
 
   const handleViewProfile = useCallback((candidate: FounderCandidate) => {
-    router.push(`/freelancer-stack/founder-profile?id=${encodeURIComponent(candidate.id)}&compact=1`);
+    router.push({
+      pathname: "/(role-pager)/(founder-tabs)/founder-profile" as any,
+      params: { id: candidate.id, compact: "1" },
+    });
   }, [router]);
 
   const handleConnect = useCallback((candidate: FounderCandidate) => {

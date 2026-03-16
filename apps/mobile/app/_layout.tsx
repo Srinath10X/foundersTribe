@@ -1,7 +1,5 @@
 import { registerGlobals } from "@livekit/react-native";
 
-registerGlobals();
-
 import {
   DarkTheme,
   ThemeProvider as NavigationThemeProvider,
@@ -11,17 +9,6 @@ import { LogBox, Platform } from "react-native";
 import "react-native-reanimated";
 import "react-native-get-random-values";
 import { TextEncoder, TextDecoder } from "text-encoding";
-
-// Polyfills
-registerGlobals();
-
-if (typeof global.TextEncoder === "undefined") {
-  global.TextEncoder = TextEncoder;
-}
-
-if (typeof global.TextDecoder === "undefined") {
-  global.TextDecoder = TextDecoder;
-}
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
@@ -52,6 +39,11 @@ import {
   useFonts as usePoppinsFonts,
 } from "@expo-google-fonts/poppins";
 import {
+  Inter_400Regular,
+  Inter_700Bold,
+  useFonts as useInterFonts,
+} from "@expo-google-fonts/inter";
+import {
   QueryClient,
   QueryClientProvider,
   useQueryClient,
@@ -62,6 +54,21 @@ import {
   restorePersistedQueryCache,
   subscribePersistedQueryCache,
 } from "@/lib/queryCachePersistence";
+
+import * as SystemUI from "expo-system-ui";
+
+registerGlobals();
+
+// Polyfills
+registerGlobals();
+
+if (typeof global.TextEncoder === "undefined") {
+  global.TextEncoder = TextEncoder;
+}
+
+if (typeof global.TextDecoder === "undefined") {
+  global.TextDecoder = TextDecoder;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,8 +86,6 @@ const queryClient = new QueryClient({
 });
 
 SplashScreen.preventAutoHideAsync();
-
-import * as SystemUI from "expo-system-ui";
 
 // Custom Deep Black Theme
 const BlackTheme = {
@@ -162,7 +167,12 @@ function RootLayoutNav() {
     Poppins_700Bold,
   });
 
-  const fontsLoaded = playfairLoaded && bricolageLoaded && poppinsLoaded;
+  const [interLoaded] = useInterFonts({
+    Inter_400Regular,
+    Inter_700Bold,
+  });
+
+  const fontsLoaded = playfairLoaded && bricolageLoaded && poppinsLoaded && interLoaded;
 
   useEffect(() => {
     // Set root view background to prevent white flash
