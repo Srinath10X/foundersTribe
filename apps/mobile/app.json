@@ -14,7 +14,8 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
-      "icon": "./assets/images/play_store_512.png"
+      "icon": "./assets/images/play_store_512.png",
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {

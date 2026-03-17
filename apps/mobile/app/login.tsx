@@ -6,11 +6,12 @@
 import { Colors, Layout, Spacing } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
+import { signInWithApple } from "@/lib/appleAuth";
 import { Ionicons } from "@expo/vector-icons";
 import * as Linking from "expo-linking";
 import { Stack, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -23,15 +24,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as AppleAuthentication from "expo-apple-authentication";
 import Animated, { FadeInUp } from "react-native-reanimated";
 
-// Completes the OAuth flow on web
 WebBrowser.maybeCompleteAuthSession();
 
 export default function Login() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
-  const [isLogin, setIsLogin] = useState(true); // Toggle logic
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -39,12 +40,26 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      WebBrowser.warmUpAsync();
+      return () => {
+        WebBrowser.coolDownAsync();
+      };
+    }
+  }, []);
+
   const performOAuth = async (provider: "google" | "apple") => {
     setLoading(true);
     setErrorMsg("");
     const redirectUrl = Linking.createURL("/");
 
     try {
+      // Dismiss any lingering browser session before starting a new one
+      if (Platform.OS === "ios") {
+        WebBrowser.dismissAuthSession();
+      }
+
       if (Platform.OS === "web") {
         const { error } = await supabase.auth.signInWithOAuth({
           provider,
@@ -107,6 +122,30 @@ export default function Login() {
         `Error: ${e.message}\n\nRedirect URL used:\n${redirectUrl}\n\nPlease add this URL to your Supabase Auth Redirect URLs.`,
       );
       console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNativeAppleSignIn = async () => {
+    setLoading(true);
+    setErrorMsg("");
+    try {
+      if (Platform.OS === "ios") {
+        const result = await signInWithApple();
+        if (result.success) {
+          router.replace("/(role-pager)/(founder-tabs)/community");
+          return;
+        }
+        if (result.error && result.error !== "Sign in was cancelled") {
+          setErrorMsg(`Native Apple Sign-In failed: ${result.error}. Trying web login...`);
+          await performOAuth("apple");
+          return;
+        }
+      }
+      await performOAuth("apple");
+    } catch (e: any) {
+      setErrorMsg(e.message);
     } finally {
       setLoading(false);
     }
@@ -219,28 +258,46 @@ export default function Login() {
                   </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[
-                    styles.socialBtn,
-                    {
-                      backgroundColor: theme.surface,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                  onPress={() => performOAuth("apple")}
-                  disabled={loading}
-                >
-                  <Ionicons
-                    name="logo-apple"
-                    size={24}
-                    color={theme.text.primary}
-                  />
-                  <Text
-                    style={[styles.socialText, { color: theme.text.primary }]}
+                {Platform.OS === "ios" ? (
+                  <View style={styles.appleButtonWrapper}>
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={
+                        AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                      }
+                      buttonStyle={
+                        isDark
+                          ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                          : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                      }
+                      cornerRadius={Layout.radius.md}
+                      style={styles.appleNativeButton}
+                      onPress={handleNativeAppleSignIn}
+                    />
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.socialBtn,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                    onPress={() => performOAuth("apple")}
+                    disabled={loading}
                   >
-                    Continue with Apple
-                  </Text>
-                </TouchableOpacity>
+                    <Ionicons
+                      name="logo-apple"
+                      size={24}
+                      color={theme.text.primary}
+                    />
+                    <Text
+                      style={[styles.socialText, { color: theme.text.primary }]}
+                    >
+                      Continue with Apple
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <View style={styles.divider}>
@@ -436,6 +493,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: Spacing.md,
     borderWidth: 1,
+  },
+  appleButtonWrapper: {
+    borderRadius: Layout.radius.md,
+    overflow: "hidden",
+  },
+  appleNativeButton: {
+    height: 56,
+    width: "100%",
   },
   socialText: {
     fontWeight: "600",

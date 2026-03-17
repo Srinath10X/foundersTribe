@@ -242,8 +242,21 @@ function RootLayoutNav() {
       }
     } else {
       // 3. Handling Logged Out Users
-      if (inRolePager || inOnboarding) {
-        setTimeout(() => router.replace("/login"), 0);
+      // Only redirect if currently on a protected route
+      const segment = segments[0] || "";
+      const isProtectedRoute =
+        inRolePager ||
+        inOnboarding ||
+        segment === "freelancer-stack" ||
+        segment === "talent-stack" ||
+        segment === "edit-profile" ||
+        segment === "edit-interests" ||
+        segment === "my-services" ||
+        segment === "experience" ||
+        segment === "proof-of-work";
+
+      if (isProtectedRoute) {
+        setTimeout(() => router.replace("/login"), 100);
       }
     }
   }, [
