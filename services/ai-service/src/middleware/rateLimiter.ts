@@ -5,6 +5,7 @@ export const apiRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
 });
 
 /** Stricter limiter for AI chat (expensive LLM calls) */
@@ -13,6 +14,7 @@ export const chatRateLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   message: {
     error: {
       code: "rate_limited",

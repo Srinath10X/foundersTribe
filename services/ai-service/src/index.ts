@@ -10,6 +10,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 
 import healthRoutes from "./routes/health.js";
 import chatRoutes from "./routes/chat.js";
+import accountRoutes from "./routes/account.js";
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use("/api/health", healthRoutes);
  */
 app.use(authMiddleware);
 app.use("/api/ai", chatRoutes);
+app.use("/api/account", accountRoutes);
 
 /**
  * Global Error Handler (MUST BE LAST)

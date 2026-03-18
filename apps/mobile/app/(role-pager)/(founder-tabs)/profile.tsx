@@ -5,12 +5,14 @@ import React, { useCallback, useState } from "react";
 import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from "react-native";
 
 import AppearanceModal from "@/components/AppearanceModal";
+import DeleteAccountModal from "@/components/DeleteAccountModal";
 import ProfileOverviewSheet from "@/components/ProfileOverviewSheet";
 import StatusToggleSwitch from "@/components/StatusToggleSwitch";
 import { Avatar, FlowScreen, SurfaceCard, T, people, useFlowPalette } from "@/components/community/freelancerFlow/shared";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { useFounderConnections } from "@/hooks/useFounderConnections";
+import { deleteAccount } from "@/lib/groqAI";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -407,6 +409,7 @@ export default function FreelancerProfileScreen() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAppearanceModal, setShowAppearanceModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [availabilityEnabled, setAvailabilityEnabled] = useState(true);
   const [activeOverviewSection, setActiveOverviewSection] = useState<
     "personal" | "experience" | "ideas" | "social" | null
@@ -1079,6 +1082,30 @@ export default function FreelancerProfileScreen() {
               />
             </SurfaceCard>
           </View>
+
+          <View style={[styles.blockWrap, { marginTop: 8 }]}>
+            <SurfaceCard style={[styles.sectionCard, styles.listCard, { borderRadius: 16 }]}>
+              <MoreRow
+                icon="trash-outline"
+                title="Delete Account"
+                isLogout
+                onPress={() => setShowDeleteModal(true)}
+              />
+            </SurfaceCard>
+          </View>
+          <DeleteAccountModal
+            visible={showDeleteModal}
+            onClose={() => setShowDeleteModal(false)}
+            onDelete={async () => {
+              try {
+                await deleteAccount();
+                await supabase.auth.signOut();
+                router.replace("/login");
+              } catch (e: any) {
+                Alert.alert("Error", e?.message || "Failed to delete account");
+              }
+            }}
+          />
           <AppearanceModal
             visible={showAppearanceModal}
             onClose={() => setShowAppearanceModal(false)}

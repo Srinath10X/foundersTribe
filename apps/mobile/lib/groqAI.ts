@@ -111,6 +111,49 @@ export async function chatWithAI(
   return json.data as ChatMessage;
 }
 
+// ── Delete Account ──────────────────────────────────────────
+
+export async function deleteAccount(): Promise<void> {
+  if (!AI_SERVICE_URL) {
+    throw new Error(
+      "AI service URL not configured. Set EXPO_PUBLIC_AI_SERVICE_URL in .env",
+    );
+  }
+
+  const token = await getAuthToken();
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${AI_SERVICE_URL}/api/account`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    if (err.name === "AbortError") throw new Error("Request timed out");
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    let errorMessage = `Failed to delete account (${response.status})`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.error?.message || errorMessage;
+    } catch {
+      // not JSON
+    }
+    throw new Error(errorMessage);
+  }
+}
+
 // ── Cache Clear ─────────────────────────────────────────────
 
 export async function clearFreelancerCache(): Promise<void> {
