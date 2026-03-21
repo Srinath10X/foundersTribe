@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Linking, RefreshControl, ScrollView, StatusBar, StyleSheet, TouchableOpacity, View } from "react-native";
 
@@ -18,6 +18,7 @@ import { ErrorState } from "@/components/freelancer/ErrorState";
 import { LoadingState } from "@/components/freelancer/LoadingState";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
+import { gigService } from "@/lib/gigService";
 import { supabase } from "@/lib/supabase";
 import * as tribeApi from "@/lib/tribeApi";
 
@@ -236,6 +237,7 @@ export default function FounderProfileScreen({
   const { themeMode } = useTheme();
   const nav = useFlowNav();
   const router = useRouter();
+  const pathname = usePathname();
   const { session } = useAuth();
   const currentUserId = session?.user?.id || "";
   const params = useLocalSearchParams<{ id?: string | string[]; compact?: string | string[] }>();
@@ -392,15 +394,70 @@ export default function FounderProfileScreen({
       .slice(0, 3);
   })();
 
-  const onMessagePress = useCallback(() => {
-    const cleanPhone = String(profile?.contact || "").replace(/[^\d+]/g, "");
-    if (cleanPhone) {
-      Linking.openURL(`tel:${cleanPhone}`).catch(() => {});
+  const onMessagePress = useCallback(async () => {
+    const inFreelancerTabs = pathname.includes("/(role-pager)/(freelancer-tabs)/");
+    const threadBasePath = inFreelancerTabs
+      ? "/(role-pager)/(freelancer-tabs)"
+      : "/(role-pager)/(founder-tabs)";
+    const fallbackRoute = inFreelancerTabs
+      ? "/(role-pager)/(freelancer-tabs)/messages"
+      : "/(role-pager)/(founder-tabs)/connections";
+    const targetUserId = String(profile?.id || requestedProfileId || "").trim();
+    const viewerUserId = String(currentUserId || "").trim();
+
+    if (!targetUserId || !viewerUserId || targetUserId === viewerUserId) {
+      router.push(fallbackRoute as any);
       return;
     }
 
-    if (connectTargetUrl) openUrl(connectTargetUrl);
-  }, [connectTargetUrl, profile?.contact]);
+    const profileName = String(profile?.display_name || profile?.username || "Founder").trim() || "Founder";
+    const avatar = String(profile?.photo_url || profile?.avatar_url || "").trim();
+    const initialMessage = `Hi ${profileName}, I'd like to connect.`;
+
+    try {
+      const { items = [] } = await gigService.getServiceRequests({ limit: 100 });
+      const existing = items.find((request) => {
+        const founderId = String(request?.founder_id || "");
+        const freelancerId = String(request?.freelancer_id || "");
+        return (
+          (founderId === viewerUserId && freelancerId === targetUserId) ||
+          (founderId === targetUserId && freelancerId === viewerUserId)
+        );
+      });
+
+      let requestId = existing?.id;
+      if (!requestId) {
+        const request = await gigService.createServiceRequest({
+          freelancer_id: targetUserId,
+          message: initialMessage,
+        });
+        requestId = request?.id;
+      }
+
+      if (!requestId) {
+        router.push(fallbackRoute as any);
+        return;
+      }
+
+      router.push(
+        `${threadBasePath}/thread/${encodeURIComponent(requestId)}?threadKind=service&title=${encodeURIComponent(
+          profileName,
+        )}&avatar=${encodeURIComponent(avatar)}` as any,
+      );
+    } catch {
+      router.push(fallbackRoute as any);
+    }
+  }, [
+    currentUserId,
+    pathname,
+    profile?.avatar_url,
+    profile?.display_name,
+    profile?.id,
+    profile?.photo_url,
+    profile?.username,
+    requestedProfileId,
+    router,
+  ]);
 
   const onConnectPress = useCallback(() => {
     if (connectTargetUrl) openUrl(connectTargetUrl);
