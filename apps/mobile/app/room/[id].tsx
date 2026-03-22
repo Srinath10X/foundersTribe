@@ -942,18 +942,30 @@ export default function RoomScreen() {
 
     const card = (
       <View style={styles.participantCard}>
+        {/* Outer glow ring when speaking */}
+        {item.isSpeaking && (
+          <View
+            style={[
+              styles.speakingRing,
+              {
+                borderColor: theme.success,
+                shadowColor: theme.success,
+              },
+            ]}
+          />
+        )}
         <View
           style={[
             styles.participantAvatarLarge,
             { backgroundColor: theme.brand.primary + "18" },
             item.isSpeaking && {
               borderColor: theme.success,
-              borderWidth: 2.5,
+              borderWidth: 3,
               shadowColor: theme.success,
               shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.5,
-              shadowRadius: 8,
-              elevation: 6,
+              shadowOpacity: 0.8,
+              shadowRadius: 12,
+              elevation: 10,
             },
           ]}
         >
@@ -970,6 +982,7 @@ export default function RoomScreen() {
                   backgroundColor: item.isSpeaking
                     ? theme.success
                     : theme.text.muted,
+                  borderColor: isDark ? "#151517" : "#FFFFFF",
                 },
               ]}
             >
@@ -1725,6 +1738,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+  },
+  speakingRing: {
+    position: "absolute",
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 3,
+    top: -5,
+    left: 5,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    elevation: 8,
   },
   avatarInitialLarge: {
     fontSize: 20,
