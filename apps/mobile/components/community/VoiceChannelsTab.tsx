@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
   Image,
+  Share,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -220,6 +221,20 @@ export default function VoiceChannelsTab({
     router.push(`/room/${roomId}` as any);
   };
 
+  const handleShareRoom = useCallback(async (roomId: string, roomTitle: string) => {
+    try {
+      const deepLink = `appfounderstribe://room/${roomId}`;
+      const message = `Join "${roomTitle}" voice chat room: ${deepLink}`;
+      await Share.share({
+        message,
+        title: `Join ${roomTitle} Voice Chat`,
+        url: deepLink,
+      });
+    } catch (error) {
+      console.error("Error sharing room:", error);
+    }
+  }, []);
+
   const handleCreateRoom = async (roomName: string, isPublic: boolean) => {
     if (!authToken) return;
     try {
@@ -359,37 +374,60 @@ export default function VoiceChannelsTab({
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.joinBtn,
-              {
-                backgroundColor: isHost
-                  ? theme.surfaceElevated
-                  : theme.brand.primary,
-                borderWidth: isHost ? 1 : 0,
-                borderColor: theme.border,
-              },
-            ]}
-            onPress={() => handleJoinRoom(room.id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isHost ? "enter-outline" : "headset-outline"}
-              size={14}
-              color={isHost ? theme.text.primary : theme.text.inverse}
-              style={{ marginRight: 4 }}
-            />
-            <Text
+          <View style={styles.actionButtonsRow}>
+            <TouchableOpacity
+              style={[styles.shareBtn, { backgroundColor: theme.text.muted + "15" }]}
+              onPress={() => handleShareRoom(room.id, room.title)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="share-social-outline"
+                size={14}
+                color={theme.text.secondary}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.shareBtnText,
+                  { color: theme.text.secondary },
+                ]}
+              >
+                Share
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={[
-                styles.joinBtnText,
+                styles.joinBtn,
                 {
-                  color: isHost ? theme.text.primary : theme.text.inverse,
+                  backgroundColor: isHost
+                    ? theme.surfaceElevated
+                    : theme.brand.primary,
+                  borderWidth: isHost ? 1 : 0,
+                  borderColor: theme.border,
                 },
               ]}
+              onPress={() => handleJoinRoom(room.id)}
+              activeOpacity={0.8}
             >
-              {isHost ? "Rejoin" : "Tune In"}
-            </Text>
-          </TouchableOpacity>
+              <Ionicons
+                name={isHost ? "enter-outline" : "headset-outline"}
+                size={14}
+                color={isHost ? theme.text.primary : theme.text.inverse}
+                style={{ marginRight: 4 }}
+              />
+              <Text
+                style={[
+                  styles.joinBtnText,
+                  {
+                    color: isHost ? theme.text.primary : theme.text.inverse,
+                  },
+                ]}
+              >
+                {isHost ? "Rejoin" : "Tune In"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -739,6 +777,19 @@ const styles = StyleSheet.create({
     borderRadius: 16, // Smoother rounded shape
   },
   joinBtnText: { ...Typography.presets.bodySmall, fontWeight: "600" },
+  actionButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  shareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: 16,
+  },
+  shareBtnText: { ...Typography.presets.bodySmall, fontWeight: "500" },
 
   /* Empty / Error */
   emptyContainer: {

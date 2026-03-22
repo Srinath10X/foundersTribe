@@ -6,6 +6,9 @@ import {
   Room,
   RoomOptions,
   setLogLevel,
+  TrackPublishOptions,
+  AudioCaptureOptions,
+  AudioPreset,
 } from 'livekit-client';
 import { Socket } from 'socket.io-client';
 
@@ -85,6 +88,35 @@ export const createRoomViaSocket = (
 };
 
 /**
+ * Audio capture options for better microphone quality
+ * - autoGainControl: Automatically adjusts microphone gain
+ * - echoCancellation: Removes echo from speakers
+ * - noiseSuppression: Reduces background noise
+ */
+export const audioCaptureOptions: AudioCaptureOptions = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+
+/**
+ * Audio preset for high quality voice (32kbps)
+ */
+export const voiceHighQuality: AudioPreset = {
+  maxBitrate: 32000,
+};
+
+/**
+ * Audio publish options for high quality audio
+ * - dtx: Disable discontinuous transmission for consistent quality
+ * - audioPreset: Use high quality voice preset
+ */
+export const audioPublishOptions: TrackPublishOptions = {
+  dtx: false,
+  audioPreset: voiceHighQuality,
+};
+
+/**
  * Connect to a LiveKit room using the provided token.
  */
 export const connectToLiveKitRoom = async (
@@ -92,7 +124,15 @@ export const connectToLiveKitRoom = async (
   livekitUrl?: string,
   options?: RoomOptions,
 ): Promise<Room> => {
-  const room = new Room(options);
+  const roomOptions: RoomOptions = {
+    ...options,
+    // Enable audio auto gain control at room level
+    audioCaptureDefaults: audioCaptureOptions,
+    // Set default publish options for audio
+    publishDefaults: audioPublishOptions,
+  };
+  
+  const room = new Room(roomOptions);
   const url = livekitUrl || LIVEKIT_WS_URL;
 
   try {
@@ -128,11 +168,16 @@ export const getParticipantInfo = (participant: Participant): ParticipantInfo =>
 };
 
 /**
- * Toggle the local participant's microphone on/off.
+ * Toggle the local participant's microphone on/off with optimized audio settings.
  */
 export const toggleMic = async (localParticipant: LocalParticipant, enabled: boolean) => {
   try {
-    await localParticipant.setMicrophoneEnabled(enabled);
+    if (enabled) {
+      // Enable mic with audio capture options for better quality
+      await localParticipant.setMicrophoneEnabled(true, audioCaptureOptions);
+    } else {
+      await localParticipant.setMicrophoneEnabled(false);
+    }
   } catch (error) {
     console.error('Failed to toggle microphone:', error);
   }

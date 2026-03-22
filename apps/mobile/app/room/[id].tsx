@@ -11,6 +11,9 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Modal,
+  Share,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import {
   SafeAreaView,
@@ -96,7 +99,7 @@ export default function RoomScreen() {
   >("listener");
   const [roomTitle, setRoomTitle] = useState("Room");
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [isSpeakerMode, setIsSpeakerMode] = useState(true); // true = speaker, false = earpiece
   const [selectedParticipant, setSelectedParticipant] = useState<
     (ServerParticipant & { isSpeaking: boolean; isMicEnabled: boolean; displayName: string }) | null
   >(null);
@@ -105,7 +108,6 @@ export default function RoomScreen() {
   const socketRef = useRef<Socket | null>(null);
   const roomRef = useRef<Room | null>(null);
   const chatListRef = useRef<FlatList>(null);
-  const handRaiseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Flag to prevent the LiveKit ConnectionStateChanged handler from tearing
   // down the socket when we intentionally disconnect LiveKit for a token swap
   const isReconnectingLiveKitRef = useRef(false);
@@ -115,7 +117,37 @@ export default function RoomScreen() {
   const routerRef = useRef(router);
   // Guard to prevent concurrent mic toggles (causes duplicate track listener warning)
   const isMicTogglingRef = useRef(false);
+  // Guard to prevent concurrent audio mode changes
+  const isAudioModeChangingRef = useRef(false);
   useEffect(() => { routerRef.current = router; }, [router]);
+
+  // Helper: Set audio mode consistently with race condition protection
+  const setAudioMode = useCallback(async (useSpeaker: boolean) => {
+    if (isAudioModeChangingRef.current) return;
+    isAudioModeChangingRef.current = true;
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        playThroughEarpieceAndroid: !useSpeaker, // false = speaker, true = earpiece
+        staysActiveInBackground: true,
+      });
+    } catch (err) {
+      console.warn("[Room] Failed to set audio mode:", err);
+    } finally {
+      isAudioModeChangingRef.current = false;
+    }
+  }, []);
+
+  // Toggle between speaker and earpiece
+  const handleToggleSpeaker = useCallback(async () => {
+    const newSpeakerMode = !isSpeakerMode;
+    setIsSpeakerMode(newSpeakerMode);
+    await setAudioMode(newSpeakerMode);
+  }, [isSpeakerMode, setAudioMode]);
 
   const displayRole = (role: string) => {
     if (role === "listener") return "audience";
@@ -145,8 +177,20 @@ export default function RoomScreen() {
     if (socket?.connected && roomId) {
       socket.emit("leave_room", { roomId }, () => { });
     }
-    socket?.removeAllListeners();
+    
+    // Clean up local audio tracks before disconnecting
+    if (roomRef.current?.localParticipant) {
+      const localP = roomRef.current.localParticipant;
+      localP.trackPublications.forEach((publication: any) => {
+        if (publication.track) {
+          publication.track.stop();
+        }
+      });
+    }
+    
+    // Disconnect socket first, then remove listeners
     socket?.disconnect();
+    socket?.removeAllListeners();
     socketRef.current = null;
     isReconnectingLiveKitRef.current = true; // prevent ConnectionStateChanged from double-navigating
     roomRef.current?.disconnect();
@@ -155,27 +199,45 @@ export default function RoomScreen() {
     // roomId is the only real dep — routerRef is stable
   }, [roomId]);
 
+  const handleShareRoom = useCallback(async () => {
+    if (!roomId) return;
+    try {
+      const deepLink = `appfounderstribe://room/${roomId}`;
+      const message = `Join "${roomTitle}" voice chat room: ${deepLink}`;
+      await Share.share({
+        message,
+        title: `Join ${roomTitle} Voice Chat`,
+        url: deepLink,
+      });
+    } catch (error) {
+      console.error("Error sharing room:", error);
+    }
+  }, [roomId, roomTitle]);
+
   // Helper: swap LiveKit connection with a new token without tearing down Socket.IO
   const reconnectLiveKit = useCallback(
     async (newToken: string, newRole: string, livekitUrl?: string) => {
       isReconnectingLiveKitRef.current = true;
       try {
-        roomRef.current?.disconnect();
-        // Ensure speaker preferred before reconnecting LiveKit
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-            playsInSilentModeIOS: true,
-            shouldDuckAndroid: true,
-            interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-            playThroughEarpieceAndroid: false,
-            staysActiveInBackground: true,
+        // Clean up local audio tracks before disconnecting
+        if (roomRef.current?.localParticipant) {
+          const localP = roomRef.current.localParticipant;
+          localP.trackPublications.forEach((publication: any) => {
+            if (publication.track) {
+              publication.track.stop();
+            }
           });
-          console.log("[Room] Audio mode set before LiveKit reconnect (speaker preferred)");
-        } catch (err) {
-          console.warn("[Room] Failed to set audio mode before reconnect:", err);
         }
+        
+        roomRef.current?.disconnect();
+        
+        // Ensure speaker preferred before reconnecting LiveKit
+        await setAudioMode(isSpeakerMode);
+        console.log("[Room] Audio mode set before LiveKit reconnect (speaker preferred)");
+        
+        // Small delay to ensure audio resources are released
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         const newRoom = await connectToLiveKitRoom(newToken, livekitUrl);
         setRoom(newRoom);
         roomRef.current = newRoom;
@@ -226,8 +288,20 @@ export default function RoomScreen() {
           "You have been disconnected from the room.",
         );
         activeRoomIdRef.current = null;
-        socketRef.current?.removeAllListeners();
+        
+        // Clean up local audio tracks
+        if (roomRef.current?.localParticipant) {
+          const localP = roomRef.current.localParticipant;
+          localP.trackPublications.forEach((publication: any) => {
+            if (publication.track) {
+              publication.track.stop();
+            }
+          });
+        }
+        
+        // Disconnect socket first, then remove listeners
         socketRef.current?.disconnect();
+        socketRef.current?.removeAllListeners();
         socketRef.current = null;
         roomRef.current = null;
         routerRef.current.replace("/(role-pager)/(founder-tabs)/community");
@@ -261,21 +335,8 @@ export default function RoomScreen() {
         console.log("[Room] Connecting socket to:", VOICE_API_URL);
 
         // Ensure audio routes to speaker by default where possible
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-            playsInSilentModeIOS: true,
-            shouldDuckAndroid: true,
-            interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-            // false = prefer speaker on Android (don't play through earpiece)
-            playThroughEarpieceAndroid: false,
-            staysActiveInBackground: true,
-          });
-          console.log("[Room] Audio mode set (speaker preferred)");
-        } catch (err) {
-          console.warn("[Room] Failed to set audio mode:", err);
-        }
+        await setAudioMode(isSpeakerMode);
+        console.log("[Room] Audio mode set (speaker preferred)");
 
         // 1. Connect Socket.IO
         socket = io(VOICE_API_URL, {
@@ -529,6 +590,12 @@ export default function RoomScreen() {
           console.log("[Room] Socket reconnected, restoring room state...");
           const currentRoomId = activeRoomIdRef.current;
           if (!currentRoomId || !socket?.connected) return;
+          
+          // Skip if we're already in the process of reconnecting LiveKit
+          if (isReconnectingLiveKitRef.current) {
+            console.log("[Room] Already reconnecting LiveKit, skipping duplicate reconnect");
+            return;
+          }
 
           // Use setChatMessages callback to get current messages without stale closure
           setChatMessages((currentMessages) => {
@@ -612,13 +679,56 @@ export default function RoomScreen() {
       cancelled = true;
       activeRoomIdRef.current = null;
       isReconnectingLiveKitRef.current = true;
+      
+      // Clean up local audio tracks before disconnecting LiveKit
+      if (roomRef.current?.localParticipant) {
+        const localP = roomRef.current.localParticipant;
+        // Stop all local tracks explicitly using trackPublications
+        localP.trackPublications.forEach((publication: any) => {
+          if (publication.track) {
+            publication.track.stop();
+          }
+        });
+      }
+      
       roomRef.current?.disconnect();
       roomRef.current = null;
-      socketRef.current?.removeAllListeners();
+      
+      // Disconnect socket first, then remove listeners
       socketRef.current?.disconnect();
+      socketRef.current?.removeAllListeners();
       socketRef.current = null;
     };
   }, [roomId, authToken, currentUserId, attachLiveKitListeners, reconnectLiveKit]);
+
+  // Handle app state changes (background/foreground)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      console.log("[Room] App state changed to:", nextAppState);
+      
+      if (nextAppState === "active") {
+        // App came to foreground - ensure audio mode is set and socket is connected
+        setAudioMode(isSpeakerMode);
+        
+        // Check if socket needs reconnection
+        const socket = socketRef.current;
+        if (socket && !socket.connected && activeRoomIdRef.current) {
+          console.log("[Room] Socket disconnected in background, attempting reconnect...");
+          socket.connect();
+        }
+      } else if (nextAppState === "background" || nextAppState === "inactive") {
+        // App going to background - ensure audio keeps working
+        // Note: iOS may kill the app, so we rely on staysActiveInBackground: true
+        console.log("[Room] App going to background, audio should stay active");
+      }
+    };
+
+    const subscription = AppState.addEventListener("change", handleAppStateChange);
+    
+    return () => {
+      subscription.remove();
+    };
+  }, [setAudioMode, isSpeakerMode]);
 
   // Toggle mic
   const handleToggleMic = async () => {
@@ -635,20 +745,8 @@ export default function RoomScreen() {
     }
     isMicTogglingRef.current = true;
     const newState = !isMicEnabled;
-    try {
-      // Ensure speaker routing before enabling microphone
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: true,
-      });
-    } catch (err) {
-      console.warn("[Room] Failed to set audio mode before toggle:", err);
-    }
+    // Ensure audio routing is set before enabling microphone
+    await setAudioMode(isSpeakerMode);
     try {
       await toggleMic(room.localParticipant, newState);
       setIsMicEnabled(newState);
@@ -1135,35 +1233,15 @@ export default function RoomScreen() {
 
         {/* Spacer */}
         <View style={{ flex: 1 }} />
-
-        {/* Hand Raised Toast */}
-        {isHandRaised && (
-          <View
-            style={[
-              styles.handRaisedToast,
-              {
-                backgroundColor: theme.warning + "20",
-                borderColor: theme.warning + "40",
-              },
-            ]}
-          >
-            <Ionicons name="hand-left" size={16} color={theme.warning} />
-            <Text
-              style={[styles.handRaisedToastText, { color: theme.warning }]}
-            >
-              Hand Raised — the host has been notified
-            </Text>
-          </View>
-        )}
       </View>
 
-      {/* Bottom Controls Bar */}
       {/* Bottom Controls Bar */}
       <SafeAreaView style={styles.bottomControlsSafeArea} edges={["bottom"]}>
         <View
           style={[
             styles.bottomControlsBar,
             {
+              backgroundColor: isDark ? "rgba(21, 21, 23, 0.85)" : "rgba(255, 255, 255, 0.95)",
               ...Layout.shadows.md,
             },
           ]}
@@ -1180,15 +1258,15 @@ export default function RoomScreen() {
                 styles.controlButtonIcon,
                 {
                   backgroundColor: isMicEnabled
-                    ? "#FFFFFF"
-                    : theme.text.muted + "20",
+                    ? (isDark ? "#FFFFFF" : theme.brand.primary)
+                    : (isDark ? theme.text.muted + "20" : theme.surface),
                 },
               ]}
             >
               <Ionicons
                 name={isMicEnabled ? "mic" : "mic-off"}
                 size={22}
-                color={isMicEnabled ? "#1A1A1B" : theme.text.secondary}
+                color={isMicEnabled ? (isDark ? "#1A1A1B" : "#FFFFFF") : theme.text.secondary}
               />
             </View>
             <Text
@@ -1201,48 +1279,35 @@ export default function RoomScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Raise Hand */}
+          {/* Speaker/Earpiece Toggle */}
           <TouchableOpacity
             style={styles.controlButton}
-            onPress={() => {
-              if (handRaiseTimerRef.current) {
-                clearTimeout(handRaiseTimerRef.current);
-                handRaiseTimerRef.current = null;
-              }
-              const newState = !isHandRaised;
-              setIsHandRaised(newState);
-              if (newState) {
-                handRaiseTimerRef.current = setTimeout(() => {
-                  setIsHandRaised(false);
-                  handRaiseTimerRef.current = null;
-                }, 5000);
-              }
-            }}
+            onPress={handleToggleSpeaker}
             activeOpacity={0.7}
           >
             <View
               style={[
                 styles.controlButtonIcon,
                 {
-                  backgroundColor: isHandRaised
-                    ? theme.warning + "25"
-                    : theme.text.muted + "20",
+                  backgroundColor: isSpeakerMode
+                    ? (isDark ? "#FFFFFF" : theme.brand.primary)
+                    : (isDark ? theme.text.muted + "20" : theme.surface),
                 },
               ]}
             >
               <Ionicons
-                name={isHandRaised ? "hand-left" : "hand-left-outline"}
+                name={isSpeakerMode ? "volume-high" : "volume-low"}
                 size={22}
-                color={isHandRaised ? theme.warning : theme.text.secondary}
+                color={isSpeakerMode ? (isDark ? "#1A1A1B" : "#FFFFFF") : theme.text.secondary}
               />
             </View>
             <Text
               style={[
                 styles.controlButtonLabel,
-                { color: isHandRaised ? theme.warning : theme.text.secondary },
+                { color: theme.text.secondary },
               ]}
             >
-              {isHandRaised ? "Lower" : "Raise"}
+              {isSpeakerMode ? "Speaker" : "Earpiece"}
             </Text>
           </TouchableOpacity>
 
@@ -1255,7 +1320,7 @@ export default function RoomScreen() {
             <View
               style={[
                 styles.controlButtonIcon,
-                { backgroundColor: theme.text.muted + "20" },
+                { backgroundColor: isDark ? theme.text.muted + "20" : theme.surface },
               ]}
             >
               <Ionicons
@@ -1280,6 +1345,34 @@ export default function RoomScreen() {
               ]}
             >
               Chat
+            </Text>
+          </TouchableOpacity>
+
+          {/* Share */}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={handleShareRoom}
+            activeOpacity={0.7}
+          >
+            <View
+              style={[
+                styles.controlButtonIcon,
+                { backgroundColor: isDark ? theme.text.muted + "20" : theme.surface },
+              ]}
+            >
+              <Ionicons
+                name="share-social-outline"
+                size={22}
+                color={theme.text.secondary}
+              />
+            </View>
+            <Text
+              style={[
+                styles.controlButtonLabel,
+                { color: theme.text.secondary },
+              ]}
+            >
+              Share
             </Text>
           </TouchableOpacity>
 
@@ -1699,20 +1792,6 @@ const styles = StyleSheet.create({
     ...Typography.presets.caption,
     fontWeight: "700",
     textTransform: "capitalize",
-  },
-  // Hand Raised Toast
-  handRaisedToast: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Layout.radius.md,
-    borderWidth: 1,
-  },
-  handRaisedToastText: {
-    ...Typography.presets.bodySmall,
-    fontWeight: "600",
   },
   // Chat badge (on control button icon)
   chatBadge: {
