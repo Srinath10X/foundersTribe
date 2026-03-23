@@ -202,12 +202,12 @@ export default function RoomScreen() {
   const handleShareRoom = useCallback(async () => {
     if (!roomId) return;
     try {
-      const deepLink = `appfounderstribe://room/${roomId}`;
-      const message = `Join "${roomTitle}" voice chat room: ${deepLink}`;
+      const shareUrl = `https://founderstribe.in/room/${roomId}`;
+      const message = `Join "${roomTitle}" voice chat room: ${shareUrl}`;
       await Share.share({
         message,
         title: `Join ${roomTitle} Voice Chat`,
-        url: deepLink,
+        url: shareUrl,
       });
     } catch (error) {
       console.error("Error sharing room:", error);
