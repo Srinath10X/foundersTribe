@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.founderstribe.ai",
+      "sha256_cert_fingerprints": [
+        "AE:C2:7B:35:E9:80:AA:40:A6:74:7D:EF:A7:30:1B:3F:E4:AD:C5:34:16:54:95:B2:68:B7:A9:E1:A6:F8:35:90"
+      ]
+    }
+  }
+]
