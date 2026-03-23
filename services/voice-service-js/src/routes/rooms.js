@@ -10,9 +10,9 @@ export default function createRoomsRouter(io) {
 
   router.use(authMiddleware);
 
-  router.get("/get_all_available_rooms", async (_req, res, next) => {
+  router.get("/get_all_available_rooms", async (req, res, next) => {
     try {
-      const rooms = await roomService.getActiveRooms();
+      const rooms = await roomService.getActiveRooms(req.user.id);
       res.json({ rooms });
     } catch (err) {
       next(err);
@@ -29,8 +29,8 @@ export default function createRoomsRouter(io) {
 
         const result = await roomService.createRoom(userId, title, type);
 
-        // Broadcast room_created to all connected clients so community screens update in realtime
-        if (io) {
+        // Broadcast only public room creation to global lobby subscribers.
+        if (io && result.room.type === "public") {
           io.emit("room_created", {
             room: result.room,
             participant_count: 1,

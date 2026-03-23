@@ -37,10 +37,12 @@ export function registerSocketHandlers(io) {
         socket.join(result.room.id);
         await roomService.updateSocketId(user.id, result.room.id, socket.id);
 
-        io.emit("room_created", {
-          room: result.room,
-          participant_count: 1,
-        });
+        if (result.room.type === "public") {
+          io.emit("room_created", {
+            room: result.room,
+            participant_count: 1,
+          });
+        }
 
         success(cb, {
           room: result.room,

@@ -188,6 +188,23 @@ export class ParticipantRepository {
     return data || [];
   }
 
+  async getRoomIdsForUser(userId) {
+    const { data, error } = await supabase
+      .from("participants")
+      .select("room_id")
+      .eq("user_id", userId);
+
+    if (error) {
+      logger.error(
+        { error, userId },
+        "ParticipantRepository.getRoomIdsForUser failed",
+      );
+      throw new Error("Database error fetching participant rooms");
+    }
+
+    return (data || []).map((row) => row.room_id);
+  }
+
   async removeAllInRoom(roomId) {
     const { error } = await supabase
       .from("participants")

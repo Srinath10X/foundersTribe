@@ -115,11 +115,34 @@ export async function endRoom(userId, roomId) {
   logger.info({ roomId, userId }, "Room ended");
 }
 
-export async function getActiveRooms() {
+export async function getActiveRooms(userId) {
   const rooms = await roomRepository.getActiveRooms();
 
+  let visibleRooms = rooms;
+  if (userId) {
+    let participantRoomIds = new Set();
+    try {
+      const roomIds = await participantRepository.getRoomIdsForUser(userId);
+      participantRoomIds = new Set(roomIds);
+    } catch (err) {
+      logger.warn(
+        { err, userId },
+        "Falling back to host/public room visibility only",
+      );
+    }
+
+    visibleRooms = rooms.filter((room) => {
+      const isPrivateRoom = room.type === "private";
+      if (!isPrivateRoom) return true;
+
+      const isHost = room.host_id === userId;
+      const isParticipant = participantRoomIds.has(room.id);
+      return isHost || isParticipant;
+    });
+  }
+
   const roomsWithCounts = await Promise.all(
-    rooms.map(async (room) => {
+    visibleRooms.map(async (room) => {
       const count = await participantRepository.countConnected(room.id);
       return { ...room, participant_count: count };
     }),

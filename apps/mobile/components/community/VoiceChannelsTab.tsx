@@ -263,10 +263,9 @@ export default function VoiceChannelsTab({
 
   /* ── Derived data ───────────────────────────────────────── */
 
-  const publicRooms = rooms.filter((r) => r.type === "public");
-  const privateRooms = rooms.filter(
-    (r) => r.type === "private" || r.host_id === currentUserId,
-  );
+  const isPublicRoom = (room: RoomItem) => room.type === "public";
+  const publicRooms = rooms.filter(isPublicRoom);
+  const privateRooms = rooms.filter((room) => !isPublicRoom(room));
   const displayedRooms = activeTab === "public" ? publicRooms : privateRooms;
 
   const accentGlow = theme.brand.primary + "20";
