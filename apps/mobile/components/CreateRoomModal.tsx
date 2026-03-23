@@ -9,6 +9,8 @@ import {
   Switch,
   Alert,
   Platform,
+  KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
@@ -18,12 +20,14 @@ interface CreateRoomModalProps {
   isVisible: boolean;
   onClose: () => void;
   onCreate: (roomName: string, isPublic: boolean) => void;
+  isLoading?: boolean;
 }
 
 export default function CreateRoomModal({
   isVisible,
   onClose,
   onCreate,
+  isLoading = false,
 }: CreateRoomModalProps) {
   const { theme } = useTheme(); // Use theme for colors
   const [roomName, setRoomName] = useState('');
@@ -46,50 +50,72 @@ export default function CreateRoomModal({
       visible={isVisible}
       onRequestClose={onClose}
     >
-      <View style={styles.centeredView}>
-        <View style={[styles.modalView, { backgroundColor: theme.background }]}>
-          <View style={styles.modalHeader}>
-            <ThemedText type="subtitle" style={{ color: theme.text.primary }}>Create New Room</ThemedText>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={theme.text.secondary} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+      >
+        <View style={styles.centeredView}>
+          <View style={[styles.modalView, { backgroundColor: theme.background }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText type="subtitle" style={{ color: theme.text.primary }}>Create New Room</ThemedText>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton} disabled={isLoading}>
+                <Ionicons name="close" size={24} color={theme.text.secondary} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={[styles.input, {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+                color: theme.text.primary,
+              }]}
+              placeholder="Room Name"
+              placeholderTextColor={theme.text.muted}
+              value={roomName}
+              onChangeText={setRoomName}
+              editable={!isLoading}
+            />
+
+            <View style={styles.switchContainer}>
+              <ThemedText style={{ color: theme.text.primary }}>Public Room</ThemedText>
+              <Switch
+                onValueChange={setIsPublic}
+                value={isPublic}
+                trackColor={{ false: theme.text.muted, true: theme.brand.primary }}
+                thumbColor={Platform.OS === 'android' ? theme.background : ''} // Android thumb color
+                disabled={isLoading}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.createButton, 
+                { backgroundColor: theme.brand.primary },
+                isLoading && styles.createButtonDisabled
+              ]}
+              onPress={handleCreatePress}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator color="white" size="small" />
+                  <ThemedText type="defaultSemiBold" style={styles.createButtonText}>Creating...</ThemedText>
+                </View>
+              ) : (
+                <ThemedText type="defaultSemiBold" style={styles.createButtonText}>Create Room</ThemedText>
+              )}
             </TouchableOpacity>
           </View>
-
-          <TextInput
-            style={[styles.input, {
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
-              color: theme.text.primary,
-            }]}
-            placeholder="Room Name"
-            placeholderTextColor={theme.text.muted}
-            value={roomName}
-            onChangeText={setRoomName}
-          />
-
-          <View style={styles.switchContainer}>
-            <ThemedText style={{ color: theme.text.primary }}>Public Room</ThemedText>
-            <Switch
-              onValueChange={setIsPublic}
-              value={isPublic}
-              trackColor={{ false: theme.text.muted, true: theme.brand.primary }}
-              thumbColor={Platform.OS === 'android' ? theme.background : ''} // Android thumb color
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.createButton, { backgroundColor: theme.brand.primary }]}
-            onPress={handleCreatePress}
-          >
-            <ThemedText type="defaultSemiBold" style={styles.createButtonText}>Create Room</ThemedText>
-          </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   centeredView: {
     flex: 1,
     justifyContent: 'center',
@@ -149,9 +175,21 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 30,
     elevation: 2,
+    minWidth: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createButtonDisabled: {
+    opacity: 0.7,
   },
   createButtonText: {
     color: 'white', // Text color for buttons is usually white
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
 });

@@ -127,6 +127,7 @@ export default function VoiceChannelsTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalVisible, setCreateModalVisible] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   const currentUserId = session?.user?.id;
@@ -237,16 +238,20 @@ export default function VoiceChannelsTab({
 
   const handleCreateRoom = async (roomName: string, isPublic: boolean) => {
     if (!authToken) return;
+    setIsCreatingRoom(true);
     try {
       const result = await createRoomViaREST(
         roomName,
         isPublic ? "public" : "private",
         authToken,
       );
+      // Keep modal open briefly to show success, then navigate
       setCreateModalVisible(false);
+      setIsCreatingRoom(false);
       router.push(`/room/${result.room.id}` as any);
     } catch (err: any) {
       console.error("[VoiceChannels] Create room failed:", err.message);
+      setIsCreatingRoom(false);
     }
   };
 
@@ -647,8 +652,12 @@ export default function VoiceChannelsTab({
       {/* Create Room Modal */}
       <CreateRoomModal
         isVisible={isCreateModalVisible}
-        onClose={() => setCreateModalVisible(false)}
+        onClose={() => {
+          setCreateModalVisible(false);
+          setIsCreatingRoom(false);
+        }}
         onCreate={handleCreateRoom}
+        isLoading={isCreatingRoom}
       />
     </View>
   );
