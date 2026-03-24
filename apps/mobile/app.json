@@ -3,7 +3,7 @@
     "name": "Founders Tribe",
     "slug": "founders-tribe",
     "scheme": "appfounderstribe",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/logo-dark.png",
     "userInterfaceStyle": "automatic",
@@ -11,9 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.founderstribe.ai",
-      "associatedDomains": [
-        "applinks:founderstribe.in"
-      ],
+      "associatedDomains": ["applinks:founderstribe.in"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -36,10 +34,7 @@
               "pathPrefix": "/room"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
       "edgeToEdgeEnabled": true,
