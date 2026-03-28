@@ -157,6 +157,10 @@ export default function VoiceChannelsTab({
     socket.on(
       "room_created",
       (data: { room: RoomItem; participant_count: number }) => {
+        // Only add public rooms from broadcast — private rooms are
+        // fetched via getActiveRooms which applies access-control filtering.
+        if (data.room.type === "private") return;
+
         setRooms((prev) => {
           if (prev.some((r) => r.id === data.room.id)) return prev;
           return [

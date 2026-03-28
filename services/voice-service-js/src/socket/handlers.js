@@ -75,11 +75,19 @@ export function registerSocketHandlers(io) {
           participant: result.participant,
         });
 
-        // Broadcast updated participant count to everyone (including lobby)
-        io.emit("room_updated", {
-          roomId: data.roomId,
-          participant_count: roomState.participants.length,
-        });
+        // Broadcast updated participant count — only to the global lobby
+        // for public rooms; private rooms only notify in-room participants.
+        if (result.room.type === "public") {
+          io.emit("room_updated", {
+            roomId: data.roomId,
+            participant_count: roomState.participants.length,
+          });
+        } else {
+          io.to(data.roomId).emit("room_updated", {
+            roomId: data.roomId,
+            participant_count: roomState.participants.length,
+          });
+        }
 
         const { messages } = await chatService.getMessages(
           data.roomId,
@@ -108,6 +116,15 @@ export function registerSocketHandlers(io) {
         // Clear any active grace period before explicit leave
         await clearGracePeriod(user.id, data.roomId);
 
+        // Fetch room type before leaving so we can scope the broadcast
+        let roomType = "public";
+        try {
+          const preLeaveState = await roomService.getRoomState(data.roomId);
+          roomType = preLeaveState.room.type || "public";
+        } catch {
+          // Room may already be gone; default to public for cleanup broadcast
+        }
+
         await roomService.leaveRoom(user.id, data.roomId);
         socket.leave(data.roomId);
 
@@ -117,10 +134,15 @@ export function registerSocketHandlers(io) {
 
         try {
           const roomState = await roomService.getRoomState(data.roomId);
-          io.emit("room_updated", {
+          const updateEvent = {
             roomId: data.roomId,
             participant_count: roomState.participants.length,
-          });
+          };
+          if (roomType === "public") {
+            io.emit("room_updated", updateEvent);
+          } else {
+            io.to(data.roomId).emit("room_updated", updateEvent);
+          }
         } catch {
           // Room may have been destroyed by checkAndDestroyRoom
           io.emit("room_removed", { roomId: data.roomId });
@@ -450,6 +472,16 @@ export function registerSocketHandlers(io) {
               userId: user_id,
             });
 
+            // Capture room type before grace period fires so we can
+            // scope the broadcast appropriately.
+            let roomTypeForGrace = "public";
+            try {
+              const preState = await roomService.getRoomState(room_id);
+              roomTypeForGrace = preState.room.type || "public";
+            } catch {
+              // Room may already be gone
+            }
+
             await startGracePeriod(user_id, room_id, async () => {
               try {
                 await roomService.removeParticipant(user_id, room_id);
@@ -461,10 +493,15 @@ export function registerSocketHandlers(io) {
 
                 try {
                   const state = await roomService.getRoomState(room_id);
-                  io.emit("room_updated", {
+                  const updateEvent = {
                     roomId: room_id,
                     participant_count: state.participants.length,
-                  });
+                  };
+                  if (roomTypeForGrace === "public") {
+                    io.emit("room_updated", updateEvent);
+                  } else {
+                    io.to(room_id).emit("room_updated", updateEvent);
+                  }
                 } catch {
                   // Room may have been destroyed
                   io.emit("room_removed", { roomId: room_id });
