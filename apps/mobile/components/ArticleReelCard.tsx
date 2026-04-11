@@ -2,6 +2,7 @@ import { BAR_BOTTOM, BAR_HEIGHT } from "@/components/CustomTabBar";
 import { Layout } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { useArticleInteractions } from "@/hooks/useArticleInteractions";
+import { shareArticle } from "@/lib/articleShare";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
@@ -12,7 +13,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -117,12 +117,11 @@ export function ArticleReelCard({
       withSpring(1, { damping: 8 })
     );
     try {
-      const shareUrl = article["Article Link"];
-      await Share.share({
-        message: shareUrl
-          ? `${article.Title}\n\n${shareUrl}`
-          : `${article.Title}\n\nRead more on foundersTribe`,
-        url: shareUrl || undefined,
+      await shareArticle({
+        id: article.id,
+        title: article.Title,
+        imageUrl: article["Image URL"],
+        articleLink: article["Article Link"],
       });
     } catch (error) {
       console.error("Error sharing:", error);

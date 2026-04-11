@@ -8,11 +8,11 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   LayoutChangeEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -39,10 +39,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useCandidates, useSwipe } from "@/hooks/useFoundersMatching";
 import type { FounderCandidate, MatchInfo } from "@/types/founders";
 
-const { width: SCREEN_W } = Dimensions.get("window");
-
 /* ── layout constants ────────────────────────────────── */
-const CARD_W = SCREEN_W - 32;
+const CARD_HORIZONTAL_MARGIN = 32;
 const VISIBLE_CARDS = 3;
 const PEEK_STRIP = 0;
 const FRONT_TOP = 0;
@@ -50,7 +48,7 @@ const STACK_SCALE_STEP = 0;
 const CARD_HEIGHT_RATIO = 0.9;
 
 /* ── swipe physics ───────────────────────────────────── */
-const SWIPE_THRESHOLD = SCREEN_W * 0.25;
+const SWIPE_THRESHOLD_RATIO = 0.25;
 const VELOCITY_THRESHOLD = 650;
 const SNAP_SPRING = { damping: 18, stiffness: 200, mass: 0.7 };
 const FLYOUT_DURATION_MS = 180;
@@ -65,6 +63,9 @@ export interface SwipeableCardRef {
 interface SwipeableCardProps {
   candidate: FounderCandidate;
   cardH: number;
+  cardW: number;
+  screenW: number;
+  swipeThreshold: number;
   isFront: boolean;
   indexOffset: number; // 0 for front, 1 for second, etc.
   onSwipeComplete: (direction: "left" | "right", candidate: FounderCandidate) => void;
@@ -74,7 +75,7 @@ interface SwipeableCardProps {
   onMessage: (candidate: FounderCandidate) => void;
 }
 
-const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ candidate, cardH, isFront, indexOffset, onSwipeComplete, onViewProfile, onConnect, onPass, onMessage }, ref) => {
+const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ candidate, cardH, cardW, screenW, swipeThreshold, isFront, indexOffset, onSwipeComplete, onViewProfile, onConnect, onPass, onMessage }, ref) => {
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const isAnimating = useSharedValue(false);
@@ -86,13 +87,13 @@ const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ ca
   const triggerFlyOut = useCallback((direction: "left" | "right") => {
     if (isAnimating.value) return;
     isAnimating.value = true;
-    const targetX = direction === "right" ? SCREEN_W * 1.5 : -SCREEN_W * 1.5;
+    const targetX = direction === "right" ? screenW * 1.5 : -screenW * 1.5;
 
     translateX.value = withTiming(targetX, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.cubic) }, (finished) => {
       if (finished) runOnJS(complete)(direction);
     });
     translateY.value = withTiming(0, { duration: FLYOUT_DURATION_MS });
-  }, [translateX, translateY, complete, isAnimating]);
+  }, [translateX, translateY, complete, isAnimating, screenW]);
 
   useImperativeHandle(ref, () => ({
     flyOut: triggerFlyOut
@@ -110,18 +111,18 @@ const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ ca
       })
       .onEnd((e) => {
         if (isAnimating.value) return;
-        const flyRight = e.translationX > SWIPE_THRESHOLD || e.velocityX > VELOCITY_THRESHOLD;
-        const flyLeft = e.translationX < -SWIPE_THRESHOLD || e.velocityX < -VELOCITY_THRESHOLD;
+        const flyRight = e.translationX > swipeThreshold || e.velocityX > VELOCITY_THRESHOLD;
+        const flyLeft = e.translationX < -swipeThreshold || e.velocityX < -VELOCITY_THRESHOLD;
 
         if (flyRight) {
           isAnimating.value = true;
-          translateX.value = withTiming(SCREEN_W * 1.5, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.cubic) }, (f) => {
+          translateX.value = withTiming(screenW * 1.5, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.cubic) }, (f) => {
             if (f) runOnJS(complete)("right");
           });
           translateY.value = withTiming(e.translationY * 0.35, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.quad) });
         } else if (flyLeft) {
           isAnimating.value = true;
-          translateX.value = withTiming(-SCREEN_W * 1.5, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.cubic) }, (f) => {
+          translateX.value = withTiming(-screenW * 1.5, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.cubic) }, (f) => {
             if (f) runOnJS(complete)("left");
           });
           translateY.value = withTiming(e.translationY * 0.35, { duration: FLYOUT_DURATION_MS, easing: Easing.out(Easing.quad) });
@@ -130,12 +131,12 @@ const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ ca
           translateY.value = withSpring(0, SNAP_SPRING);
         }
       })
-    , [isFront, complete, translateX, translateY, isAnimating]);
+    , [isFront, complete, translateX, translateY, isAnimating, screenW, swipeThreshold]);
 
   const animStyle = useAnimatedStyle(() => {
     // If front card
     if (isFront) {
-      const rotate = interpolate(translateX.value, [-SCREEN_W * 0.6, 0, SCREEN_W * 0.6], [-8, 0, 8], Extrapolation.CLAMP);
+      const rotate = interpolate(translateX.value, [-screenW * 0.6, 0, screenW * 0.6], [-8, 0, 8], Extrapolation.CLAMP);
       return {
         transform: [
           { translateX: translateX.value },
@@ -171,7 +172,7 @@ const SwipeableCardItem = forwardRef<SwipeableCardRef, SwipeableCardProps>(({ ca
         <FounderCard
           candidate={candidate}
           cardHeight={cardH}
-          cardWidth={CARD_W}
+          cardWidth={cardW}
           onViewProfile={isFront ? () => onViewProfile(candidate) : undefined}
           onConnect={isFront ? () => onConnect(candidate) : undefined}
           onPass={isFront ? () => onPass(candidate) : undefined}
@@ -188,6 +189,9 @@ SwipeableCardItem.displayName = "SwipeableCardItem";
 export default function FindCofounderTab() {
   const { theme } = useTheme();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  const cardWidth = Math.max(280, screenWidth - CARD_HORIZONTAL_MARGIN);
+  const swipeThreshold = screenWidth * SWIPE_THRESHOLD_RATIO;
   const { session } = useAuth();
   const currentUserAvatar =
     (session?.user?.user_metadata?.photo_url as string) ||
@@ -263,6 +267,9 @@ export default function FindCofounderTab() {
             ref={isFront ? frontCardRef : null}
             candidate={candidate}
             cardH={cardH}
+            cardW={cardWidth}
+            screenW={screenWidth}
+            swipeThreshold={swipeThreshold}
             isFront={isFront}
             indexOffset={idx}
             onSwipeComplete={handleSwipeComplete}

@@ -1,7 +1,11 @@
 import { Colors, Spacing, Type } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-import { supabase } from "@/lib/supabase";
+import {
+  useCategories,
+  useUserInterests,
+  useSaveInterests,
+} from "@/hooks/useOnboarding";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -9,6 +13,7 @@ import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   ScrollView,
   StatusBar,
@@ -20,88 +25,35 @@ import {
 
 export default function EditInterests() {
   const router = useRouter();
-  const { user, refreshOnboardingStatus } = useAuth();
+  const { user } = useAuth();
   const { theme, isDark } = useTheme();
   const [selected, setSelected] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [categories, setCategories] = useState<
-    { id: string; label: string; image: string }[]
-  >([]);
 
+  const {
+    data: categories = [],
+    isLoading: loadingCategories,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories();
+
+  const {
+    data: existingInterests,
+    isLoading: loadingInterests,
+  } = useUserInterests(user?.id);
+
+  const saveInterestsMutation = useSaveInterests();
+
+  const loading = loadingCategories || loadingInterests;
+
+  // Preload existing interests when fetched
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    await Promise.all([fetchCategories(), fetchUserInterests()]);
-    setLoading(false);
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("Articles")
-        .select('Category, "Image URL"')
-        .not("Category", "is", null)
-        .order("Category");
-
-      if (error) throw error;
-
-      if (data) {
-        const categoryMap = new Map<string, string>();
-        data.forEach((item) => {
-          if (item.Category && !categoryMap.has(item.Category)) {
-            if (item["Image URL"]) {
-              categoryMap.set(item.Category, item["Image URL"]);
-            }
-          }
-        });
-
-        const fetchedCats = Array.from(categoryMap.entries()).map(
-          ([cat, img]) => ({
-            id: cat.toLowerCase().replace(/ /g, "_"),
-            label: cat,
-            image:
-              img ||
-              "https://images.unsplash.com/photo-1557683311-eac922347aa1",
-          }),
-        );
-
-        setCategories(fetchedCats);
-      }
-    } catch (e) {
-      console.error("Error fetching categories:", e);
+    if (existingInterests && existingInterests.length > 0 && selected.length === 0) {
+      setSelected(existingInterests);
     }
-  };
-
-  const fetchUserInterests = async () => {
-    try {
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from("user_interests")
-        .select("category")
-        .eq("user_id", user.id);
-
-      if (error) throw error;
-
-      if (data) {
-        // Normalize the categories from DB to match internal IDs for UI checks
-        const interests = data.map((item) =>
-          item.category.toLowerCase().replace(/ /g, "_"),
-        );
-        console.log("Fetched normalized interests:", interests);
-        setSelected(interests);
-      }
-    } catch (e) {
-      console.error("Error fetching user interests:", e);
-    }
-  };
+  }, [existingInterests]);
 
   const toggleInterest = (id: string) => {
     const normalizedId = id.toLowerCase().replace(/ /g, "_");
-    console.log("Toggling:", normalizedId, "Current selected:", selected);
 
     if (selected.includes(normalizedId)) {
       setSelected((prev) => prev.filter((i) => i !== normalizedId));
@@ -118,48 +70,20 @@ export default function EditInterests() {
   const handleSave = async () => {
     if (!user || selected.length < 3) return;
 
-    setSaving(true);
-
     try {
       const interestsData = selected.map((catId) => {
         const cat = categories.find((c) => c.id === catId);
-        return {
-          user_id: user.id,
-          category: cat ? cat.label : catId,
-        };
+        return { category: cat ? cat.label : catId };
       });
 
-      const deleteResult = await supabase
-        .from("user_interests")
-        .delete()
-        .eq("user_id", user.id);
-      if (deleteResult.error) {
-        console.error("DEBUG: Error deleting interests:", deleteResult.error);
-        throw deleteResult.error;
-      }
-
-      const insertResult = await supabase
-        .from("user_interests")
-        .insert(interestsData);
-      if (insertResult.error) {
-        console.error("DEBUG: Error inserting interests:", insertResult.error);
-        throw insertResult.error;
-      }
-
-      console.log("DEBUG: Interests updated successfully");
-      await refreshOnboardingStatus();
+      await saveInterestsMutation.mutateAsync(interestsData);
       router.back();
     } catch (error: any) {
-      console.error("Error saving interests:", error);
-
-      // Check for RLS/permission issues
       if (error?.code === "PGRST301" || error?.status === 403) {
-        alert("Permission denied. Please check your connection and try again.");
+        Alert.alert("Permission Denied", "Please check your connection and try again.");
       } else {
-        alert(`Failed to save: ${error?.message || "Unknown error"}`);
+        Alert.alert("Error", error?.message || "Failed to save interests");
       }
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -214,7 +138,31 @@ export default function EditInterests() {
         </View>
 
         {/* Categories Grid */}
-        {categories.length > 0 && (
+        {categoriesError ? (
+          <View style={styles.centeredMessage}>
+            <Ionicons name="cloud-offline-outline" size={48} color={theme.text.muted} />
+            <Text style={[styles.centeredText, { color: theme.text.secondary, marginTop: 12 }]}>
+              Could not load categories
+            </Text>
+            <TouchableOpacity
+              style={[styles.retryBtn, { borderColor: theme.brand.primary }]}
+              onPress={() => refetchCategories()}
+            >
+              <Ionicons name="refresh-outline" size={18} color={theme.brand.primary} />
+              <Text style={[styles.retryText, { color: theme.brand.primary }]}>Tap to retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : categories.length === 0 ? (
+          <View style={styles.centeredMessage}>
+            <Ionicons name="albums-outline" size={48} color={theme.text.muted} />
+            <Text style={[styles.centeredText, { color: theme.text.secondary, marginTop: 12 }]}>
+              No categories found
+            </Text>
+            <Text style={[styles.centeredSubtext, { color: theme.text.muted }]}>
+              Please check back later or contact support.
+            </Text>
+          </View>
+        ) : (
           <View style={styles.gridContainer}>
             {categories.map((item) => {
               const active = isSelected(item.id);
@@ -277,9 +225,9 @@ export default function EditInterests() {
             },
           ]}
           onPress={handleSave}
-          disabled={selected.length < 3 || saving}
+          disabled={selected.length < 3 || saveInterestsMutation.isPending}
         >
-          {saving ? (
+          {saveInterestsMutation.isPending ? (
             <ActivityIndicator color="white" />
           ) : (
             <>
@@ -417,5 +365,36 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 12,
     textAlign: "center",
+  },
+  centeredMessage: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: Spacing.xl,
+  },
+  centeredText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  centeredSubtext: {
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

@@ -71,110 +71,197 @@ export default function BookmarksScreen() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      console.log("[Bookmarks] user:", user?.id);
       if (!user) {
+        console.log("[Bookmarks] No user, returning empty");
         setBookmarkedArticles([]);
         return;
       }
 
-      let interactions: InteractionRow[] | null = null;
-      let interactionsError: any = null;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      // Primary shape
-      {
-        const result = await supabase
+      const NEWS_SERVICE_URL =
+        process.env.EXPO_PUBLIC_NEWS_SERVICE_URL || "http://192.168.0.19:3001";
+      console.log("[Bookmarks] API URL:", NEWS_SERVICE_URL);
+
+      // ─── 1. Get bookmarked article IDs via API (bypasses RLS) ──────────
+      let articleIds: (number | string)[] = [];
+
+      if (session?.access_token) {
+        try {
+          console.log("[Bookmarks] Calling user_bookmarked_articles API...");
+          const resp = await fetch(
+            `${NEWS_SERVICE_URL}/api/user_bookmarked_articles`,
+            {
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+                "Content-Type": "application/json",
+              },
+            },
+          );
+          console.log("[Bookmarks] API status:", resp.status);
+
+          if (resp.ok) {
+            const rows = await resp.json();
+            console.log("[Bookmarks] API rows count:", Array.isArray(rows) ? rows.length : "not array", "data:", JSON.stringify(rows?.slice(0, 3)));
+            if (Array.isArray(rows)) {
+              articleIds = Array.from(
+                new Set(
+                  rows
+                    .map((r: any) => r?.article_id)
+                    .filter(
+                      (id: any): id is number | string =>
+                        id !== null && id !== undefined,
+                    ),
+                ),
+              );
+              console.log("[Bookmarks] articleIds from API:", articleIds);
+            }
+          } else {
+            const errText = await resp.text().catch(() => "");
+            console.log("[Bookmarks] API error body:", errText);
+          }
+        } catch (e) {
+          console.error("[Bookmarks] API fetch failed:", e);
+        }
+      } else {
+        console.log("[Bookmarks] No access token available");
+      }
+
+      // ─── 2. Fallback: get bookmarked article IDs via Supabase ─────────
+      if (articleIds.length === 0) {
+        console.log("[Bookmarks] No articleIds from API, trying Supabase...");
+        let interactions: InteractionRow[] | null = null;
+
+        // Try ordered by updated_at
+        const r1 = await supabase
           .from("user_interactions")
           .select("article_id, updated_at")
           .eq("user_id", user.id)
           .eq("bookmarked", true)
           .order("updated_at", { ascending: false });
-        interactions = (result.data as InteractionRow[] | null) || null;
-        interactionsError = result.error;
-      }
+        interactions = (r1.data as InteractionRow[] | null) || null;
+        console.log("[Bookmarks] Supabase r1:", r1.data?.length, "error:", r1.error?.message);
 
-      // Fallback for schemas without updated_at
-      if (interactionsError) {
-        const fallback = await supabase
-          .from("user_interactions")
-          .select("article_id, created_at")
-          .eq("user_id", user.id)
-          .eq("bookmarked", true)
-          .order("created_at", { ascending: false });
-        interactions = (fallback.data as InteractionRow[] | null) || null;
-        interactionsError = fallback.error;
-      }
+        // Fallback: ordered by created_at
+        if (!interactions || interactions.length === 0) {
+          const r2 = await supabase
+            .from("user_interactions")
+            .select("article_id, created_at")
+            .eq("user_id", user.id)
+            .eq("bookmarked", true)
+            .order("created_at", { ascending: false });
+          interactions = (r2.data as InteractionRow[] | null) || null;
+          console.log("[Bookmarks] Supabase r2:", r2.data?.length, "error:", r2.error?.message);
+        }
 
-      // Last fallback: no timestamp ordering
-      if (interactionsError) {
-        const fallback = await supabase
-          .from("user_interactions")
-          .select("article_id")
-          .eq("user_id", user.id)
-          .eq("bookmarked", true);
-        interactions = (fallback.data as InteractionRow[] | null) || null;
-        interactionsError = fallback.error;
-      }
+        // Fallback: no ordering
+        if (!interactions || interactions.length === 0) {
+          const r3 = await supabase
+            .from("user_interactions")
+            .select("article_id")
+            .eq("user_id", user.id)
+            .eq("bookmarked", true);
+          interactions = (r3.data as InteractionRow[] | null) || null;
+          console.log("[Bookmarks] Supabase r3:", r3.data?.length, "error:", r3.error?.message);
+        }
 
-      if (interactionsError) {
-        console.error("Error fetching bookmark interactions:", interactionsError);
-        setBookmarkedArticles([]);
-        return;
-      }
-
-      if (!interactions || interactions.length === 0) {
-        setBookmarkedArticles([]);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
-      const articleIds = Array.from(
-        new Set(
-          interactions
-            .map((i) => i?.article_id)
-            .filter((id): id is number | string => id !== null && id !== undefined),
-        ),
-      );
-
-      if (articleIds.length === 0) {
-        setBookmarkedArticles([]);
-        return;
-      }
-
-      const articleSelect =
-        'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"';
-
-      // Try with raw ids first (works when db stores matching id type).
-      let { data: articles, error: articlesError } = await supabase
-        .from("Articles")
-        .select(articleSelect)
-        .in("id", articleIds);
-
-      // Fallback: if raw ids returned nothing, retry with numeric ids.
-      if ((!articles || articles.length === 0) && !articlesError) {
-        const numericIds = articleIds
-          .map((id) => Number(id))
-          .filter((id) => Number.isFinite(id));
-
-        if (numericIds.length > 0) {
-          const retry = await supabase
-            .from("Articles")
-            .select(articleSelect)
-            .in("id", numericIds);
-          articles = retry.data || [];
-          articlesError = retry.error;
+        if (interactions && interactions.length > 0) {
+          articleIds = Array.from(
+            new Set(
+              interactions
+                .map((i) => i?.article_id)
+                .filter(
+                  (id): id is number | string =>
+                    id !== null && id !== undefined,
+                ),
+            ),
+          );
+          console.log("[Bookmarks] articleIds from Supabase:", articleIds);
         }
       }
 
-      // Lowercase table/column fallback for environments with snake/lower-case schema.
-      if ((!articles || articles.length === 0) && !articlesError) {
+      console.log("[Bookmarks] Final articleIds count:", articleIds.length);
+      if (articleIds.length === 0) {
+        console.log("[Bookmarks] No bookmarks found, showing empty state");
+        setBookmarkedArticles([]);
+        return;
+      }
+
+      // ─── 3. Fetch full article data for each bookmarked ID ────────────
+      const fetchOneArticle = async (
+        id: number | string,
+      ): Promise<Article | null> => {
+        // Try API first
+        if (session?.access_token) {
+          try {
+            const resp = await fetch(
+              `${NEWS_SERVICE_URL}/api/article_by_id?article_id=${encodeURIComponent(String(id))}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${session.access_token}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+
+            if (resp.ok) {
+              const payload = await resp.json();
+              const row = Array.isArray(payload)
+                ? payload[0]
+                : Array.isArray(payload?.data)
+                  ? payload.data[0]
+                  : payload?.data || payload;
+
+              if (row && typeof row === "object") {
+                const articleId = Number(row.id);
+                if (Number.isFinite(articleId)) {
+                  return {
+                    id: articleId,
+                    Title: row.Title || row.title || "",
+                    Summary: row.Summary || row.summary || "",
+                    Content: row.Content || row.content || "",
+                    "Image URL":
+                      row["Image URL"] || row.image_url || null,
+                    "Article Link":
+                      row["Article Link"] || row.article_link || "",
+                    Category: row.Category || row.category || null,
+                    "Company Name":
+                      row["Company Name"] || row.company_name || null,
+                  };
+                }
+              }
+            }
+          } catch {
+            // fall through to Supabase
+          }
+        }
+
+        // Fallback: Supabase direct query
+        const articleSelect =
+          'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"';
+        const { data } = await supabase
+          .from("Articles")
+          .select(articleSelect)
+          .eq("id", id as any)
+          .maybeSingle();
+
+        if (data) return data as Article;
+
+        // Lowercase table fallback
         const lowerSelect =
           "id, title, summary, content, image_url, article_link, category, company_name";
-        const lower = await supabase
+        const { data: lowerData } = await supabase
           .from("articles")
           .select(lowerSelect)
-          .in("id", articleIds as any[]);
-        if (!lower.error && Array.isArray(lower.data) && lower.data.length > 0) {
-          articles = lower.data.map((row: any) => ({
+          .eq("id", id as any)
+          .maybeSingle();
+
+        if (lowerData) {
+          const row = lowerData as any;
+          return {
             id: Number(row.id),
             Title: row.title || "",
             Summary: row.summary || "",
@@ -183,39 +270,28 @@ export default function BookmarksScreen() {
             "Article Link": row.article_link || "",
             Category: row.category || null,
             "Company Name": row.company_name || null,
-          }));
+          };
         }
-      }
 
-      // Final fallback: fetch per-id in case mixed id types break IN query.
-      if ((!articles || articles.length === 0) && !articlesError) {
-        const fallbackRows = await Promise.all(
-          articleIds.map(async (id) => {
-            const { data } = await supabase
-              .from("Articles")
-              .select(articleSelect)
-              .eq("id", id as any)
-              .maybeSingle();
-            return data || null;
-          }),
-        );
-        articles = fallbackRows.filter((row): row is Article => Boolean(row));
-      }
+        return null;
+      };
 
-      if (articlesError) {
-        console.error("Error fetching bookmarked articles:", articlesError);
-        setBookmarkedArticles([]);
-        return;
-      }
+      const articles = (
+        await Promise.all(articleIds.map(fetchOneArticle))
+      ).filter((a): a is Article => a !== null);
 
-      if (articles && articles.length > 0) {
-        // Keep same order as saved interactions (latest first).
+      console.log("[Bookmarks] Resolved articles count:", articles.length);
+
+      if (articles.length > 0) {
+        // Keep same order as bookmarked interactions
         const orderMap = new Map(
-          articleIds.map((id, index) => [String(id), index]),
+          articleIds.map((id, idx) => [String(id), idx]),
         );
         const ordered = [...articles].sort((a, b) => {
-          const ai = orderMap.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER;
-          const bi = orderMap.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER;
+          const ai =
+            orderMap.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER;
+          const bi =
+            orderMap.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER;
           return ai - bi;
         });
         setBookmarkedArticles(ordered);

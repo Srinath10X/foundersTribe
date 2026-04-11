@@ -2,8 +2,12 @@ import { Spacing, Type } from "@/constants/DesignSystem";
 import { useAuth } from "@/context/AuthContext";
 import { useRole } from "@/context/RoleContext";
 import { useTheme } from "@/context/ThemeContext";
-import { supabase } from "@/lib/supabase";
-import * as tribeApi from "@/lib/tribeApi";
+import {
+  useCategories,
+  useMyProfile,
+  useUpdateProfile,
+  useSaveInterests,
+} from "@/hooks/useOnboarding";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -20,6 +24,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
@@ -61,27 +66,52 @@ const ROLE_OPTIONS: RoleOption[] = [
   },
 ];
 
+const withAlpha = (hex: string, alpha: number) => {
+  const normalized = hex.replace("#", "");
+  if (normalized.length !== 6) {
+    return `rgba(0,0,0,${alpha})`;
+  }
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return `rgba(0,0,0,${alpha})`;
+  }
+
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
 export default function Onboarding() {
   const router = useRouter();
-  const { user, session, refreshOnboardingStatus } = useAuth();
+  const { user, session } = useAuth();
   const { switchRole } = useRole();
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isCompactRoleLayout = windowWidth < 380 || windowHeight < 760;
 
   const token = session?.access_token || "";
+
+  // --- TanStack Query hooks ---
+  const {
+    data: categories = [],
+    isLoading: loadingCategories,
+    isError: categoriesError,
+    refetch: refetchCategories,
+  } = useCategories();
+
+  const { data: profileData } = useMyProfile(token);
+
+  const updateProfileMutation = useUpdateProfile(token);
+  const saveInterestsMutation = useSaveInterests();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selected, setSelected] = useState<string[]>([]);
   const [userType, setUserType] = useState<"founder" | "freelancer" | "both" | null>(
     null,
   );
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [savingInterests, setSavingInterests] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingRole, setSavingRole] = useState(false);
-  const [categories, setCategories] = useState<
-    { id: string; label: string; image: string }[]
-  >([]);
 
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
@@ -94,89 +124,48 @@ export default function Onboarding() {
     EMPTY_IDEA,
   ]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([EMPTY_LINK]);
+  const [profilePreloaded, setProfilePreloaded] = useState(false);
 
+  // Preload profile data from query result
   useEffect(() => {
-    fetchCategories();
-    preloadProfile();
-  }, []);
+    if (!profileData || profilePreloaded) return;
+    setProfilePreloaded(true);
 
-  const preloadProfile = async () => {
-    if (!token) return;
-    try {
-      const data = await tribeApi.getMyProfile(token);
-      setFullName(data.display_name || "");
-      setBio(data.bio || "");
-      setLinkedinUrl(data.linkedin_url || "");
-      setContact(data.contact || "");
-      setLocation(data.location || "");
-      setRole(data.role || "");
-      setCompletedGigs(Array.isArray(data.completed_gigs) ? data.completed_gigs : []);
-      setUserType(
-        typeof data.user_type === "string"
-          ? (data.user_type.toLowerCase() as "founder" | "freelancer" | "both")
-          : (data.user_type || null)
+    setFullName(profileData.display_name || "");
+    setBio(profileData.bio || "");
+    setLinkedinUrl(profileData.linkedin_url || "");
+    setContact(profileData.contact || "");
+    setLocation(profileData.location || "");
+    setRole(profileData.role || "");
+    setCompletedGigs(Array.isArray(profileData.completed_gigs) ? profileData.completed_gigs : []);
+    setUserType(
+      typeof profileData.user_type === "string"
+        ? (profileData.user_type.toLowerCase() as "founder" | "freelancer" | "both")
+        : (profileData.user_type || null)
+    );
+
+    if (Array.isArray(profileData.business_ideas) && profileData.business_ideas.length > 0) {
+      setBusinessIdeas(
+        profileData.business_ideas
+          .filter((idea: unknown) => typeof idea === "string")
+          .map((idea: string) => ({ idea })),
       );
-
-      if (Array.isArray(data.business_ideas) && data.business_ideas.length > 0) {
-        setBusinessIdeas(
-          data.business_ideas
-            .filter((idea: unknown) => typeof idea === "string")
-            .map((idea: string) => ({ idea })),
-        );
-      } else if (typeof data.business_idea === "string" && data.business_idea.trim()) {
-        setBusinessIdeas([{ idea: data.business_idea }]);
-      }
-
-      if (Array.isArray(data.social_links) && data.social_links.length > 0) {
-        setSocialLinks(
-          data.social_links
-            .filter((link: any) => link && typeof link.url === "string")
-            .map((link: any) => ({
-              platform: String(link.platform || ""),
-              url: String(link.url || ""),
-              label: String(link.label || ""),
-            })),
-        );
-      }
-    } catch (error) {
-      console.log("Onboarding profile preload skipped:", error);
+    } else if (typeof profileData.business_idea === "string" && profileData.business_idea.trim()) {
+      setBusinessIdeas([{ idea: profileData.business_idea }]);
     }
-  };
 
-  const fetchCategories = async () => {
-    setLoadingCategories(true);
-    try {
-      const { data, error } = await supabase
-        .from("Articles")
-        .select('Category, "Image URL"')
-        .not("Category", "is", null)
-        .order("Category");
-
-      if (error) throw error;
-
-      if (data) {
-        const categoryMap = new Map<string, string>();
-        data.forEach((item) => {
-          if (item.Category && !categoryMap.has(item.Category) && item["Image URL"]) {
-            categoryMap.set(item.Category, item["Image URL"]);
-          }
-        });
-
-        setCategories(
-          Array.from(categoryMap.entries()).map(([cat, img]) => ({
-            id: cat.toLowerCase().replace(/ /g, "_"),
-            label: cat,
-            image:
-              img || "https://images.unsplash.com/photo-1557683311-eac922347aa1",
+    if (Array.isArray(profileData.social_links) && profileData.social_links.length > 0) {
+      setSocialLinks(
+        profileData.social_links
+          .filter((link: any) => link && typeof link.url === "string")
+          .map((link: any) => ({
+            platform: String(link.platform || ""),
+            url: String(link.url || ""),
+            label: String(link.label || ""),
           })),
-        );
-      }
-    } catch (e) {
-      console.error("Error fetching categories:", e);
-    } finally {
-      setLoadingCategories(false);
+      );
     }
-  };
+  }, [profileData, profilePreloaded]);
 
   const normalizeUrl = (value: string) => {
     const trimmed = value.trim();
@@ -230,9 +219,8 @@ export default function Onboarding() {
 
   const saveProfileStepAndContinue = async () => {
     if (!token) return;
-    setSavingProfile(true);
     try {
-      await tribeApi.updateMyProfile(token, {
+      await updateProfileMutation.mutateAsync({
         display_name: fullName.trim() || undefined,
         bio: bio.trim() || null,
         linkedin_url: normalizeUrl(linkedinUrl) || null,
@@ -248,16 +236,13 @@ export default function Onboarding() {
       setStep(3);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save profile details");
-    } finally {
-      setSavingProfile(false);
     }
   };
 
   const saveRoleStepAndContinue = async () => {
     if (!token || !userType) return;
-    setSavingRole(true);
     try {
-      await tribeApi.updateMyProfile(token, {
+      await updateProfileMutation.mutateAsync({
         user_type: userType,
       });
       // Persist the selected role locally for navigation
@@ -265,8 +250,6 @@ export default function Onboarding() {
       setStep(2);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to save your role");
-    } finally {
-      setSavingRole(false);
     }
   };
 
@@ -284,23 +267,27 @@ export default function Onboarding() {
 
   const isSelected = (id: string) => selected.includes(id.toLowerCase().replace(/ /g, "_"));
 
+  const availableCategories = useMemo(
+    () =>
+      categories.filter((item) => {
+        const categoryId = typeof item.id === "string" ? item.id.trim() : "";
+        const categoryLabel = typeof item.label === "string" ? item.label.trim() : "";
+        return categoryId.length > 0 && categoryLabel.length > 0;
+      }),
+    [categories],
+  );
+
   const handleFinish = async () => {
     if (!user || selected.length < 3) return;
-    setSavingInterests(true);
 
     try {
       const interestsData = selected.map((catId) => {
         const cat = categories.find((c) => c.id === catId);
-        return { user_id: user.id, category: cat ? cat.label : catId };
+        return { category: cat ? cat.label : catId };
       });
 
-      const del = await supabase.from("user_interests").delete().eq("user_id", user.id);
-      if (del.error) throw del.error;
+      await saveInterestsMutation.mutateAsync(interestsData);
 
-      const ins = await supabase.from("user_interests").insert(interestsData);
-      if (ins.error) throw ins.error;
-
-      await refreshOnboardingStatus();
       const target =
         userType === "freelancer"
           ? "/(role-pager)/(freelancer-tabs)/dashboard"
@@ -308,22 +295,17 @@ export default function Onboarding() {
       setTimeout(() => router.replace(target), 300);
     } catch (error: any) {
       Alert.alert("Error", error?.message || "Failed to complete onboarding");
-    } finally {
-      setSavingInterests(false);
     }
   };
 
   const renderProfileStep = () => (
-    <KeyboardAvoidingView
-      style={styles.flex1}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 100 : 0}
-    >
     <ScrollView
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
+      contentInsetAdjustmentBehavior="always"
+      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
     >
       <Animated.View entering={FadeInUp.delay(100).duration(500)} style={styles.titleSection}>
         <Text style={[styles.mainTitle, { color: theme.text.primary }]}>Your Profile</Text>
@@ -483,7 +465,6 @@ export default function Onboarding() {
         ))}
       </View>
     </ScrollView>
-    </KeyboardAvoidingView>
   );
 
   const renderRoleStep = () => (
@@ -506,89 +487,112 @@ export default function Onboarding() {
 
       <View style={styles.roleGrid}>
         <Text style={[styles.roleHint, { color: theme.text.tertiary }]}>Choose one option to continue</Text>
-        <View
-          style={[
-            styles.roleSingleCard,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}
-        >
-          {ROLE_OPTIONS.map((option, index) => {
+        <View style={styles.roleOptionsList}>
+          {ROLE_OPTIONS.map((option) => {
             const active = userType === option.value;
+            const tone =
+              option.value === "founder"
+                ? theme.brand.primary
+                : option.value === "freelancer"
+                  ? theme.brand.secondary
+                  : theme.brand.tertiary;
+
+            const roleCardBackground = active
+              ? withAlpha(theme.brand.primary, isDark ? 0.14 : 0.08)
+              : theme.surface;
 
             return (
-              <View key={option.value}>
-                <TouchableOpacity
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.roleOptionCard,
+                  {
+                    borderColor: active ? theme.brand.primary : theme.border,
+                    backgroundColor: roleCardBackground,
+                  },
+                  isCompactRoleLayout && styles.roleOptionCardCompact,
+                ]}
+                onPress={() => setUserType(option.value)}
+                activeOpacity={0.9}
+              >
+                <View
                   style={[
-                    styles.roleOptionRow,
-                    active && { backgroundColor: theme.surfaceElevated },
+                    styles.roleIconCircleCompact,
+                    {
+                      backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
+                    },
+                    isCompactRoleLayout && styles.roleIconCircleCompactSmall,
                   ]}
-                  onPress={() => setUserType(option.value)}
-                  activeOpacity={0.85}
                 >
-                  <View
-                    style={[
-                      styles.roleIconCircleCompact,
-                      {
-                        backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={option.icon}
-                      size={20}
-                      color={active ? "#fff" : theme.text.secondary}
-                    />
-                  </View>
+                  <Ionicons
+                    name={option.icon}
+                    size={isCompactRoleLayout ? 18 : 20}
+                    color={active ? "#fff" : theme.text.secondary}
+                  />
+                </View>
 
-                  <View style={styles.roleOptionText}>
-                    <View style={styles.roleTitleRow}>
-                      <Text style={[styles.roleTitleCompact, { color: theme.text.primary }]}>
-                        {option.title}
-                      </Text>
-                      <View
+                <View style={styles.roleOptionText}>
+                  <View style={styles.roleTitleRow}>
+                    <Text
+                      style={[
+                        styles.roleTitleCompact,
+                        {
+                          color: theme.text.primary,
+                          fontSize: isCompactRoleLayout ? 17 : 18,
+                          lineHeight: isCompactRoleLayout ? 21 : 22,
+                        },
+                      ]}
+                    >
+                      {option.title}
+                    </Text>
+                    <View
+                      style={[
+                        styles.roleTag,
+                        {
+                          backgroundColor: active
+                            ? theme.brand.primary
+                            : withAlpha(tone, isDark ? 0.2 : 0.14),
+                        },
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.roleTag,
-                          {
-                            backgroundColor: active ? theme.brand.primary : theme.surfaceElevated,
-                          },
+                          styles.roleTagText,
+                          { color: active ? "#fff" : tone },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.roleTagText,
-                            { color: active ? "#fff" : theme.text.secondary },
-                          ]}
-                        >
-                          {option.tag}
-                        </Text>
-                      </View>
+                        {option.tag}
+                      </Text>
                     </View>
-                    <Text style={[styles.roleDescCompact, { color: theme.text.secondary }]}>
-                      {option.description}
-                    </Text>
                   </View>
 
-                  <View
+                  <Text
                     style={[
-                      styles.roleRadio,
-                      { borderColor: active ? theme.brand.primary : theme.border },
+                      styles.roleDescCompact,
+                      {
+                        color: theme.text.secondary,
+                        fontSize: isCompactRoleLayout ? 14 : 15,
+                        lineHeight: isCompactRoleLayout ? 20 : 22,
+                      },
                     ]}
+                    numberOfLines={isCompactRoleLayout ? 2 : 3}
                   >
-                    {active && (
-                      <View
-                        style={[
-                          styles.roleRadioDot,
-                          { backgroundColor: theme.brand.primary },
-                        ]}
-                      />
-                    )}
-                  </View>
-                </TouchableOpacity>
+                    {option.description}
+                  </Text>
+                </View>
 
-                {index < ROLE_OPTIONS.length - 1 && (
-                  <View style={[styles.roleDivider, { backgroundColor: theme.border }]} />
-                )}
-              </View>
+                <View
+                  style={[
+                    styles.roleRadio,
+                    {
+                      borderColor: active ? theme.brand.primary : theme.border,
+                      backgroundColor: active ? theme.brand.primary : "transparent",
+                    },
+                  ]}
+                >
+                  {active ? <Ionicons name="checkmark" size={12} color="#fff" /> : null}
+                </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -597,7 +601,10 @@ export default function Onboarding() {
   );
 
   const renderInterestStep = () => (
-    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={[styles.scrollContent, styles.interestScrollContent]}
+      showsVerticalScrollIndicator={false}
+    >
       <Animated.View entering={FadeInUp.delay(100).duration(500)} style={styles.titleSection}>
         <Text style={[styles.mainTitle, { color: theme.text.primary }]}>What interests you?</Text>
         <Text style={[styles.subtitle, { color: theme.text.secondary }]}>
@@ -606,13 +613,43 @@ export default function Onboarding() {
       </Animated.View>
 
       {loadingCategories ? (
-        <ActivityIndicator color={theme.brand.primary} />
+        <View style={styles.centeredMessage}>
+          <ActivityIndicator color={theme.brand.primary} size="large" />
+          <Text style={[styles.centeredText, { color: theme.text.secondary, marginTop: 12 }]}>
+            Loading categories...
+          </Text>
+        </View>
+      ) : categoriesError ? (
+        <View style={styles.centeredMessage}>
+          <Ionicons name="cloud-offline-outline" size={48} color={theme.text.muted} />
+          <Text style={[styles.centeredText, { color: theme.text.secondary, marginTop: 12 }]}>
+            Could not load categories
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryBtn, { borderColor: theme.brand.primary }]}
+            onPress={() => refetchCategories()}
+          >
+            <Ionicons name="refresh-outline" size={18} color={theme.brand.primary} />
+            <Text style={[styles.retryText, { color: theme.brand.primary }]}>Tap to retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : availableCategories.length === 0 ? (
+        <View style={styles.centeredMessage}>
+          <Ionicons name="albums-outline" size={48} color={theme.text.muted} />
+          <Text style={[styles.centeredText, { color: theme.text.secondary, marginTop: 12 }]}>
+            No categories found
+          </Text>
+          <Text style={[styles.centeredSubtext, { color: theme.text.muted }]}>
+            Please check back later or contact support.
+          </Text>
+        </View>
       ) : (
         <Animated.View entering={FadeInUp.delay(200).duration(500)} style={styles.moreSection}>
           <Text style={[styles.sectionHeader, { color: theme.text.tertiary }]}>ALL CATEGORIES</Text>
           <View style={styles.gridContainer}>
-            {categories.map((item) => {
+            {availableCategories.map((item) => {
               const active = isSelected(item.id);
+              const hasImage = typeof item.image === "string" && item.image.trim().length > 0;
               return (
                 <TouchableOpacity
                   key={item.id}
@@ -624,7 +661,19 @@ export default function Onboarding() {
                   onPress={() => toggleInterest(item.id)}
                   activeOpacity={0.9}
                 >
-                  <Image source={{ uri: item.image }} style={styles.cardImage} contentFit="cover" />
+                  {hasImage ? (
+                    <Image source={{ uri: item.image }} style={styles.cardImage} contentFit="cover" />
+                  ) : (
+                    <View
+                      style={[
+                        styles.cardImage,
+                        styles.cardImageFallback,
+                        { backgroundColor: theme.surfaceElevated },
+                      ]}
+                    >
+                      <Ionicons name="albums-outline" size={22} color={theme.text.muted} />
+                    </View>
+                  )}
                   <LinearGradient colors={["transparent", "rgba(0,0,0,0.9)"]} style={styles.cardGradient} />
                   <View style={styles.cardContent}>
                     <Text style={styles.cardLabel}>{item.label}</Text>
@@ -645,7 +694,11 @@ export default function Onboarding() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: theme.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top + 12 : 0}
+    >
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <Stack.Screen options={{ headerShown: false }} />
 
@@ -704,7 +757,7 @@ export default function Onboarding() {
             <TouchableOpacity
               style={[styles.skipBtn, { borderColor: theme.border }]}
               onPress={handleSkipRole}
-              disabled={savingRole}
+              disabled={updateProfileMutation.isPending}
             >
               <Text style={[styles.skipText, { color: theme.text.secondary }]}>
                 Skip
@@ -721,9 +774,9 @@ export default function Onboarding() {
                 },
               ]}
               onPress={saveRoleStepAndContinue}
-              disabled={savingRole || !userType}
+              disabled={updateProfileMutation.isPending || !userType}
             >
-              {savingRole ? (
+              {updateProfileMutation.isPending && step === 1 ? (
                 <ActivityIndicator color="white" />
               ) : (
                 <>
@@ -738,7 +791,7 @@ export default function Onboarding() {
             <TouchableOpacity
               style={[styles.skipBtn, { borderColor: theme.border }]}
               onPress={handleSkipProfile}
-              disabled={savingProfile}
+              disabled={updateProfileMutation.isPending}
             >
               <Text style={[styles.skipText, { color: theme.text.secondary }]}>
                 Skip
@@ -750,9 +803,9 @@ export default function Onboarding() {
                 { backgroundColor: theme.brand.primary, flex: 1, marginBottom: 0 },
               ]}
               onPress={saveProfileStepAndContinue}
-              disabled={savingProfile}
+              disabled={updateProfileMutation.isPending}
             >
-              {savingProfile ? (
+              {updateProfileMutation.isPending && step === 2 ? (
                 <ActivityIndicator color="white" />
               ) : (
                 <>
@@ -771,9 +824,9 @@ export default function Onboarding() {
                 selected.length < 3 && { backgroundColor: theme.border, opacity: 0.5 },
               ]}
               onPress={handleFinish}
-              disabled={selected.length < 3 || savingInterests}
+              disabled={selected.length < 3 || saveInterestsMutation.isPending}
             >
-              {savingInterests ? (
+              {saveInterestsMutation.isPending ? (
                 <ActivityIndicator color="white" />
               ) : (
                 <>
@@ -788,7 +841,7 @@ export default function Onboarding() {
           </>
         )}
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -810,6 +863,7 @@ const styles = StyleSheet.create({
   track: { height: 4, borderRadius: 2 },
   bar: { height: "100%", borderRadius: 2 },
   scrollContent: { paddingHorizontal: Spacing.xl, paddingBottom: 140 },
+  interestScrollContent: { flexGrow: 1 },
   titleSection: { marginBottom: Spacing.xl },
   mainTitle: { fontSize: 28, fontWeight: "700", marginBottom: Spacing.sm },
   subtitle: { fontSize: 15, lineHeight: 22 },
@@ -855,6 +909,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   cardImage: { width: "100%", height: "100%", opacity: 0.6 },
+  cardImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 1,
+  },
   cardGradient: { ...StyleSheet.absoluteFillObject },
   activeOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(37, 99, 235, 0.2)" },
   cardContent: { position: "absolute", bottom: Spacing.md, left: Spacing.md },
@@ -898,81 +957,115 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   roleGrid: {
-    gap: 10,
+    gap: 12,
     marginTop: Spacing.sm,
   },
   roleHint: {
     ...Type.label,
     fontSize: 11,
-    letterSpacing: 0.8,
-    marginBottom: 2,
+    letterSpacing: 0.9,
+    marginBottom: 4,
   },
-  roleSingleCard: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    overflow: "hidden",
+  roleOptionsList: {
+    gap: 10,
   },
-  roleOptionRow: {
+  roleOptionCard: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
+  roleOptionCardCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
   roleIconCircleCompact: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 13,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 2,
+    marginTop: 1,
+  },
+  roleIconCircleCompactSmall: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
   },
   roleOptionText: {
     flex: 1,
-    paddingRight: 10,
+    minWidth: 0,
+    paddingRight: 2,
   },
   roleTitleRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   roleTitleCompact: {
-    fontSize: 18,
     fontWeight: "700",
+    flexShrink: 1,
   },
   roleTag: {
     borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: "flex-start",
   },
   roleTagText: {
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: "700",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   roleDescCompact: {
-    fontSize: 13,
-    lineHeight: 19,
     opacity: 0.8,
   },
   roleRadio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.6,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
+    marginTop: 3,
+    marginLeft: 6,
+    flexShrink: 0,
   },
-  roleRadioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  centeredMessage: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: Spacing.xl,
   },
-  roleDivider: {
-    height: 1,
-    marginLeft: 70,
+  centeredText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  centeredSubtext: {
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

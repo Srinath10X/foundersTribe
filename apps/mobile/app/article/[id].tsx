@@ -1,5 +1,6 @@
 import { useTheme } from "@/context/ThemeContext";
 import { useArticleInteractions } from "@/hooks/useArticleInteractions";
+import { shareArticle } from "@/lib/articleShare";
 import { supabase } from "@/lib/supabase";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
@@ -10,10 +11,8 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Linking,
   Platform,
-  Share as RNShare,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -28,8 +27,10 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+const NEWS_SERVICE_URL =
+  process.env.EXPO_PUBLIC_NEWS_SERVICE_URL || "http://192.168.0.19:3001";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+type ParamValue = string | string[] | undefined;
 
 interface Article {
   id: number;
@@ -42,12 +43,61 @@ interface Article {
   Summary: string | null;
 }
 
+const toParamString = (value: ParamValue): string => {
+  if (Array.isArray(value)) return value[0] || "";
+  if (typeof value === "string") return value;
+  return "";
+};
+
+const toNullable = (value: ParamValue): string | null => {
+  const next = toParamString(value).trim();
+  return next.length > 0 ? next : null;
+};
+
+const normalizeArticleRow = (row: any): Article | null => {
+  if (!row || typeof row !== "object") return null;
+  const normalizedId = Number(row.id);
+  if (!Number.isFinite(normalizedId)) return null;
+
+  return {
+    id: normalizedId,
+    Title: row.Title || row.title || "",
+    Summary: row.Summary || row.summary || null,
+    Content: row.Content || row.content || null,
+    "Image URL": row["Image URL"] || row.image_url || null,
+    "Article Link": row["Article Link"] || row.article_link || null,
+    Category: row.Category || row.category || null,
+    "Company Name": row["Company Name"] || row.company_name || null,
+  };
+};
+
+const buildArticleFromParams = (params: Record<string, ParamValue>): Article => {
+  const parsedId = Number.parseInt(toParamString(params.id), 10);
+  const imageUrl = toNullable(params.imageUrl) || toNullable(params.image);
+
+  return {
+    id: Number.isFinite(parsedId) ? parsedId : 0,
+    Title: toParamString(params.title),
+    Summary: toNullable(params.summary),
+    Content: toNullable(params.content),
+    "Image URL": imageUrl,
+    "Article Link": toNullable(params.articleLink),
+    Category: toNullable(params.category),
+    "Company Name": toNullable(params.companyName),
+  };
+};
+
 export default function ArticleDetailScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const fontSize = 18;
+  const routeArticle = React.useMemo(
+    () => buildArticleFromParams(params as Record<string, ParamValue>),
+    [params],
+  );
+  const [article, setArticle] = useState<Article>(routeArticle);
   const [imageLoading, setImageLoading] = useState(true);
   const [relatedArticles, setRelatedArticles] = useState<Article[]>([]);
 
@@ -55,28 +105,121 @@ export default function ArticleDetailScreen() {
   const likeScale = useSharedValue(1);
   const bookmarkScale = useSharedValue(1);
 
-  // Parse article data from params
-  const article = {
-    id: parseInt(params.id as string),
-    Title: params.title as string,
-    Summary: params.summary as string,
-    Content: params.content as string,
-    "Image URL": params.imageUrl as string,
-    "Article Link": params.articleLink as string,
-    Category: params.category as string,
-    "Company Name": params.companyName as string,
-  };
+  useEffect(() => {
+    setArticle(routeArticle);
+  }, [routeArticle]);
 
   // Parse history IDs (visited articles in this stack)
-  const historyIds = params.historyIds
-    ? (params.historyIds as string)
+  const historyIds = React.useMemo(() => {
+    const historyParam = toParamString(params.historyIds);
+    if (!historyParam) return [] as number[];
+    return historyParam
       .split(",")
       .filter((id) => id && !isNaN(Number(id)))
-      .map(Number)
-    : [];
+      .map(Number);
+  }, [params.historyIds]);
 
   const { liked, bookmarked, toggleLike, toggleBookmark } =
     useArticleInteractions(article.id);
+
+  const fetchArticleById = React.useCallback(async (articleId: number) => {
+    if (!Number.isFinite(articleId) || articleId <= 0) return null;
+
+    const primarySelect =
+      'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"';
+    const primaryResult = await supabase
+      .from("Articles")
+      .select(primarySelect)
+      .eq("id", articleId)
+      .maybeSingle();
+
+    const primaryArticle = normalizeArticleRow(primaryResult.data);
+    if (primaryArticle) return primaryArticle;
+
+    const fallbackSelect =
+      "id, title, summary, content, image_url, article_link, category, company_name";
+    const fallbackResult = await supabase
+      .from("articles")
+      .select(fallbackSelect)
+      .eq("id", articleId)
+      .maybeSingle();
+
+    const fallbackArticle = normalizeArticleRow(fallbackResult.data);
+    if (fallbackArticle) return fallbackArticle;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.access_token) {
+        const response = await fetch(
+          `${NEWS_SERVICE_URL}/api/article_by_id?article_id=${encodeURIComponent(String(articleId))}`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        if (response.ok) {
+          const payload = await response.json();
+          const row = Array.isArray(payload)
+            ? payload[0]
+            : Array.isArray(payload?.data)
+              ? payload.data[0]
+              : payload?.data || payload;
+          const networkArticle = normalizeArticleRow(row);
+          if (networkArticle) return networkArticle;
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching shared article from API:", error);
+    }
+
+    if (primaryResult.error) {
+      console.error("Error fetching shared article from Articles table:", primaryResult.error);
+    }
+    if (fallbackResult.error) {
+      console.error("Error fetching shared article from articles table:", fallbackResult.error);
+    }
+
+    return null;
+  }, []);
+
+  useEffect(() => {
+    const shouldHydrateArticle = !article.Title || !(article.Content || article.Summary);
+    if (!shouldHydrateArticle) return;
+
+    let isMounted = true;
+
+    (async () => {
+      const hydratedArticle = await fetchArticleById(article.id);
+      if (!isMounted || !hydratedArticle) return;
+
+      setArticle((previous) => ({
+        ...hydratedArticle,
+        Title: previous.Title || hydratedArticle.Title,
+        Summary: previous.Summary || hydratedArticle.Summary,
+        Content: previous.Content || hydratedArticle.Content,
+        "Image URL": previous["Image URL"] || hydratedArticle["Image URL"],
+        "Article Link": previous["Article Link"] || hydratedArticle["Article Link"],
+        Category: previous.Category || hydratedArticle.Category,
+        "Company Name": previous["Company Name"] || hydratedArticle["Company Name"],
+      }));
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    article.id,
+    article.Title,
+    article.Content,
+    article.Summary,
+    fetchArticleById,
+  ]);
 
   useEffect(() => {
     fetchRelatedArticles();
@@ -84,6 +227,11 @@ export default function ArticleDetailScreen() {
 
   const fetchRelatedArticles = async () => {
     try {
+      if (!Number.isFinite(article.id) || article.id <= 0) {
+        setRelatedArticles([]);
+        return;
+      }
+
       const rawCat = article.Category;
       const currentCategory =
         rawCat && rawCat !== "null" && rawCat !== "undefined" ? rawCat : null;
@@ -169,11 +317,11 @@ export default function ArticleDetailScreen() {
     if (Platform.OS !== "web")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await RNShare.share({
-        message: article["Article Link"]
-          ? `${article.Title}\n\n${article["Article Link"]}`
-          : article.Title,
-        url: article["Article Link"] || undefined,
+      await shareArticle({
+        id: article.id,
+        title: article.Title,
+        imageUrl: article["Image URL"],
+        articleLink: article["Article Link"],
       });
     } catch (error) {
       console.error("Error sharing:", error);

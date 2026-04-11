@@ -6,18 +6,18 @@ import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Platform,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 const TAB_BAR_TOTAL = Platform.OS === "ios" ? 80 : 72;
+const MIN_CARD_HEIGHT = 420;
 
 interface Article {
   id: number;
@@ -43,6 +43,26 @@ const dedupeArticles = (items: Article[]) => {
   });
 };
 
+const MIN_ARTICLE_BODY_LENGTH = 100;
+
+const cleanArticleText = (value: string | null | undefined) => {
+  if (!value) return "";
+  return value
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
+const filterReadableArticles = (items: Article[]) =>
+  items.filter((article) => {
+    const body = cleanArticleText(article.Content || article.Summary);
+    return body.length >= MIN_ARTICLE_BODY_LENGTH;
+  });
+
 const PAGE_SIZE = 20;
 const DEFAULT_TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 116 : 96;
 
@@ -54,6 +74,7 @@ export default function ForYouTab({
   topContentOffset = DEFAULT_TOP_CONTENT_OFFSET,
 }: ForYouTabProps) {
   const { theme, isDark } = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,7 +85,10 @@ export default function ForYouTab({
   const loadingMoreRef = useRef(false);
   const hasMoreRef = useRef(true);
 
-  const CARD_HEIGHT = SCREEN_HEIGHT - topContentOffset - TAB_BAR_TOTAL;
+  const CARD_HEIGHT = Math.max(
+    MIN_CARD_HEIGHT,
+    windowHeight - topContentOffset - TAB_BAR_TOTAL,
+  );
 
   const updateHasMore = (value: boolean) => {
     hasMoreRef.current = value;
@@ -80,10 +104,10 @@ export default function ForYouTab({
     pageRef.current = 0;
     updateHasMore(true);
     const data = await fetchArticles(0);
-    const uniqueData = dedupeArticles(data);
+    const uniqueData = dedupeArticles(filterReadableArticles(data));
     setArticles(uniqueData);
-    if (uniqueData.length < PAGE_SIZE) updateHasMore(false);
-    if (uniqueData.length > 0) pageRef.current = 1;
+    if (data.length < PAGE_SIZE) updateHasMore(false);
+    if (data.length > 0) pageRef.current = 1;
     setLoading(false);
   };
 
@@ -130,10 +154,10 @@ export default function ForYouTab({
     pageRef.current = 0;
     updateHasMore(true);
     const data = await fetchArticles(0);
-    const uniqueData = dedupeArticles(data);
+    const uniqueData = dedupeArticles(filterReadableArticles(data));
     setArticles(uniqueData);
-    updateHasMore(uniqueData.length >= PAGE_SIZE);
-    if (uniqueData.length > 0) pageRef.current = 1;
+    updateHasMore(data.length >= PAGE_SIZE);
+    if (data.length > 0) pageRef.current = 1;
     setRefreshing(false);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
@@ -143,10 +167,13 @@ export default function ForYouTab({
     loadingMoreRef.current = true;
     setLoadingMore(true);
     const data = await fetchArticles(pageRef.current);
+
     if (data.length > 0) {
-      setArticles((prev) => dedupeArticles([...prev, ...data]));
+      const readableData = filterReadableArticles(data);
+      setArticles((prev) => dedupeArticles([...prev, ...readableData]));
       pageRef.current += 1;
     }
+
     if (data.length < PAGE_SIZE) {
       updateHasMore(false);
     }
@@ -334,7 +361,8 @@ export default function ForYouTab({
             No articles yet
           </Text>
           <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-            Edit your interests to see personalized content
+            We hide very short updates to keep your feed clean. Pull to refresh
+            for fuller stories.
           </Text>
         </View>
       </View>
@@ -348,6 +376,7 @@ export default function ForYouTab({
         data={articles}
         renderItem={renderItem}
         keyExtractor={(item, index) => `${getArticleIdentity(item)}-${index}`}
+        extraData={CARD_HEIGHT}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.listContent, { paddingTop: topContentOffset }]}
         onEndReached={loadNextPage}

@@ -15,8 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-const TOP_CONTENT_OFFSET = Platform.OS === "ios" ? 134 : 112;
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type SubTab = "feed" | "foryou";
 
@@ -43,8 +42,11 @@ const SUB_TABS: {
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { notificationCount } = useFounderConnections(true);
   const [activeTab, setActiveTab] = useState<SubTab>("feed");
+  const headerTopPadding = insets.top + (Platform.OS === "ios" ? 14 : 12);
+  const topContentOffset = headerTopPadding + 76;
   const headerBg = theme.background;
   const headerGradientColors: [string, string, string] = isDark
     ? ["#0A0A0B", "#0A0A0B", "#0A0A0B"]
@@ -56,9 +58,9 @@ export default function HomeScreen() {
   const renderContent = () => {
     switch (activeTab) {
       case "feed":
-        return <FeedTab topContentOffset={TOP_CONTENT_OFFSET} />;
+        return <FeedTab topContentOffset={topContentOffset} />;
       case "foryou":
-        return <ForYouTab topContentOffset={TOP_CONTENT_OFFSET} />;
+        return <ForYouTab topContentOffset={topContentOffset} />;
     }
   };
 
@@ -75,7 +77,7 @@ export default function HomeScreen() {
           colors={headerGradientColors}
           style={styles.headerGradient}
         >
-          <View style={styles.headerInner}>
+          <View style={[styles.headerInner, { paddingTop: headerTopPadding }]}>
             <Image
               source={
                 isDark
@@ -200,7 +202,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === "ios" ? 58 : 36,
     paddingBottom: 8,
   },
   brandLogo: {

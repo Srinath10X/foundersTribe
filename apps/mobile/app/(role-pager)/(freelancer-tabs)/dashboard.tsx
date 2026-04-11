@@ -579,13 +579,6 @@ export default function TalentDashboardScreen() {
                       router.push("/(role-pager)/(freelancer-tabs)/my-gigs" as any)
                     }
                   />
-                  <QuickAction
-                    icon="create-outline"
-                    label="Create Post"
-                    onPress={() =>
-                      router.push("/(role-pager)/(freelancer-tabs)/create-post" as any)
-                    }
-                  />
                 </View>
               </View>
             </LinearGradient>

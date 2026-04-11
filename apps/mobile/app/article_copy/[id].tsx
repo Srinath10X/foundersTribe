@@ -1,5 +1,6 @@
 import { useTheme } from "@/context/ThemeContext";
 import { useArticleInteractions } from "@/hooks/useArticleInteractions";
+import { shareArticle } from "@/lib/articleShare";
 import { supabase } from "@/lib/supabase";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { BsStarsIcon } from "@/components/icons/BsStarsIcon";
@@ -14,7 +15,6 @@ import {
   Dimensions,
   Linking,
   Platform,
-  Share as RNShare,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -170,11 +170,11 @@ export default function ArticleDetailScreen() {
     if (Platform.OS !== "web")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
-      await RNShare.share({
-        message: article["Article Link"]
-          ? `${article.Title}\n\n${article["Article Link"]}`
-          : article.Title,
-        url: article["Article Link"] || undefined,
+      await shareArticle({
+        id: article.id,
+        title: article.Title,
+        imageUrl: article["Image URL"],
+        articleLink: article["Article Link"],
       });
     } catch (error) {
       console.error("Error sharing:", error);
