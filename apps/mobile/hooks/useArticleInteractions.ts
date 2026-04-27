@@ -3,6 +3,9 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { DeviceEventEmitter } from "react-native";
 
+const NEWS_SERVICE_URL =
+  process.env.EXPO_PUBLIC_NEWS_SERVICE_URL || "http://192.168.0.19:3001";
+
 interface ArticleInteraction {
   liked: boolean;
   bookmarked: boolean;
@@ -120,9 +123,9 @@ export function useArticleInteractions(articleId: number) {
   const toggleLike = async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) {
         alert("Please log in to like articles");
         return;
       }
@@ -136,20 +139,32 @@ export function useArticleInteractions(articleId: number) {
         updates: { liked: newLiked },
       });
 
-      const { error: dbError } = await supabase
-        .from("user_interactions")
-        .upsert(
-          {
-            user_id: user.id,
+      const resp = await fetch(
+        `${NEWS_SERVICE_URL}/api/user_liked_articles`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
             article_id: articleId,
             liked: newLiked,
-            bookmarked: interaction.bookmarked,
-          },
-          { onConflict: "user_id,article_id" }
-        );
+          }),
+        }
+      );
 
-      if (dbError) throw dbError;
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
     } catch (error: any) {
+      // Rollback optimistic update
+      setInteraction((prev) => ({ ...prev, liked: !prev.liked }));
+      DeviceEventEmitter.emit(INTERACTION_SYNC_EVENT, {
+        articleId,
+        updates: { liked: interaction.liked },
+      });
       console.error("Error toggling like:", error);
       alert(`Could not save like: ${error.message || "Unknown error"}`);
     }
@@ -158,9 +173,9 @@ export function useArticleInteractions(articleId: number) {
   const toggleBookmark = async () => {
     try {
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) return;
 
       const newBookmarked = !interaction.bookmarked;
 
@@ -171,21 +186,34 @@ export function useArticleInteractions(articleId: number) {
         updates: { bookmarked: newBookmarked },
       });
 
-      const { error: dbError } = await supabase
-        .from("user_interactions")
-        .upsert(
-          {
-            user_id: user.id,
-            article_id: articleId,
-            liked: interaction.liked,
-            bookmarked: newBookmarked,
+      const resp = await fetch(
+        `${NEWS_SERVICE_URL}/api/user_bookmarked_articles`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
           },
-          { onConflict: "user_id,article_id" }
-        );
+          body: JSON.stringify({
+            article_id: articleId,
+            bookmarked: newBookmarked,
+          }),
+        }
+      );
 
-      if (dbError) throw dbError;
-    } catch (error) {
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${resp.status}`);
+      }
+    } catch (error: any) {
+      // Rollback optimistic update
+      setInteraction((prev) => ({ ...prev, bookmarked: !prev.bookmarked }));
+      DeviceEventEmitter.emit(INTERACTION_SYNC_EVENT, {
+        articleId,
+        updates: { bookmarked: interaction.bookmarked },
+      });
       console.error("Error toggling bookmark:", error);
+      alert(`Could not save bookmark: ${error.message || "Unknown error"}`);
     }
   };
 

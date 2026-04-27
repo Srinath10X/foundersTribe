@@ -5,7 +5,8 @@
       {
         "appID": "TW3PC43LA2.com.founderstribe.ai",
         "paths": [
-          "/room/*"
+          "/room/*",
+          "/article/*"
         ]
       }
     ]

@@ -138,14 +138,10 @@ export function ArticleReelCard({
     }
   };
 
-  const handleBookmark = () => {
+  const handleBookmark = async () => {
     triggerHaptic();
     bookmarkScale.value = withSequence(withSpring(1.4), withSpring(1));
-    try {
-      toggleBookmark();
-    } catch (e) {
-      console.error(e);
-    }
+    await toggleBookmark();
   };
 
   const likeAnimatedStyle = useAnimatedStyle(() => ({

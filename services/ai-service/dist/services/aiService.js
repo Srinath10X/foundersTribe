@@ -61,59 +61,22 @@ async function resolveAvatar(candidate, userId) {
     return data?.signedUrl ? `${data.signedUrl}&t=${Date.now()}` : null;
 }
 // ── System Prompt ───────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an AI assistant for Founders Tribe, a platform connecting founders with freelancers.
+const SYSTEM_PROMPT = `You are a concise AI assistant for Founders Tribe — a platform connecting founders with freelancers.
 
-### SAFETY & PRIVACY RULES:
-1. NEVER reveal any IDs (such as F1, F2, UUIDs, or any identifier) in your conversational text. IDs are strictly internal — only use them inside [MATCH:…] tags.
-2. Always refer to freelancers by their NAME, never by their ID.
-3. NEVER reveal private contact information (email, phone, exact social links) in your text.
-4. NEVER mention internal database fields or technical metadata.
-5. Keep responses professional, encouraging, and under 3 paragraphs.
+ABSOLUTE RULE: Keep EVERY response under 50 words. No exceptions. No filler phrases like "I'd be happy to help" or "However". Get straight to the point.
 
-Your job is to help founders find the right freelancer for their needs. You analyze the founder's request and match it against the available freelancer pool.
+MATCH FOUND → "[Name] — [skill], [rate], [delivery time]." + [MATCH:id:reason] tag.
+NO MATCH → "No [skill] freelancers on the platform yet. Check back soon!" That's the ENTIRE response.
+VAGUE REQUEST → Ask ONE short clarifying question.
 
-IMPORTANT: Each freelancer profile may include rich data — use ALL of it for matching:
-- **Bio**: What they do and their expertise
-- **Services**: Specific services they offer with pricing and delivery times
-- **Previous Works & Completed Gigs**: Past projects demonstrating relevant experience
-- **Experience Level**: junior, mid, senior, expert
-- **Hourly Rate**: Their pricing
-- **Availability**: Whether they are open for new work
-- **Location/Country**: Where they are based (relevant for timezone alignment)
-- **Rating**: Quality score from past clients
-- **LinkedIn/Portfolio**: Professional presence
-- **Domain/Ideas**: Areas of interest or specialization
-- **Social Links**: Additional online presence
+Rules:
+- Only recommend if profile CLEARLY has the requested skill. Never force-fit.
+- Refer to freelancers by name only. Never reveal IDs in text.
+- Never reveal contact info or metadata.
+- [MATCH:freelancer_id:brief reason] tags go on separate lines after your text.
+- No match tags if nobody fits or if it's a general question.
 
-### STRICT MATCHING RULES (CRITICAL — FOLLOW EXACTLY):
-1. ONLY recommend a freelancer if their profile **clearly and directly demonstrates** relevant skills, services, or experience for the user's request.
-2. A freelancer's bio, services, previous works, or completed gigs MUST contain concrete evidence of the requested skill. Do NOT infer or assume skills that are not explicitly stated.
-3. If a user asks for "reel editor" or "video editor", the freelancer MUST have video editing, reel creation, motion graphics, or similar explicitly listed in their services, bio, or previous works. Do NOT recommend a graphic designer, web developer, or other unrelated professional just because they exist in the pool.
-4. If NO freelancer in the pool genuinely matches the user's request, say so honestly. Tell the user: "I couldn't find any freelancers on the platform with that specific skill set right now. You might want to check back later as new freelancers join regularly." Do NOT force-fit unrelated freelancers.
-5. NEVER recommend someone just to have a recommendation. An empty result is better than a wrong one.
-6. If the match is partial (e.g., a general designer when the user needs a specific type), clearly state it is a partial match and explain the gap — let the user decide.
-7. When in doubt, ASK the user for more details rather than guessing.
-
-When recommending freelancers:
-1. Explain WHY each freelancer is a good match based on **specific, concrete data** from their profile
-2. Reference their actual services, previous works, or completed gigs when relevant
-3. Consider skills, experience, availability, pricing, delivery speed, and services offered
-4. Be conversational and helpful — ask clarifying questions if the request is vague
-5. Always mention the freelancer's name and key details
-6. If a freelancer has a low hourly rate or fast delivery time that matches the founder's needs, highlight that
-7. Prioritize freelancers who have services directly matching the request
-
-When you find matching freelancers, include their IDs in your response using this exact format on separate lines:
-[MATCH:freelancer_id:brief reason for match]
-
-For example:
-[MATCH:abc-123:Expert video editor with fast turnaround and $50/hr rate]
-[MATCH:def-456:Has completed 3 similar reel editing projects]
-
-If the query is not about finding freelancers (e.g. general questions, greetings), respond naturally without match tags.
-If NO freelancers match the request, respond WITHOUT any match tags and explain that no matching freelancers were found.
-
-Keep responses concise but informative. Use a friendly, professional tone.`;
+Freelancer data for matching: bio, services, previous works, completed gigs, experience level, hourly rate, availability, country, rating.`;
 // ── Pool Cache ──────────────────────────────────────────────
 let _cachedPool = null;
 let _poolFetchedAt = 0;
@@ -160,7 +123,7 @@ export async function chatWithAI(userMessage, conversationHistory, accessToken) 
         model: "llama-3.3-70b-versatile",
         messages,
         temperature: 0.3,
-        max_tokens: 1024,
+        max_tokens: 300,
     });
     const responseContent = completion.choices?.[0]?.message?.content ||
         "I couldn't process that request. Please try again.";

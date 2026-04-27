@@ -24,6 +24,10 @@
     {
       "source": "/room/:id",
       "destination": "/room.html"
+    },
+    {
+      "source": "/article/:id",
+      "destination": "/article.html"
     }
   ]
 }

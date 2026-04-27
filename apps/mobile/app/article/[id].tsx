@@ -335,11 +335,11 @@ export default function ArticleDetailScreen() {
     toggleLike();
   };
 
-  const handleBookmark = () => {
+  const handleBookmark = async () => {
     if (Platform.OS !== "web")
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     bookmarkScale.value = withSequence(withSpring(1.4), withSpring(1));
-    toggleBookmark();
+    await toggleBookmark();
   };
 
   const handleRelatedArticlePress = (relatedArticle: Article) => {

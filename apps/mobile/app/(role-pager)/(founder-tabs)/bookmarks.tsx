@@ -1,10 +1,9 @@
-import { ArticleReelCard } from "@/components/ArticleReelCard";
+import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { Layout, Spacing, Typography } from "@/constants/DesignSystem";
 import { useTheme } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -19,16 +18,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-} from "react-native-reanimated";
 
 const { height: windowHeight } = Dimensions.get("window");
-const TAB_BAR_HEIGHT = Platform.OS === "ios" ? 88 : 70;
-const HEADER_HEIGHT = Platform.OS === "ios" ? 140 : 120; // Slightly more for better gradient fade
-
-const REEL_HEIGHT = windowHeight - TAB_BAR_HEIGHT;
+const STATUS_BAR_HEIGHT = Platform.OS === "ios" ? 54 : StatusBar.currentHeight || 24;
+const HEADER_HEIGHT = 48;
+const TOP_OFFSET = STATUS_BAR_HEIGHT + HEADER_HEIGHT;
+const CARD_HEIGHT = windowHeight - TOP_OFFSET;
 
 interface Article {
   id: number;
@@ -47,15 +42,12 @@ type InteractionRow = {
   created_at?: string | null;
 };
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Article>);
-
 export default function BookmarksScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
   const [bookmarkedArticles, setBookmarkedArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const scrollY = useSharedValue(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,9 +63,7 @@ export default function BookmarksScreen() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      console.log("[Bookmarks] user:", user?.id);
       if (!user) {
-        console.log("[Bookmarks] No user, returning empty");
         setBookmarkedArticles([]);
         return;
       }
@@ -84,14 +74,12 @@ export default function BookmarksScreen() {
 
       const NEWS_SERVICE_URL =
         process.env.EXPO_PUBLIC_NEWS_SERVICE_URL || "http://192.168.0.19:3001";
-      console.log("[Bookmarks] API URL:", NEWS_SERVICE_URL);
 
       // ─── 1. Get bookmarked article IDs via API (bypasses RLS) ──────────
       let articleIds: (number | string)[] = [];
 
       if (session?.access_token) {
         try {
-          console.log("[Bookmarks] Calling user_bookmarked_articles API...");
           const resp = await fetch(
             `${NEWS_SERVICE_URL}/api/user_bookmarked_articles`,
             {
@@ -101,11 +89,9 @@ export default function BookmarksScreen() {
               },
             },
           );
-          console.log("[Bookmarks] API status:", resp.status);
 
           if (resp.ok) {
             const rows = await resp.json();
-            console.log("[Bookmarks] API rows count:", Array.isArray(rows) ? rows.length : "not array", "data:", JSON.stringify(rows?.slice(0, 3)));
             if (Array.isArray(rows)) {
               articleIds = Array.from(
                 new Set(
@@ -117,25 +103,17 @@ export default function BookmarksScreen() {
                     ),
                 ),
               );
-              console.log("[Bookmarks] articleIds from API:", articleIds);
             }
-          } else {
-            const errText = await resp.text().catch(() => "");
-            console.log("[Bookmarks] API error body:", errText);
           }
         } catch (e) {
           console.error("[Bookmarks] API fetch failed:", e);
         }
-      } else {
-        console.log("[Bookmarks] No access token available");
       }
 
       // ─── 2. Fallback: get bookmarked article IDs via Supabase ─────────
       if (articleIds.length === 0) {
-        console.log("[Bookmarks] No articleIds from API, trying Supabase...");
         let interactions: InteractionRow[] | null = null;
 
-        // Try ordered by updated_at
         const r1 = await supabase
           .from("user_interactions")
           .select("article_id, updated_at")
@@ -143,9 +121,7 @@ export default function BookmarksScreen() {
           .eq("bookmarked", true)
           .order("updated_at", { ascending: false });
         interactions = (r1.data as InteractionRow[] | null) || null;
-        console.log("[Bookmarks] Supabase r1:", r1.data?.length, "error:", r1.error?.message);
 
-        // Fallback: ordered by created_at
         if (!interactions || interactions.length === 0) {
           const r2 = await supabase
             .from("user_interactions")
@@ -154,10 +130,8 @@ export default function BookmarksScreen() {
             .eq("bookmarked", true)
             .order("created_at", { ascending: false });
           interactions = (r2.data as InteractionRow[] | null) || null;
-          console.log("[Bookmarks] Supabase r2:", r2.data?.length, "error:", r2.error?.message);
         }
 
-        // Fallback: no ordering
         if (!interactions || interactions.length === 0) {
           const r3 = await supabase
             .from("user_interactions")
@@ -165,7 +139,6 @@ export default function BookmarksScreen() {
             .eq("user_id", user.id)
             .eq("bookmarked", true);
           interactions = (r3.data as InteractionRow[] | null) || null;
-          console.log("[Bookmarks] Supabase r3:", r3.data?.length, "error:", r3.error?.message);
         }
 
         if (interactions && interactions.length > 0) {
@@ -179,13 +152,10 @@ export default function BookmarksScreen() {
                 ),
             ),
           );
-          console.log("[Bookmarks] articleIds from Supabase:", articleIds);
         }
       }
 
-      console.log("[Bookmarks] Final articleIds count:", articleIds.length);
       if (articleIds.length === 0) {
-        console.log("[Bookmarks] No bookmarks found, showing empty state");
         setBookmarkedArticles([]);
         return;
       }
@@ -194,7 +164,6 @@ export default function BookmarksScreen() {
       const fetchOneArticle = async (
         id: number | string,
       ): Promise<Article | null> => {
-        // Try API first
         if (session?.access_token) {
           try {
             const resp = await fetch(
@@ -223,13 +192,10 @@ export default function BookmarksScreen() {
                     Title: row.Title || row.title || "",
                     Summary: row.Summary || row.summary || "",
                     Content: row.Content || row.content || "",
-                    "Image URL":
-                      row["Image URL"] || row.image_url || null,
-                    "Article Link":
-                      row["Article Link"] || row.article_link || "",
+                    "Image URL": row["Image URL"] || row.image_url || null,
+                    "Article Link": row["Article Link"] || row.article_link || "",
                     Category: row.Category || row.category || null,
-                    "Company Name":
-                      row["Company Name"] || row.company_name || null,
+                    "Company Name": row["Company Name"] || row.company_name || null,
                   };
                 }
               }
@@ -239,7 +205,6 @@ export default function BookmarksScreen() {
           }
         }
 
-        // Fallback: Supabase direct query
         const articleSelect =
           'id, Title, Summary, Content, "Image URL", "Article Link", Category, "Company Name"';
         const { data } = await supabase
@@ -250,7 +215,6 @@ export default function BookmarksScreen() {
 
         if (data) return data as Article;
 
-        // Lowercase table fallback
         const lowerSelect =
           "id, title, summary, content, image_url, article_link, category, company_name";
         const { data: lowerData } = await supabase
@@ -280,18 +244,13 @@ export default function BookmarksScreen() {
         await Promise.all(articleIds.map(fetchOneArticle))
       ).filter((a): a is Article => a !== null);
 
-      console.log("[Bookmarks] Resolved articles count:", articles.length);
-
       if (articles.length > 0) {
-        // Keep same order as bookmarked interactions
         const orderMap = new Map(
           articleIds.map((id, idx) => [String(id), idx]),
         );
         const ordered = [...articles].sort((a, b) => {
-          const ai =
-            orderMap.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER;
-          const bi =
-            orderMap.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER;
+          const ai = orderMap.get(String(a.id)) ?? Number.MAX_SAFE_INTEGER;
+          const bi = orderMap.get(String(b.id)) ?? Number.MAX_SAFE_INTEGER;
           return ai - bi;
         });
         setBookmarkedArticles(ordered);
@@ -315,74 +274,12 @@ export default function BookmarksScreen() {
     await fetchBookmarkedArticles(true);
   }, []);
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      scrollY.value = event.contentOffset.y;
-    },
-  });
+  const BOTTOM_PADDING = Platform.OS === "ios" ? 50 : 44;
 
   const renderItem = ({ item }: { item: Article }) => (
-    <View style={{ height: REEL_HEIGHT }}>
-      <ArticleReelCard article={item} />
-    </View>
-  );
-
-  const ReachedEndFooter = () => (
-    <View
-      style={[styles.footerContainer, { backgroundColor: theme.background }]}
-    >
-      <View style={styles.footerContent}>
-        <Ionicons
-          name="checkmark-circle-outline"
-          size={48}
-          color={theme.brand.primary}
-        />
-        <Text style={[styles.footerTitle, { color: theme.text.primary }]}>
-          End of Collection
-        </Text>
-        <Text style={[styles.footerSubtitle, { color: theme.text.tertiary }]}>
-          You&apos;ve seen all your bookmarked articles.
-        </Text>
-        <TouchableOpacity
-          style={[styles.exploreBtn, { backgroundColor: theme.brand.primary }]}
-          onPress={() => router.push("/(role-pager)/(founder-tabs)/home")}
-        >
-          <Text style={[styles.exploreBtnText, { color: theme.text.inverse }]}>
-            Discover More
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const EmptyState = () => (
-    <View
-      style={[styles.emptyContainer, { backgroundColor: theme.background }]}
-    >
-      <View
-        style={[
-          styles.emptyIconContainer,
-          { backgroundColor: theme.surface, borderColor: theme.border },
-        ]}
-      >
-        <Ionicons name="bookmark-outline" size={80} color={theme.text.muted} />
-      </View>
-      <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
-        No saved articles
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
-        You haven&apos;t bookmarked any articles yet.
-      </Text>
-      <TouchableOpacity
-        style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}
-        onPress={() => router.push("/(role-pager)/(founder-tabs)/home")}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.emptyButtonText, { color: theme.text.inverse }]}>
-          Explore Articles
-        </Text>
-        <Ionicons name="arrow-forward" size={18} color={theme.text.inverse} />
-      </TouchableOpacity>
+    <View style={styles.cardWrapper}>
+      <NewsArticleCard article={item} cardHeight={CARD_HEIGHT - BOTTOM_PADDING} />
+      <View style={{ height: BOTTOM_PADDING }} />
     </View>
   );
 
@@ -401,30 +298,62 @@ export default function BookmarksScreen() {
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
-      {/* Overlay Header at top */}
-      <View style={styles.headerContainer}>
-        <LinearGradient
-          colors={["rgba(0,0,0,0.8)", "rgba(0,0,0,0.4)", "transparent"]}
-          style={StyleSheet.absoluteFillObject}
-        />
-        <Text style={styles.headerTitle}>Saved Collection</Text>
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: theme.background,
+            borderBottomColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+          },
+        ]}
+      >
+        <Text style={[styles.headerTitle, { color: theme.text.primary }]}>
+          Saved Collection
+        </Text>
+        <Text style={[styles.headerCount, { color: theme.text.tertiary }]}>
+          {bookmarkedArticles.length} {bookmarkedArticles.length === 1 ? "article" : "articles"}
+        </Text>
       </View>
 
       {bookmarkedArticles.length === 0 ? (
-        <EmptyState />
+        <View style={styles.emptyContainer}>
+          <View
+            style={[
+              styles.emptyIconContainer,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <Ionicons name="bookmark-outline" size={80} color={theme.text.muted} />
+          </View>
+          <Text style={[styles.emptyTitle, { color: theme.text.primary }]}>
+            No saved articles
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: theme.text.tertiary }]}>
+            You haven&apos;t bookmarked any articles yet.
+          </Text>
+          <TouchableOpacity
+            style={[styles.emptyButton, { backgroundColor: theme.brand.primary }]}
+            onPress={() => router.push("/(role-pager)/(founder-tabs)/home")}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.emptyButtonText, { color: theme.text.inverse }]}>
+              Explore Articles
+            </Text>
+            <Ionicons name="arrow-forward" size={18} color={theme.text.inverse} />
+          </TouchableOpacity>
+        </View>
       ) : (
-        <AnimatedFlatList
+        <FlatList
           data={bookmarkedArticles}
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           pagingEnabled
           showsVerticalScrollIndicator={false}
-          snapToInterval={REEL_HEIGHT}
+          snapToInterval={CARD_HEIGHT}
           snapToAlignment="start"
           decelerationRate="fast"
-          onScroll={scrollHandler}
           scrollEventThrottle={16}
-          ListFooterComponent={ReachedEndFooter}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -434,11 +363,12 @@ export default function BookmarksScreen() {
               progressViewOffset={10}
             />
           }
-          getItemLayout={(data, index) => ({
-            length: REEL_HEIGHT,
-            offset: REEL_HEIGHT * index,
+          getItemLayout={(_data, index) => ({
+            length: CARD_HEIGHT,
+            offset: CARD_HEIGHT * index,
             index,
           })}
+          extraData={CARD_HEIGHT}
           removeClippedSubviews={Platform.OS === "android"}
           maxToRenderPerBatch={3}
           windowSize={5}
@@ -453,66 +383,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerContainer: {
-    height: HEADER_HEIGHT,
-    paddingTop: Platform.OS === "ios" ? 60 : 40,
+  header: {
+    paddingTop: Platform.OS === "ios" ? 54 : (StatusBar.currentHeight || 24),
+    height: (Platform.OS === "ios" ? 54 : (StatusBar.currentHeight || 24)) + HEADER_HEIGHT,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: {
-    color: "#fff",
-    fontSize: 10,
+    fontSize: 16,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 2,
+    letterSpacing: 0.3,
     fontFamily: Typography.fonts.primary,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
-  goldLine: {
-    width: 40,
-    height: 2,
-    marginTop: 8,
+  headerCount: {
+    fontSize: 13,
+    fontFamily: Typography.fonts.primary,
+  },
+  cardWrapper: {
+    height: CARD_HEIGHT,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  footerContainer: {
-    height: REEL_HEIGHT,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  footerContent: {
-    alignItems: "center",
-    paddingHorizontal: 40,
-  },
-  footerTitle: {
-    ...Typography.presets.h3,
-    marginTop: 20,
-    fontFamily: Typography.fonts.primary,
-  },
-  footerSubtitle: {
-    ...Typography.presets.body,
-    textAlign: "center",
-    marginTop: 10,
-    marginBottom: 30,
-  },
-  exploreBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 25,
-  },
-  exploreBtnText: {
-    fontWeight: "700",
-    fontSize: 14,
   },
   emptyContainer: {
     flex: 1,
